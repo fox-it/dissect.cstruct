@@ -206,6 +206,45 @@ def test_default_constructors(compiled):
     assert obj.dumps() == b"\x00" * 54
 
 
+def test_default_constructors_dynamic(compiled):
+    cdef = """
+    enum Enum {
+        a = 0,
+        b = 1
+    };
+    flag Flag {
+        a = 0,
+        b = 1
+    };
+    struct test {
+        uint8   x;
+        uint32  t_int_array_n[];
+        uint32  t_int_array_d[x];
+        uint24  t_bytesint_array_n[];
+        uint24  t_bytesint_array_d[x];
+        char    t_char_array_n[];
+        char    t_char_array_d[x];
+        wchar   t_wchar_array_n[];
+        wchar   t_wchar_array_d[x];
+        Enum    t_enum_array_n[];
+        Enum    t_enum_array_d[x];
+        Flag    t_flag_array_n[];
+        Flag    t_flag_array_d[x];
+    };
+    """
+    cs = cstruct.cstruct()
+    cs.load(cdef, compiled=compiled)
+    assert verify_compiled(cs.test, compiled)
+    obj = cs.test()
+    assert obj.t_int_array_n == obj.t_int_array_d == []
+    assert obj.t_bytesint_array_n == obj.t_bytesint_array_d == []
+    assert obj.t_char_array_n == obj.t_char_array_d == b""
+    assert obj.t_wchar_array_n == obj.t_wchar_array_d == ""
+    assert obj.t_enum_array_n == obj.t_enum_array_d == []
+    assert obj.t_flag_array_n == obj.t_flag_array_d == []
+    assert obj.dumps() == b"\x00" * 19
+
+
 def test_config_flag_nocompile(compiled):
     cdef = """
     struct compiled_global
