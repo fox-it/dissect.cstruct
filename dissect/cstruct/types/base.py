@@ -161,10 +161,8 @@ class Array(BaseType):
         return self.type._write_array(stream, data)
 
     def default(self) -> List[Any]:
-        if self.dynamic or self.null_terminated:
-            return []
-
-        return self.type.default_array(self.count)
+        count = 0 if self.dynamic or self.null_terminated else self.count
+        return self.type.default_array(count)
 
 
 class RawType(BaseType):
