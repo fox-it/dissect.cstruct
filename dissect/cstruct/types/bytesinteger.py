@@ -44,8 +44,8 @@ class BytesInteger(RawType):
         bits = size * 8
         unsigned_min = 0
         unsigned_max = (2**bits) - 1
-        signed_max = (2 ** (bits - 1)) - 1
         signed_min = -(2 ** (bits - 1))
+        signed_max = (2 ** (bits - 1)) - 1
 
         for i in data:
 
