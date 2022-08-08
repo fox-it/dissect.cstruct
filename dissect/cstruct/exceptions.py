@@ -12,7 +12,3 @@ class ResolveError(Error):
 
 class NullPointerDereference(Error):
     pass
-
-
-class ValueOutOfBounds(Error):
-    pass

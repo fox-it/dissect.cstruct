@@ -2,7 +2,6 @@ import pytest
 
 from dissect import cstruct
 from dissect.cstruct.types import BytesInteger
-from dissect.cstruct.exceptions import ValueOutOfBounds
 
 from .utils import verify_compiled
 
@@ -190,19 +189,19 @@ def test_bytesinteger_range():
     int16.dumps(32767)
     int24.dumps(-8388608)
     int24.dumps(8388607)
-    with pytest.raises(ValueOutOfBounds):
+    with pytest.raises(OverflowError):
         int8.dumps(-129)
-    with pytest.raises(ValueOutOfBounds):
+    with pytest.raises(OverflowError):
         int8.dumps(128)
-    with pytest.raises(ValueOutOfBounds):
+    with pytest.raises(OverflowError):
         uint8.dumps(-1)
-    with pytest.raises(ValueOutOfBounds):
+    with pytest.raises(OverflowError):
         uint8.dumps(256)
-    with pytest.raises(ValueOutOfBounds):
+    with pytest.raises(OverflowError):
         int16.dumps(-32769)
-    with pytest.raises(ValueOutOfBounds):
+    with pytest.raises(OverflowError):
         int16.dumps(32768)
-    with pytest.raises(ValueOutOfBounds):
+    with pytest.raises(OverflowError):
         int24.dumps(-8388609)
-    with pytest.raises(ValueOutOfBounds):
+    with pytest.raises(OverflowError):
         int24.dumps(8388608)

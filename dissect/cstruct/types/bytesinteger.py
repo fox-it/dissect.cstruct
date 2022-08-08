@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import BinaryIO, List, TYPE_CHECKING
 
 from dissect.cstruct.types import RawType
-from dissect.cstruct.exceptions import ValueOutOfBounds
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
@@ -41,17 +40,19 @@ class BytesInteger(RawType):
     @staticmethod
     def pack(data: List[int], size: int, endian: str, signed: bool) -> bytes:
         buf = []
-        for i in data:
-            bits = size * 8
-            unsignedMin = 0
-            unsignedMax = (2**bits) - 1
-            signedMax = (2 ** (bits - 1)) - 1
-            signedMin = -(2 ** (bits - 1))
 
-            if signed and (i < signedMin or i > signedMax):
-                raise ValueOutOfBounds
-            elif not signed and (i < unsignedMin or i > unsignedMax):
-                raise ValueOutOfBounds
+        bits = size * 8
+        unsigned_min = 0
+        unsigned_max = (2 ** bits) - 1
+        signed_max = (2 ** (bits - 1)) - 1
+        signed_min = -(2 ** (bits - 1))
+
+        for i in data:
+
+            if signed and (i < signed_min or i > signed_max):
+                raise OverflowError
+            elif not signed and (i < unsigned_min or i > unsigned_max):
+                raise OverflowError
 
             num = int(i)
             if num < 0:
