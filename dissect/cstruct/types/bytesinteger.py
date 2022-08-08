@@ -50,9 +50,9 @@ class BytesInteger(RawType):
         for i in data:
 
             if signed and (i < signed_min or i > signed_max):
-                raise OverflowError()
+                raise OverflowError(f"{i} exceeds bounds for signed {bits} bits BytesInteger")
             elif not signed and (i < unsigned_min or i > unsigned_max):
-                raise OverflowError()
+                raise OverflowError(f"{i} exceeds bounds for unsigned {bits} bits BytesInteger")
 
             num = int(i)
             if num < 0:
