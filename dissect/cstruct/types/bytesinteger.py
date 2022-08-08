@@ -38,9 +38,22 @@ class BytesInteger(RawType):
         return nums
 
     @staticmethod
-    def pack(data: List[int], size: int, endian: str) -> bytes:
+    def pack(data: List[int], size: int, endian: str, signed: bool) -> bytes:
         buf = []
+
+        bits = size * 8
+        unsigned_min = 0
+        unsigned_max = (2**bits) - 1
+        signed_min = -(2 ** (bits - 1))
+        signed_max = (2 ** (bits - 1)) - 1
+
         for i in data:
+
+            if signed and (i < signed_min or i > signed_max):
+                raise OverflowError(f"{i} exceeds bounds for signed {bits} bits BytesInteger")
+            elif not signed and (i < unsigned_min or i > unsigned_max):
+                raise OverflowError(f"{i} exceeds bounds for unsigned {bits} bits BytesInteger")
+
             num = int(i)
             if num < 0:
                 num += 1 << (size * 8)
@@ -88,10 +101,10 @@ class BytesInteger(RawType):
         return result
 
     def _write(self, stream: BinaryIO, data: int) -> int:
-        return stream.write(self.pack([data], self.size, self.cstruct.endian))
+        return stream.write(self.pack([data], self.size, self.cstruct.endian, self.signed))
 
     def _write_array(self, stream: BinaryIO, data: List[int]) -> int:
-        return stream.write(self.pack(data, self.size, self.cstruct.endian))
+        return stream.write(self.pack(data, self.size, self.cstruct.endian, self.signed))
 
     def _write_0(self, stream: BinaryIO, data: List[int]) -> int:
         return self._write_array(stream, data + [0])
