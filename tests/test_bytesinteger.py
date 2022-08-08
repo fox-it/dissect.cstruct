@@ -1,5 +1,8 @@
+import pytest
+
 from dissect import cstruct
 from dissect.cstruct.types import BytesInteger
+from dissect.cstruct.exceptions import ValueOutOfBounds
 
 from .utils import verify_compiled
 
@@ -171,3 +174,35 @@ def test_bytesinteger_struct_unsigned_be(compiled):
     assert obj.dync == [0x444444, 0x454545]
     assert obj.c == 0xFFFFFF
     assert obj.dumps() == buf
+
+
+def test_bytesinteger_range():
+    cs = cstruct.cstruct()
+    int8 = BytesInteger(cs, "int8", 1, signed=True)
+    uint8 = BytesInteger(cs, "uint8", 1, signed=False)
+    int16 = BytesInteger(cs, "int16", 2, signed=True)
+    int24 = BytesInteger(cs, "int24", 3, signed=True)
+    int8.dumps(127)
+    int8.dumps(-128)
+    uint8.dumps(255)
+    uint8.dumps(0)
+    int16.dumps(-32768)
+    int16.dumps(32767)
+    int24.dumps(-8388608)
+    int24.dumps(8388607)
+    with pytest.raises(ValueOutOfBounds):
+        int8.dumps(-129)
+    with pytest.raises(ValueOutOfBounds):
+        int8.dumps(128)
+    with pytest.raises(ValueOutOfBounds):
+        uint8.dumps(-1)
+    with pytest.raises(ValueOutOfBounds):
+        uint8.dumps(256)
+    with pytest.raises(ValueOutOfBounds):
+        int16.dumps(-32769)
+    with pytest.raises(ValueOutOfBounds):
+        int16.dumps(32768)
+    with pytest.raises(ValueOutOfBounds):
+        int24.dumps(-8388609)
+    with pytest.raises(ValueOutOfBounds):
+        int24.dumps(8388608)

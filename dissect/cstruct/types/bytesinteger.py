@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import BinaryIO, List, TYPE_CHECKING
 
 from dissect.cstruct.types import RawType
+from dissect.cstruct.exceptions import ValueOutOfBounds
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
@@ -38,9 +39,20 @@ class BytesInteger(RawType):
         return nums
 
     @staticmethod
-    def pack(data: List[int], size: int, endian: str) -> bytes:
+    def pack(data: List[int], size: int, endian: str, signed: bool) -> bytes:
         buf = []
         for i in data:
+            bits = size * 8
+            unsignedMin = 0
+            unsignedMax = (2**bits) - 1
+            signedMax = (2 ** (bits - 1)) - 1
+            signedMin = -(2 ** (bits - 1))
+
+            if signed and (i < signedMin or i > signedMax):
+                raise ValueOutOfBounds
+            elif not signed and (i < unsignedMin or i > unsignedMax):
+                raise ValueOutOfBounds
+
             num = int(i)
             if num < 0:
                 num += 1 << (size * 8)
@@ -88,10 +100,10 @@ class BytesInteger(RawType):
         return result
 
     def _write(self, stream: BinaryIO, data: int) -> int:
-        return stream.write(self.pack([data], self.size, self.cstruct.endian))
+        return stream.write(self.pack([data], self.size, self.cstruct.endian, self.signed))
 
     def _write_array(self, stream: BinaryIO, data: List[int]) -> int:
-        return stream.write(self.pack(data, self.size, self.cstruct.endian))
+        return stream.write(self.pack(data, self.size, self.cstruct.endian, self.signed))
 
     def _write_0(self, stream: BinaryIO, data: List[int]) -> int:
         return self._write_array(stream, data + [0])
