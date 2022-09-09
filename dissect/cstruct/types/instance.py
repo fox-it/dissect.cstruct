@@ -40,6 +40,9 @@ class Instance:
     def __len__(self) -> int:
         return len(self.dumps())
 
+    def __bytes__(self) -> bytes:
+        return self.dumps()
+
     def _size(self, field: str) -> int:
         return self._sizes[field]
 
