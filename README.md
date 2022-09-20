@@ -13,6 +13,16 @@ structure as you go.
 By design cstruct is incredibly simple. No complex syntax, filters, pre- or post-processing steps. Just structure
 parsing. For more information, please see [the documentation](https://dissect.readthedocs.io/en/latest/projects/dissect.cstruct).
 
+## Installation
+
+`dissect.cstruct` is available on [PyPI](https://pypi.org/project/dissect.cstruct/).
+
+```bash
+pip install dissect.cstruct
+```
+
+This module is also automatically installed if you install the `dissect` package.
+
 ## Build and test instructions
 
 This project uses `tox` to build source and wheel distributions. Run the following command from the root folder to build
