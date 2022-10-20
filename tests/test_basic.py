@@ -401,3 +401,19 @@ def test_multipart_type_name():
         c.load(d)
 
     assert str(exc.value) == "Unknown type unsigned int and more"
+
+
+def test_dunder_bytes():
+    d = """
+    struct test {
+        DWORD   a;
+        QWORD   b;
+    };
+    """
+    c = cstruct.cstruct(endian=">")
+    c.load(d)
+
+    a = c.test(a=0xBADC0DE, b=0xACCE55ED)
+    assert len(bytes(a)) == 12
+    assert bytes(a) == a.dumps()
+    assert bytes(a) == b"\x0b\xad\xc0\xde\x00\x00\x00\x00\xac\xceU\xed"
