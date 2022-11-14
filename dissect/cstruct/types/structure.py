@@ -261,15 +261,16 @@ class Structure(BaseType):
 
         return num
 
-    def add_field(self, name: str, type_: BaseType, offset: int = None) -> None:
+    def add_field(self, name: str, type_: BaseType, bits: int = None, offset: int = None) -> None:
         """Add a field to this structure.
 
         Args:
             name: The field name.
             type_: The field type.
+            bits: The bit of the field.
             offset: The field offset.
         """
-        field = Field(name, type_, offset=offset)
+        field = Field(name, type_, bits=bits, offset=offset)
         self.fields.append(field)
         self.lookup[name] = field
         if isinstance(field.type, Structure) and field.type.anonymous:
