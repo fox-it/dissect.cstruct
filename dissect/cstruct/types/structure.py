@@ -316,9 +316,19 @@ class Union(Structure):
         return f"<Union {self.name}>"
 
     def _calc_size_and_offsets(self) -> None:
-        if self.fields:
-            self.size = max(len(field.type) for field in self.fields)
-            self.alignment = max(field.type.alignment for field in self.fields)
+        size = 0
+        alignment = 0
+
+        for field in self.fields:
+            if field.alignment is None:
+                # If a field already has an alignment, it's leading
+                field.alignment = field.type.alignment
+
+            size = max(len(field.type), size)
+            alignment = max(field.alignment, alignment)
+
+        self.size = size
+        self.alignment = alignment
 
     def _read(self, stream: BinaryIO) -> Instance:
         buf = io.BytesIO(memoryview(stream.read(len(self))))
