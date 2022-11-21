@@ -129,13 +129,15 @@ class cstruct:
             "uint16_t": "uint16",
             "uint32_t": "uint32",
             "uint64_t": "uint64",
-            "uint128_t": "int128",
+            "uint128_t": "uint128",
+            "unsigned __int128": "uint128",
 
             # Other convenience types
             "u1": "uint8",
             "u2": "uint16",
             "u4": "uint32",
             "u8": "uint64",
+            "u16": "uint128",
             "uchar": "uint8",
             "ushort": "unsigned short",
             "uint": "unsigned int",
