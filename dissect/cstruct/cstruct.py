@@ -55,6 +55,8 @@ class cstruct:
             "uint24": BytesInteger(self, "uint24", 3, False, alignment=4),
             "int48": BytesInteger(self, "int48", 6, True, alignment=8),
             "uint48": BytesInteger(self, "uint48", 6, False, alignment=8),
+            "int128": BytesInteger(self, "int128", 16, True, alignment=16),
+            "uint128": BytesInteger(self, "uint128", 16, False, alignment=16),
 
             "void": VoidType(),
 
