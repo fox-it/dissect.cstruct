@@ -22,6 +22,12 @@ def test_bytesinteger_unsigned():
     assert uint40[2](b"AAAAABBBBB") == [0x4141414141, 0x4242424242]
     assert uint40[None](b"AAAAA\x00") == [0x4141414141]
 
+    uint128 = BytesInteger(cs, "uint128", 16, signed=False)
+    assert uint128(b"A" * 16) == 0x41414141414141414141414141414141
+    assert uint128(b"\xff" * 16) == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+    assert uint128[2](b"A" * 16 + b"B" * 16) == [0x41414141414141414141414141414141, 0x42424242424242424242424242424242]
+    assert uint128[None](b"AAAAAAAAAAAAAAAA\x00") == [0x41414141414141414141414141414141]
+
 
 def test_bytesinteger_signed():
     cs = cstruct.cstruct()
@@ -34,6 +40,11 @@ def test_bytesinteger_signed():
     assert int40(b"AAAAA") == 0x4141414141
     assert int40(b"\xff\xff\xff\xff\xff") == -1
     assert int40[2](b"\xff\xff\xff\xff\xff\xfe\xff\xff\xff\xff") == [-1, -2]
+
+    int128 = BytesInteger(cs, "int128", 16, signed=True)
+    assert int128(b"A" * 16) == 0x41414141414141414141414141414141
+    assert int128(b"\xff" * 16) == -1
+    assert int128[2](b"\xff" * 16 + b"\xfe" + b"\xff" * 15) == [-1, -2]
 
 
 def test_bytesinteger_unsigned_be():
@@ -48,6 +59,11 @@ def test_bytesinteger_unsigned_be():
     assert uint40(b"\x00\x00\x00\x00\xff") == 255
     assert uint40(b"\xff\xff\xff\xff\xff") == 0xFFFFFFFFFF
     assert uint40[2](b"\x00\x00\x00\x00A\x00\x00\x00\x00B") == [0x41, 0x42]
+
+    uint128 = BytesInteger(cs, "uint128", 16, signed=False)
+    assert uint128(b"\x00" * 15 + b"\xff") == 255
+    assert uint128(b"\xff" * 16) == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+    assert uint128[2](b"\x00" * 15 + b"A" + b"\x00" * 15 + b"B") == [0x41, 0x42]
 
 
 def test_bytesinteger_signed_be():
@@ -64,6 +80,12 @@ def test_bytesinteger_signed_be():
     assert int40(b"\xff\xff\xff\xff\x01") == -255
     assert int40[2](b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xfe") == [-1, -2]
 
+    int128 = BytesInteger(cs, "int128", 16, signed=True)
+    assert int128(b"\x00" * 15 + b"\xff") == 255
+    assert int128(b"\xff" * 16) == -1
+    assert int128(b"\xff" * 15 + b"\x01") == -255
+    assert int128[2](b"\xff" * 16 + b"\xff" * 15 + b"\xfe") == [-1, -2]
+
 
 def test_bytesinteger_struct_signed(compiled):
     cdef = """
@@ -74,6 +96,8 @@ def test_bytesinteger_struct_signed(compiled):
         int24   dync[len];
         int24   c;
         int24   d[3];
+        int128  e;
+        int128  f[2];
     };
     """
     cs = cstruct.cstruct()
@@ -82,6 +106,8 @@ def test_bytesinteger_struct_signed(compiled):
     assert verify_compiled(cs.test, compiled)
 
     buf = b"AAABBBCCC\x02\x00\x00DDDEEE\xff\xff\xff\x01\xff\xff\x02\xff\xff\x03\xff\xff"
+    buf += b"A" * 16
+    buf += b"\xff" * 16 + b"\x01" + b"\xff" * 15
     obj = cs.test(buf)
 
     assert obj.a == 0x414141
@@ -90,6 +116,8 @@ def test_bytesinteger_struct_signed(compiled):
     assert obj.dync == [0x444444, 0x454545]
     assert obj.c == -1
     assert obj.d == [-255, -254, -253]
+    assert obj.e == 0x41414141414141414141414141414141
+    assert obj.f == [-1, -255]
     assert obj.dumps() == buf
 
 
@@ -101,6 +129,8 @@ def test_bytesinteger_struct_unsigned(compiled):
         uint24  len;
         uint24  dync[len];
         uint24  c;
+        uint128 d;
+        uint128 e[2];
     };
     """
     cs = cstruct.cstruct()
@@ -109,6 +139,8 @@ def test_bytesinteger_struct_unsigned(compiled):
     assert verify_compiled(cs.test, compiled)
 
     buf = b"AAABBBCCC\x02\x00\x00DDDEEE\xff\xff\xff"
+    buf += b"A" * 16
+    buf += b"A" + b"\x00" * 15 + b"B" + b"\x00" * 15
     obj = cs.test(buf)
 
     assert obj.a == 0x414141
@@ -116,6 +148,8 @@ def test_bytesinteger_struct_unsigned(compiled):
     assert obj.len == 0x02
     assert obj.dync == [0x444444, 0x454545]
     assert obj.c == 0xFFFFFF
+    assert obj.d == 0x41414141414141414141414141414141
+    assert obj.e == [0x41, 0x42]
     assert obj.dumps() == buf
 
 
@@ -128,6 +162,8 @@ def test_bytesinteger_struct_signed_be(compiled):
         int24   dync[len];
         int24   c;
         int24   d[3];
+        int128  e;
+        int128  f[2];
     };
     """
     cs = cstruct.cstruct()
@@ -137,6 +173,8 @@ def test_bytesinteger_struct_signed_be(compiled):
     assert verify_compiled(cs.test, compiled)
 
     buf = b"AAABBBCCC\x00\x00\x02DDDEEE\xff\xff\xff\xff\xff\x01\xff\xff\x02\xff\xff\x03"
+    buf += b"A" * 16
+    buf += b"\x00" * 15 + b"A" + b"\x00" * 15 + b"B"
     obj = cs.test(buf)
 
     assert obj.a == 0x414141
@@ -145,6 +183,8 @@ def test_bytesinteger_struct_signed_be(compiled):
     assert obj.dync == [0x444444, 0x454545]
     assert obj.c == -1
     assert obj.d == [-255, -254, -253]
+    assert obj.e == 0x41414141414141414141414141414141
+    assert obj.f == [0x41, 0x42]
     assert obj.dumps() == buf
 
 
@@ -156,6 +196,8 @@ def test_bytesinteger_struct_unsigned_be(compiled):
         uint24  len;
         uint24  dync[len];
         uint24  c;
+        uint128 d;
+        uint128 e[2];
     };
     """
     cs = cstruct.cstruct()
@@ -165,6 +207,8 @@ def test_bytesinteger_struct_unsigned_be(compiled):
     assert verify_compiled(cs.test, compiled)
 
     buf = b"AAABBBCCC\x00\x00\x02DDDEEE\xff\xff\xff"
+    buf += b"\xff" * 16
+    buf += b"\x00" * 14 + b"AA" + b"\x00" * 14 + b"BB"
     obj = cs.test(buf)
 
     assert obj.a == 0x414141
@@ -172,6 +216,8 @@ def test_bytesinteger_struct_unsigned_be(compiled):
     assert obj.len == 0x02
     assert obj.dync == [0x444444, 0x454545]
     assert obj.c == 0xFFFFFF
+    assert obj.d == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+    assert obj.e == [0x4141, 0x4242]
     assert obj.dumps() == buf
 
 
@@ -181,6 +227,7 @@ def test_bytesinteger_range():
     uint8 = BytesInteger(cs, "uint8", 1, signed=False)
     int16 = BytesInteger(cs, "int16", 2, signed=True)
     int24 = BytesInteger(cs, "int24", 3, signed=True)
+    int128 = BytesInteger(cs, "int128", 16, signed=True)
     int8.dumps(127)
     int8.dumps(-128)
     uint8.dumps(255)
@@ -189,6 +236,8 @@ def test_bytesinteger_range():
     int16.dumps(32767)
     int24.dumps(-8388608)
     int24.dumps(8388607)
+    int128.dumps(-(2**127) + 1)
+    int128.dumps(2**127 - 1)
     with pytest.raises(OverflowError):
         int8.dumps(-129)
     with pytest.raises(OverflowError):
@@ -205,3 +254,7 @@ def test_bytesinteger_range():
         int24.dumps(-8388609)
     with pytest.raises(OverflowError):
         int24.dumps(8388608)
+    with pytest.raises(OverflowError):
+        int128.dumps(-(2**127) - 1)
+    with pytest.raises(OverflowError):
+        int128.dumps(2**127)
