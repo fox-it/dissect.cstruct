@@ -87,6 +87,7 @@ class cstruct:
             "LONG64": "int64",
             "LONGLONG": "int64",
             "QWORD": "uint64",
+            "OWORD": "uint128",
             "WCHAR": "wchar",
 
             "UCHAR": "uint8",
@@ -100,17 +101,20 @@ class cstruct:
             "INT16": "int16",
             "INT32": "int32",
             "INT64": "int64",
+            "INT128": "int128",
 
             "UINT": "uint",
             "UINT8": "uint8",
             "UINT16": "uint16",
             "UINT32": "uint32",
             "UINT64": "uint64",
+            "UINT128": "uint128",
 
             "__int8": "int8",
             "__int16": "int16",
             "__int32": "int32",
             "__int64": "int64",
+            "__int128": "int128",
 
             "wchar_t": "wchar",
 
@@ -119,11 +123,13 @@ class cstruct:
             "int16_t": "int16",
             "int32_t": "int32",
             "int64_t": "int64",
+            "int128_t": "int128",
 
             "uint8_t": "uint8",
             "uint16_t": "uint16",
             "uint32_t": "uint32",
             "uint64_t": "uint64",
+            "uint128_t": "int128",
 
             # Other convenience types
             "u1": "uint8",
