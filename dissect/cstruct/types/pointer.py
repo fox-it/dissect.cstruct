@@ -25,6 +25,9 @@ class Pointer(RawType):
         addr = self.cstruct.pointer(stream)
         return PointerInstance(self.type, stream, addr, ctx)
 
+    def _read_array(self, stream: BinaryIO, count: int, ctx: Dict[str, Any]) -> List[Pointer]:
+        return [ self._read(stream, ctx) for _ in range(count) ]
+
     def _write(self, stream: BinaryIO, data: Union[int, PointerInstance]):
         if isinstance(data, PointerInstance):
             data = data._addr
