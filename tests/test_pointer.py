@@ -83,6 +83,29 @@ def test_pointer_struct(compiled):
         c.ptrtest(b"\x00\x00\x00\x00").ptr.magic
 
 
+@pytest.mark.parametrize("compiled", [True, False])
+def test_array_of_pointers(compiled):
+    d = """
+    struct mainargs {
+        uint8_t argc;
+        char *args[4];
+    }
+    """
+    c = cstruct.cstruct(pointer="uint16")
+    c.load(d, compiled=compiled)
+
+    assert verify_compiled(c.mainargs, compiled)
+
+    d = b"\x02\x09\x00\x16\x00\x00\x00\x00\x00argument one\x00argument two\x00"
+    p = c.mainargs(d)
+
+    assert p.argc == 2
+    assert p.args[2] == 0
+    assert p.args[3] == 0
+    assert p.args[0].dereference() == b'argument one'
+    assert p.args[1].dereference() == b'argument two'
+
+
 def test_pointer_arithmetic():
     inst = PointerInstance(None, None, 0, None)
     assert inst._addr == 0
