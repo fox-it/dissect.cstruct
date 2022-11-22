@@ -4,7 +4,7 @@ import operator
 from typing import Any, BinaryIO, Callable, Dict, Union, TYPE_CHECKING
 
 from dissect.cstruct.exceptions import NullPointerDereference
-from dissect.cstruct.types import Array, BaseType, RawType
+from dissect.cstruct.types import Array, BaseType, CharType, RawType
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
@@ -120,6 +120,9 @@ class PointerInstance:
 
             if isinstance(self._type, Array):
                 value = self._type._read(self._stream, self._ctx)
+            elif isinstance(self._type, CharType):
+                # this makes the assumption that a char pointer is a null-terminated string
+                value = self._type._read_0(self._stream)
             else:
                 value = self._type._read(
                     self._stream,
