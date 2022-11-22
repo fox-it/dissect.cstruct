@@ -17,7 +17,7 @@ class CharType(RawType):
     def _read(self, stream: BinaryIO) -> bytes:
         return stream.read(1)
 
-    def _read_array(self, stream: BinaryIO, count: int) -> bytes:
+    def _read_array(self, stream: BinaryIO, count: int, **kwargs) -> bytes:
         if count == 0:
             return b""
 

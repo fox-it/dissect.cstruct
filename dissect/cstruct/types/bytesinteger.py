@@ -79,7 +79,7 @@ class BytesInteger(RawType):
     def _read(self, stream: BinaryIO) -> int:
         return self.parse(stream.read(self.size * 1), self.size, 1, self.signed, self.cstruct.endian)[0]
 
-    def _read_array(self, stream: BinaryIO, count: int) -> List[int]:
+    def _read_array(self, stream: BinaryIO, count: int, **kwargs) -> List[int]:
         return self.parse(
             stream.read(self.size * count),
             self.size,

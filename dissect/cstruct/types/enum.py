@@ -61,7 +61,7 @@ class Enum(RawType):
         )
         return self(v)
 
-    def _read_array(self, stream: BinaryIO, count: int) -> List[EnumInstance]:
+    def _read_array(self, stream: BinaryIO, count: int, **kwargs) -> List[EnumInstance]:
         return list(map(self, self.type._read_array(stream, count)))
 
     def _read_0(self, stream: BinaryIO) -> List[EnumInstance]:

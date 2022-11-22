@@ -19,7 +19,7 @@ class WcharType(RawType):
     def _read(self, stream: BinaryIO) -> str:
         return stream.read(2).decode(self.encoding)
 
-    def _read_array(self, stream: BinaryIO, count: int) -> str:
+    def _read_array(self, stream: BinaryIO, count: int, **kwargs) -> str:
         if count == 0:
             return ""
 

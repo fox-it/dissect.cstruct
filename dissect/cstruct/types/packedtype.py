@@ -19,7 +19,7 @@ class PackedType(RawType):
     def _read(self, stream: BinaryIO) -> int:
         return self._read_array(stream, 1)[0]
 
-    def _read_array(self, stream: BinaryIO, count: int) -> List[int]:
+    def _read_array(self, stream: BinaryIO, count: int, **kwargs) -> List[int]:
         length = self.size * count
         data = stream.read(length)
         fmt = self.cstruct.endian + str(count) + self.packchar

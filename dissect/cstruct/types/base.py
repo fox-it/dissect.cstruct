@@ -84,7 +84,7 @@ class BaseType:
     def _read(self, stream: BinaryIO) -> Any:
         raise NotImplementedError()
 
-    def _read_array(self, stream: BinaryIO, count: int) -> List[Any]:
+    def _read_array(self, stream: BinaryIO, count: int, **kwargs) -> List[Any]:
         return [self._read(stream) for _ in range(count)]
 
     def _read_0(self, stream: BinaryIO) -> List[Any]:
@@ -152,7 +152,7 @@ class Array(BaseType):
         else:
             count = self.count
 
-        return self.type._read_array(stream, max(0, count))
+        return self.type._read_array(stream, max(0, count), ctx=context)
 
     def _write(self, stream: BinaryIO, data: List[Any]) -> int:
         if self.null_terminated:
