@@ -221,11 +221,52 @@ def test_bytesinteger_struct_unsigned_be(compiled):
     assert obj.dumps() == buf
 
 
+def test_bytesinteger_struct_float(compiled):
+    cdef = """
+    struct test {
+        float16 a;
+        float   b;
+    };
+    """
+    cs = cstruct.cstruct()
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"69\xb1U$G"
+    obj = cs.test(buf)
+
+    assert obj.a == 0.6513671875
+    assert obj.b == 42069.69140625
+
+
+def test_bytesinteger_struct_float_be(compiled):
+    cdef = """
+    struct test {
+        float16 a;
+        float   b;
+    };
+    """
+    cs = cstruct.cstruct()
+    cs.load(cdef, compiled=compiled)
+    cs.endian = ">"
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"69G$U\xb1"
+    obj = cs.test(buf)
+    print(obj)
+
+    assert obj.a == 0.388916015625
+    assert obj.b == 42069.69140625
+
+
 def test_bytesinteger_range():
     cs = cstruct.cstruct()
     int8 = BytesInteger(cs, "int8", 1, signed=True)
     uint8 = BytesInteger(cs, "uint8", 1, signed=False)
     int16 = BytesInteger(cs, "int16", 2, signed=True)
+    float16 = BytesInteger(cs, "float16", 2, signed=True)
     int24 = BytesInteger(cs, "int24", 3, signed=True)
     int128 = BytesInteger(cs, "int128", 16, signed=True)
     int8.dumps(127)
@@ -234,6 +275,8 @@ def test_bytesinteger_range():
     uint8.dumps(0)
     int16.dumps(-32768)
     int16.dumps(32767)
+    float16.dumps(-32767.0)
+    float16.dumps(32767.0)
     int24.dumps(-8388608)
     int24.dumps(8388607)
     int128.dumps(-(2**127) + 1)
@@ -250,6 +293,10 @@ def test_bytesinteger_range():
         int16.dumps(-32769)
     with pytest.raises(OverflowError):
         int16.dumps(32768)
+    with pytest.raises(OverflowError):
+        float16.dumps(-32768.01)
+    with pytest.raises(OverflowError):
+        float16.dumps(32768.01)
     with pytest.raises(OverflowError):
         int24.dumps(-8388609)
     with pytest.raises(OverflowError):
