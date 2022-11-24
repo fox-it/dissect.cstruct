@@ -6,7 +6,16 @@ from dissect.cstruct.types import PackedType
 from .utils import verify_compiled
 
 
-def test_packedtype_struct_float(compiled):
+def test_packedtype_float():
+    cs = cstruct.cstruct()
+
+    assert cs.float16.dumps(420.69) == b"\x93^"
+    assert cs.float.dumps(31337.6969) == b"e\xd3\xf4F"
+    assert cs.float16.reads(b"\x69\x69") == 2770.0
+    assert cs.float.reads(b"M0MS") == 881278648320.0
+
+
+def test_packedtype_float_struct(compiled):
     cdef = """
     struct test {
         float16 a;
@@ -25,7 +34,7 @@ def test_packedtype_struct_float(compiled):
     assert obj.b == 42069.69140625
 
 
-def test_packedtype_struct_float_be(compiled):
+def test_packedtype_float_struct_be(compiled):
     cdef = """
     struct test {
         float16 a;
