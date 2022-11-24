@@ -46,6 +46,7 @@ class cstruct:
             "uint32": PackedType(self, "uint32", 4, "I"),
             "int64": PackedType(self, "int64", 8, "q"),
             "uint64": PackedType(self, "uint64", 8, "Q"),
+            "float16": PackedType(self, "float16", 2, "e"),
             "float": PackedType(self, "float", 4, "f"),
             "double": PackedType(self, "double", 8, "d"),
             "char": CharType(self),
