@@ -246,3 +246,29 @@ def test_bitfield_with_enum_or_flag(compiled):
     assert obj.d == cs.Flag8.A | cs.Flag8.B
 
     assert obj.dumps() == buf
+
+
+def test_bitfield_char(compiled):
+    cdef = """
+    struct test {
+        uint16  a : 4;
+        uint16  b : 4;
+        char    c : 4;
+        char    d[4];
+    };
+    """
+
+    cs = cstruct.cstruct()
+    cs.load(cdef)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"\x12\x34\xff\x69420"
+    obj = cs.test(buf)
+
+    assert obj.a == 0b10
+    assert obj.b == 0b1
+    assert obj.c == 0b1111
+    assert obj.d == b"i420"
+
+    assert obj.dumps() == buf

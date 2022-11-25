@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import BinaryIO, TYPE_CHECKING
+from typing import BinaryIO, TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from dissect.cstruct.types import RawType
@@ -17,16 +17,22 @@ class BitBuffer:
         self._buffer = 0
         self._remaining = 0
 
-    def read(self, field_type: RawType, bits: int) -> int:
+    def read(self, field_type: RawType, bits: Union[int, bytes]) -> int:
         if self._remaining == 0 or self._type != field_type:
             self._type = field_type
             self._remaining = field_type.size * 8
             self._buffer = field_type._read(self.stream)
 
+        if isinstance(self._buffer, bytes):
+            if self.endian == "<":
+                self._buffer = int.from_bytes(self._buffer, "little")
+            else:
+                self._buffer = int.from_bytes(self._buffer, "big")
+
         if bits > self._remaining:
             raise ValueError("Reading straddled bits is unsupported")
 
-        if self.endian != ">":
+        if self.endian == "<":
             v = self._buffer & ((1 << bits) - 1)
             self._buffer >>= bits
             self._remaining -= bits
@@ -44,7 +50,7 @@ class BitBuffer:
             self._remaining = field_type.size * 8
             self._type = field_type
 
-        if self.endian != ">":
+        if self.endian == "<":
             self._buffer |= data << (self._type.size * 8 - self._remaining)
         else:
             self._buffer |= data << (self._remaining - bits)
