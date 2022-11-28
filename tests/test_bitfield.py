@@ -253,22 +253,22 @@ def test_bitfield_char(compiled):
     struct test {
         uint16  a : 4;
         uint16  b : 4;
-        char    c : 4;
+        char    c : 8;
         char    d[4];
     };
     """
 
     cs = cstruct.cstruct()
-    cs.load(cdef)
+    cs.load(cdef, compiled=compiled)
 
-    assert verify_compiled(cs.test, compiled)
+    assert verify_compiled(cs.test, compiled=compiled)
 
-    buf = b"\x12\x34\xff\x69420"
+    buf = b"\x12\x00\xff\x69420"
     obj = cs.test(buf)
 
     assert obj.a == 0b10
     assert obj.b == 0b1
-    assert obj.c == 0b1111
+    assert obj.c == 0b11111111
     assert obj.d == b"i420"
 
     assert obj.dumps() == buf
