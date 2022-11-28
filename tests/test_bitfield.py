@@ -261,7 +261,7 @@ def test_bitfield_char(compiled):
     cs = cstruct.cstruct()
     cs.load(cdef, compiled=compiled)
 
-    assert verify_compiled(cs.test, compiled=compiled)
+    assert verify_compiled(cs.test, compiled)
 
     buf = b"\x12\x00\xff\x69420"
     obj = cs.test(buf)
