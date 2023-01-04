@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import BinaryIO, List, TYPE_CHECKING
+from typing import Any, BinaryIO, List, TYPE_CHECKING
 
 from dissect.cstruct.types import RawType
 
@@ -76,10 +76,10 @@ class BytesInteger(RawType):
 
         return b"".join(buf)
 
-    def _read(self, stream: BinaryIO) -> int:
+    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> int:
         return self.parse(stream.read(self.size * 1), self.size, 1, self.signed, self.cstruct.endian)[0]
 
-    def _read_array(self, stream: BinaryIO, count: int, **kwargs) -> List[int]:
+    def _read_array(self, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> List[int]:
         return self.parse(
             stream.read(self.size * count),
             self.size,
@@ -88,11 +88,11 @@ class BytesInteger(RawType):
             self.cstruct.endian,
         )
 
-    def _read_0(self, stream: BinaryIO) -> List[int]:
+    def _read_0(self, stream: BinaryIO, context: dict[str, Any] = None) -> List[int]:
         result = []
 
         while True:
-            v = self._read(stream)
+            v = self._read(stream, context)
             if v == 0:
                 break
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import BinaryIO, TYPE_CHECKING
+from typing import Any, BinaryIO, TYPE_CHECKING
 
 from dissect.cstruct.types import RawType
 
@@ -14,16 +14,16 @@ class CharType(RawType):
     def __init__(self, cstruct: cstruct):
         super().__init__(cstruct, "char", size=1, alignment=1)
 
-    def _read(self, stream: BinaryIO) -> bytes:
+    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> bytes:
         return stream.read(1)
 
-    def _read_array(self, stream: BinaryIO, count: int, **kwargs) -> bytes:
+    def _read_array(self, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> bytes:
         if count == 0:
             return b""
 
         return stream.read(count)
 
-    def _read_0(self, stream: BinaryIO) -> bytes:
+    def _read_0(self, stream: BinaryIO, context: dict[str, Any] = None) -> bytes:
         byte_array = []
         while True:
             bytes_stream = stream.read(1)

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import io
 from collections import OrderedDict
-from typing import BinaryIO, List, TYPE_CHECKING
+from typing import Any, BinaryIO, List, TYPE_CHECKING
 
 from dissect.cstruct.bitbuffer import BitBuffer
-from dissect.cstruct.types import Array, BaseType, Enum, Instance, Pointer
+from dissect.cstruct.types import BaseType, Enum, Instance
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
@@ -153,7 +153,7 @@ class Structure(BaseType):
         self.size = offset
         self.alignment = alignment
 
-    def _read(self, stream: BinaryIO, *args, **kwargs) -> Instance:
+    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> Instance:
         bit_buffer = BitBuffer(stream, self.cstruct.endian)
         struct_start = stream.tell()
 
@@ -185,10 +185,7 @@ class Structure(BaseType):
             else:
                 bit_buffer.reset()
 
-            if isinstance(field_type, (Array, Pointer)):
-                value = field_type._read(stream, result)
-            else:
-                value = field_type._read(stream)
+            value = field_type._read(stream, result)
 
             if isinstance(field_type, Structure) and field_type.anonymous:
                 sizes.update(value._sizes)
@@ -330,7 +327,7 @@ class Union(Structure):
         self.size = size
         self.alignment = alignment
 
-    def _read(self, stream: BinaryIO) -> Instance:
+    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> Instance:
         buf = io.BytesIO(memoryview(stream.read(len(self))))
         result = OrderedDict()
         sizes = {}
@@ -344,10 +341,7 @@ class Union(Structure):
                 buf.seek(field.offset)
                 start = field.offset
 
-            if isinstance(field_type, (Array, Pointer)):
-                v = field_type._read(buf, result)
-            else:
-                v = field_type._read(buf)
+            v = field_type._read(buf, result)
 
             if isinstance(field_type, Structure) and field_type.anonymous:
                 sizes.update(v._sizes)

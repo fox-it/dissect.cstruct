@@ -51,7 +51,7 @@ class {name}(Structure):
         self.source = source
         super().__init__(cstruct, structure.name, structure.fields, anonymous=structure.anonymous)
 
-    def _read(self, stream):
+    def _read(self, stream, context=None):
         r = OrderedDict()
         sizes = {{}}
         bitreader = BitBuffer(stream, self.cstruct.endian)

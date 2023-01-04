@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import BinaryIO, Dict, List, Union, TYPE_CHECKING
+from typing import Any, BinaryIO, Dict, List, Union, TYPE_CHECKING
 
 from dissect.cstruct.types import BaseType, RawType
 
@@ -55,17 +55,15 @@ class Enum(RawType):
     def __contains__(self, attr: str) -> bool:
         return attr in self.values
 
-    def _read(self, stream: BinaryIO) -> EnumInstance:
-        v = self.type._read(
-            stream,
-        )
+    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> EnumInstance:
+        v = self.type._read(stream, context)
         return self(v)
 
-    def _read_array(self, stream: BinaryIO, count: int, **kwargs) -> List[EnumInstance]:
-        return list(map(self, self.type._read_array(stream, count)))
+    def _read_array(self, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> List[EnumInstance]:
+        return list(map(self, self.type._read_array(stream, count, context)))
 
-    def _read_0(self, stream: BinaryIO) -> List[EnumInstance]:
-        return list(map(self, self.type._read_0(stream)))
+    def _read_0(self, stream: BinaryIO, context: dict[str, Any] = None) -> List[EnumInstance]:
+        return list(map(self, self.type._read_0(stream, context)))
 
     def _write(self, stream: BinaryIO, data: Union[int, EnumInstance]) -> int:
         data = data.value if isinstance(data, EnumInstance) else data

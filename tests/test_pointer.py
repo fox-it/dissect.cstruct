@@ -8,42 +8,42 @@ from .utils import verify_compiled
 
 @pytest.mark.parametrize("compiled", [True, False])
 def test_pointer_basic(compiled):
-    d = """
+    cdef = """
     struct ptrtest {
         uint32  *ptr1;
         uint32  *ptr2;
     };
     """
-    c = cstruct.cstruct(pointer="uint16")
-    c.load(d, compiled=compiled)
+    cs = cstruct.cstruct(pointer="uint16")
+    cs.load(cdef, compiled=compiled)
 
-    assert verify_compiled(c.ptrtest, compiled)
+    assert verify_compiled(cs.ptrtest, compiled)
 
-    d = b"\x04\x00\x08\x00\x01\x02\x03\x04\x05\x06\x07\x08"
-    p = c.ptrtest(d)
+    buf = b"\x04\x00\x08\x00\x01\x02\x03\x04\x05\x06\x07\x08"
+    obj = cs.ptrtest(buf)
 
-    assert p.ptr1 != 0
-    assert p.ptr2 != 0
-    assert p.ptr1 != p.ptr2
-    assert p.ptr1 == 4
-    assert p.ptr2 == 8
-    assert p.ptr1.dereference() == 0x04030201
-    assert p.ptr2.dereference() == 0x08070605
+    assert obj.ptr1 != 0
+    assert obj.ptr2 != 0
+    assert obj.ptr1 != obj.ptr2
+    assert obj.ptr1 == 4
+    assert obj.ptr2 == 8
+    assert obj.ptr1.dereference() == 0x04030201
+    assert obj.ptr2.dereference() == 0x08070605
 
-    p.ptr1 += 2
-    p.ptr2 -= 2
-    assert p.ptr1 == p.ptr2
-    assert p.ptr1.dereference() == p.ptr2.dereference() == 0x06050403
+    obj.ptr1 += 2
+    obj.ptr2 -= 2
+    assert obj.ptr1 == obj.ptr2
+    assert obj.ptr1.dereference() == obj.ptr2.dereference() == 0x06050403
 
-    assert p.dumps() == b"\x06\x00\x06\x00"
+    assert obj.dumps() == b"\x06\x00\x06\x00"
 
     with pytest.raises(cstruct.NullPointerDereference):
-        c.ptrtest(b"\x00\x00\x00\x00").ptr1.dereference()
+        cs.ptrtest(b"\x00\x00\x00\x00").ptr1.dereference()
 
 
 @pytest.mark.parametrize("compiled", [True, False])
 def test_pointer_struct(compiled):
-    d = """
+    cdef = """
     struct test {
         char    magic[4];
         wchar   wmagic[4];
@@ -58,52 +58,52 @@ def test_pointer_struct(compiled):
         test    *ptr;
     };
     """
-    c = cstruct.cstruct(pointer="uint16")
-    c.load(d, compiled=compiled)
+    cs = cstruct.cstruct(pointer="uint16")
+    cs.load(cdef, compiled=compiled)
 
-    assert verify_compiled(c.test, compiled)
-    assert verify_compiled(c.ptrtest, compiled)
+    assert verify_compiled(cs.test, compiled)
+    assert verify_compiled(cs.ptrtest, compiled)
 
-    d = b"\x02\x00testt\x00e\x00s\x00t\x00\x01\x02\x03\x04\x05\x06\x07lalala\x00t\x00e\x00s\x00t\x00\x00\x00"
-    p = c.ptrtest(d)
+    buf = b"\x02\x00testt\x00e\x00s\x00t\x00\x01\x02\x03\x04\x05\x06\x07lalala\x00t\x00e\x00s\x00t\x00\x00\x00"
+    obj = cs.ptrtest(buf)
 
-    assert p.ptr != 0
+    assert obj.ptr != 0
 
-    assert p.ptr.magic == b"test"
-    assert p.ptr.wmagic == "test"
-    assert p.ptr.a == 0x01
-    assert p.ptr.b == 0x0302
-    assert p.ptr.c == 0x07060504
-    assert p.ptr.string == b"lalala"
-    assert p.ptr.wstring == "test"
+    assert obj.ptr.magic == b"test"
+    assert obj.ptr.wmagic == "test"
+    assert obj.ptr.a == 0x01
+    assert obj.ptr.b == 0x0302
+    assert obj.ptr.c == 0x07060504
+    assert obj.ptr.string == b"lalala"
+    assert obj.ptr.wstring == "test"
 
-    assert p.dumps() == b"\x02\x00"
+    assert obj.dumps() == b"\x02\x00"
 
     with pytest.raises(cstruct.NullPointerDereference):
-        c.ptrtest(b"\x00\x00\x00\x00").ptr.magic
+        cs.ptrtest(b"\x00\x00\x00\x00").ptr.magic
 
 
 @pytest.mark.parametrize("compiled", [True, False])
 def test_array_of_pointers(compiled):
-    d = """
+    cdef = """
     struct mainargs {
         uint8_t argc;
         char *args[4];
     }
     """
-    c = cstruct.cstruct(pointer="uint16")
-    c.load(d, compiled=compiled)
+    cs = cstruct.cstruct(pointer="uint16")
+    cs.load(cdef, compiled=compiled)
 
-    assert verify_compiled(c.mainargs, compiled)
+    assert verify_compiled(cs.mainargs, compiled)
 
-    d = b"\x02\x09\x00\x16\x00\x00\x00\x00\x00argument one\x00argument two\x00"
-    p = c.mainargs(d)
+    buf = b"\x02\x09\x00\x16\x00\x00\x00\x00\x00argument one\x00argument two\x00"
+    obj = cs.mainargs(buf)
 
-    assert p.argc == 2
-    assert p.args[2] == 0
-    assert p.args[3] == 0
-    assert p.args[0].dereference() == b'argument one'
-    assert p.args[1].dereference() == b'argument two'
+    assert obj.argc == 2
+    assert obj.args[2] == 0
+    assert obj.args[3] == 0
+    assert obj.args[0].dereference() == b'argument one'
+    assert obj.args[1].dereference() == b'argument two'
 
 
 def test_pointer_arithmetic():

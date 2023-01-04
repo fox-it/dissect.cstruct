@@ -81,13 +81,13 @@ class BaseType:
         """
         return self._write(stream, data)
 
-    def _read(self, stream: BinaryIO) -> Any:
+    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> Any:
         raise NotImplementedError()
 
-    def _read_array(self, stream: BinaryIO, count: int, **kwargs) -> List[Any]:
-        return [self._read(stream) for _ in range(count)]
+    def _read_array(self, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> List[Any]:
+        return [self._read(stream, context) for _ in range(count)]
 
-    def _read_0(self, stream: BinaryIO) -> List[Any]:
+    def _read_0(self, stream: BinaryIO, context: dict[str, Any] = None) -> List[Any]:
         raise NotImplementedError()
 
     def _write(self, stream: BinaryIO, data: Any) -> int:
@@ -143,16 +143,16 @@ class Array(BaseType):
 
         return len(self.type) * self.count
 
-    def _read(self, stream: BinaryIO, context: dict = None) -> List[Any]:
+    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> List[Any]:
         if self.null_terminated:
-            return self.type._read_0(stream)
+            return self.type._read_0(stream, context)
 
         if self.dynamic:
             count = self.count.evaluate(context)
         else:
             count = self.count
 
-        return self.type._read_array(stream, max(0, count), ctx=context)
+        return self.type._read_array(stream, max(0, count), context)
 
     def _write(self, stream: BinaryIO, data: List[Any]) -> int:
         if self.null_terminated:
@@ -183,10 +183,10 @@ class RawType(BaseType):
 
         return BaseType.__repr__(self)
 
-    def _read(self, stream: BinaryIO) -> Any:
+    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> Any:
         raise NotImplementedError()
 
-    def _read_0(self, stream: BinaryIO) -> List[Any]:
+    def _read_0(self, stream: BinaryIO, context: dict[str, Any] = None) -> List[Any]:
         raise NotImplementedError()
 
     def _write(self, stream: BinaryIO, data: Any) -> int:

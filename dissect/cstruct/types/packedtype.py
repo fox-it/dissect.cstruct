@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import struct
-from typing import BinaryIO, List, TYPE_CHECKING
+from typing import Any, BinaryIO, List, TYPE_CHECKING
 
 from dissect.cstruct.types import RawType
 
@@ -16,10 +16,10 @@ class PackedType(RawType):
         super().__init__(cstruct, name, size, alignment)
         self.packchar = packchar
 
-    def _read(self, stream: BinaryIO) -> int:
-        return self._read_array(stream, 1)[0]
+    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> int:
+        return self._read_array(stream, 1, context)[0]
 
-    def _read_array(self, stream: BinaryIO, count: int, **kwargs) -> List[int]:
+    def _read_array(self, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> List[int]:
         length = self.size * count
         data = stream.read(length)
         fmt = self.cstruct.endian + str(count) + self.packchar
@@ -29,7 +29,7 @@ class PackedType(RawType):
 
         return list(struct.unpack(fmt, data))
 
-    def _read_0(self, stream: BinaryIO) -> List[int]:
+    def _read_0(self, stream: BinaryIO, context: dict[str, Any] = None) -> List[int]:
         byte_array = []
         while True:
             bytes_stream = stream.read(self.size)

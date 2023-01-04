@@ -1,4 +1,4 @@
-from typing import BinaryIO
+from typing import Any, BinaryIO
 
 from dissect.cstruct.types import RawType
 
@@ -16,17 +16,17 @@ class WcharType(RawType):
         elif self.cstruct.endian == ">":  # big-endian (BE)
             return "utf-16-be"
 
-    def _read(self, stream: BinaryIO) -> str:
+    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> str:
         return stream.read(2).decode(self.encoding)
 
-    def _read_array(self, stream: BinaryIO, count: int, **kwargs) -> str:
+    def _read_array(self, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> str:
         if count == 0:
             return ""
 
         data = stream.read(2 * count)
         return data.decode(self.encoding)
 
-    def _read_0(self, stream: BinaryIO) -> str:
+    def _read_0(self, stream: BinaryIO, context: dict[str, Any] = None) -> str:
         byte_string = b""
         while True:
             bytes_stream = stream.read(2)
