@@ -102,8 +102,8 @@ def test_array_of_pointers(compiled):
     assert obj.argc == 2
     assert obj.args[2] == 0
     assert obj.args[3] == 0
-    assert obj.args[0].dereference() == b'argument one'
-    assert obj.args[1].dereference() == b'argument two'
+    assert obj.args[0].dereference() == b"argument one"
+    assert obj.args[1].dereference() == b"argument two"
 
 
 def test_pointer_arithmetic():

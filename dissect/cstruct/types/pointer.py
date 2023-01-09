@@ -4,7 +4,7 @@ import operator
 from typing import Any, BinaryIO, Callable, Dict, Union, TYPE_CHECKING
 
 from dissect.cstruct.exceptions import NullPointerDereference
-from dissect.cstruct.types import Array, BaseType, CharType, RawType
+from dissect.cstruct.types import BaseType, CharType, RawType
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
