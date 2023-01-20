@@ -4,7 +4,7 @@ import operator
 from typing import Any, BinaryIO, Callable, Dict, Union, TYPE_CHECKING
 
 from dissect.cstruct.exceptions import NullPointerDereference
-from dissect.cstruct.types import Array, BaseType, RawType
+from dissect.cstruct.types import BaseType, CharType, RawType
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
@@ -21,9 +21,9 @@ class Pointer(RawType):
     def __repr__(self) -> str:
         return f"<Pointer {self.type}>"
 
-    def _read(self, stream: BinaryIO, ctx: Dict[str, Any]) -> PointerInstance:
+    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> PointerInstance:
         addr = self.cstruct.pointer(stream)
-        return PointerInstance(self.type, stream, addr, ctx)
+        return PointerInstance(self.type, stream, addr, context)
 
     def _write(self, stream: BinaryIO, data: Union[int, PointerInstance]):
         if isinstance(data, PointerInstance):
@@ -115,12 +115,11 @@ class PointerInstance:
             # Reposition the file read/write pointer
             self._stream.seek(self._addr)
 
-            if isinstance(self._type, Array):
-                value = self._type._read(self._stream, self._ctx)
+            if isinstance(self._type, CharType):
+                # this makes the assumption that a char pointer is a null-terminated string
+                value = self._type._read_0(self._stream, self._ctx)
             else:
-                value = self._type._read(
-                    self._stream,
-                )
+                value = self._type._read(self._stream, self._ctx)
 
             self._stream.seek(position)
             self._value = value

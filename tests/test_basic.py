@@ -306,8 +306,8 @@ def test_half_compiled_struct():
             self._t = cstruct_obj.uint64
             super().__init__(cstruct_obj, "OffByOne", 8)
 
-        def _read(self, stream):
-            return self._t._read(stream) + 1
+        def _read(self, stream, context=None):
+            return self._t._read(stream, context) + 1
 
         def _write(self, stream, data):
             return self._t._write(stream, data - 1)

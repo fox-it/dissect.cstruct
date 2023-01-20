@@ -51,7 +51,7 @@ class {name}(Structure):
         self.source = source
         super().__init__(cstruct, structure.name, structure.fields, anonymous=structure.anonymous)
 
-    def _read(self, stream):
+    def _read(self, stream, context=None):
         r = OrderedDict()
         sizes = {{}}
         bitreader = BitBuffer(stream, self.cstruct.endian)
@@ -307,7 +307,7 @@ class {name}(Structure):
             elif isinstance(field_type, Pointer):
                 getter = f"PointerInstance(self.cstruct.{field_type.type.name}, stream, {getter}, r)"
             elif isinstance(field_type, Array) and isinstance(field_type.type, Pointer):
-                getter = f"[PointerInstance(self.cstruct.{field_type.type.name}, stream, d, r) for d in {getter}]"
+                getter = f"[PointerInstance(self.cstruct.{field_type.type.type.name}, stream, d, r) for d in {getter}]"
             elif isinstance(field_type, Array) and isinstance(read_type, PackedType):
                 getter = f"list({getter})"
 

@@ -245,6 +245,11 @@ class TokenParser(Parser):
 
         name = d["name"]
         count = d["count"]
+
+        if name.startswith("*"):
+            name = name[1:]
+            type_ = Pointer(self.cstruct, type_)
+
         if count is not None:
             if count == "":
                 count = None
@@ -256,10 +261,6 @@ class TokenParser(Parser):
                     pass
 
             type_ = Array(self.cstruct, type_, count)
-
-        if name.startswith("*"):
-            name = name[1:]
-            type_ = Pointer(self.cstruct, type_)
 
         tokens.eol()
         return Field(name, type_, int(d["bits"]) if d["bits"] else None)
