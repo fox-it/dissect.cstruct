@@ -12,3 +12,8 @@ class ResolveError(Error):
 
 class NullPointerDereference(Error):
     pass
+
+
+class ArraySizeMismatch(Error):
+    pass
+
