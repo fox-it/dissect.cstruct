@@ -67,7 +67,11 @@ class TokenParser(Parser):
             "ENUM",
         )
         TOK.add(r"(?<=})\s*(?P<defs>(?:[a-zA-Z0-9_]+\s*,\s*)+[a-zA-Z0-9_]+)\s*(?=;)", "DEFS")
-        TOK.add(r"(?P<name>\*?[a-zA-Z0-9_]+)(?:\s*:\s*(?P<bits>\d+))?(?:\[(?P<count>[^;\n]*)\])?\s*(?=;)", "NAME")
+        TOK.add(
+            r"(?P<name>\*?[a-zA-Z0-9_]+)(?:\s*:\s*(?P<bits>\d+))?"
+            r"(?:\[(?P<count>[^;\n]*?)\])?\s*(?:\[(?P<width>[^;\n]*?)\])?\s*(?=;)",
+            "NAME",
+        )
         TOK.add(r"[a-zA-Z_][a-zA-Z0-9_]*", "IDENTIFIER")
         TOK.add(r"[{}]", "BLOCK")
         TOK.add(r"\$(?P<name>[^\s]+) = (?P<value>{[^}]+})\w*[\r\n]+", "LOOKUP")
@@ -245,10 +249,23 @@ class TokenParser(Parser):
 
         name = d["name"]
         count = d["count"]
+        width = d["width"]
 
         if name.startswith("*"):
             name = name[1:]
             type_ = Pointer(self.cstruct, type_)
+
+        if width is not None:
+            if width == "":
+                width = None
+            else:
+                width = Expression(self.cstruct, width)
+                try:
+                    width = width.evaluate()
+                except Exception:
+                    pass
+
+            type_ = Array(self.cstruct, type_, width)
 
         if count is not None:
             if count == "":
@@ -259,6 +276,9 @@ class TokenParser(Parser):
                     count = count.evaluate()
                 except Exception:
                     pass
+
+            if isinstance(type_, Array) and count is None:
+                raise ParserError("Depth required for two-dimensional array")
 
             type_ = Array(self.cstruct, type_, count)
 

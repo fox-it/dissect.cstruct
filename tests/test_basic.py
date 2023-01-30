@@ -416,4 +416,48 @@ def test_dunder_bytes():
     a = c.test(a=0xBADC0DE, b=0xACCE55ED)
     assert len(bytes(a)) == 12
     assert bytes(a) == a.dumps()
-    assert bytes(a) == b"\x0b\xad\xc0\xde\x00\x00\x00\x00\xac\xceU\xed"
+    assert bytes(a) == b"\x0b\xad\xc0\xde\x00\x00\x00\x00\xac\xce\x55\xed"
+
+
+@pytest.mark.parametrize("compiled", [True, False])
+def test_array_of_nullterminated_strings(compiled):
+    d = """
+    struct args {
+        uint32 argc;
+        char   argv[argc][];
+    }
+    """
+    c = cstruct.cstruct(endian="<")
+    c.load(d, compiled=compiled)
+
+    assert verify_compiled(c.args, compiled)
+
+    buf = b"\x02\x00\x00\x00hello\0world\0"
+    obj = c.args(buf)
+
+    assert obj.argc == 2
+    assert obj.argv[0] == b"hello"
+    assert obj.argv[1] == b"world"
+
+
+@pytest.mark.parametrize("compiled", [True, False])
+def test_array_of_sizelimited_strings(compiled):
+    d = """
+    struct args {
+        uint32 argc;
+        char   argv[argc][8];
+    }
+    """
+    c = cstruct.cstruct(endian="<")
+    c.load(d, compiled=compiled)
+
+    assert verify_compiled(c.args, compiled)
+
+    buf = b"\x04\x00\x00\x00lorem\0\0\0ipsum\0\0\0dolor\0\0\0sit amet"
+    obj = c.args(buf)
+
+    assert obj.argc == 4
+    assert obj.argv[0] == b"lorem\0\0\0"
+    assert obj.argv[1] == b"ipsum\0\0\0"
+    assert obj.argv[2] == b"dolor\0\0\0"
+    assert obj.argv[3] == b"sit amet"

@@ -120,7 +120,7 @@ class {name}(Structure):
                 raise TypeError(f"Unsupported type for compiler: {field_type}")
 
             if isinstance(field_type, Structure) or (
-                isinstance(field_type, Array) and isinstance(field_type.type, Structure)
+                isinstance(field_type, Array) and isinstance(field_type.type, (Structure, Array))
             ):
 
                 blocks.append(self.gen_read_block(read_size, cur_block))
