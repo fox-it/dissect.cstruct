@@ -2,20 +2,12 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import Dict, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List
 
 from dissect.cstruct.compiler import Compiler
 from dissect.cstruct.exceptions import ParserError
 from dissect.cstruct.expression import Expression
-from dissect.cstruct.types import (
-    Array,
-    Enum,
-    Field,
-    Flag,
-    Pointer,
-    Structure,
-    Union,
-)
+from dissect.cstruct.types import Array, Enum, Field, Flag, Pointer, Structure, Union
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
@@ -67,11 +59,7 @@ class TokenParser(Parser):
             "ENUM",
         )
         TOK.add(r"(?<=})\s*(?P<defs>(?:[a-zA-Z0-9_]+\s*,\s*)+[a-zA-Z0-9_]+)\s*(?=;)", "DEFS")
-        TOK.add(
-            r"(?P<name>\*?[a-zA-Z0-9_]+)(?:\s*:\s*(?P<bits>\d+))?"
-            r"(?:\[(?P<count>[^;\n]*?)\])?\s*(?:\[(?P<width>[^;\n]*?)\])?\s*(?=;)",
-            "NAME",
-        )
+        TOK.add(r"(?P<name>\*?[a-zA-Z0-9_]+)(?:\s*:\s*(?P<bits>\d+))?(?:\[(?P<count>[^;\n]*)\])?\s*(?=;)", "NAME")
         TOK.add(r"[a-zA-Z_][a-zA-Z0-9_]*", "IDENTIFIER")
         TOK.add(r"[{}]", "BLOCK")
         TOK.add(r"\$(?P<name>[^\s]+) = (?P<value>{[^}]+})\w*[\r\n]+", "LOOKUP")
@@ -248,39 +236,33 @@ class TokenParser(Parser):
         d = pattern.match(nametok.value + ";").groupdict()
 
         name = d["name"]
-        count = d["count"]
-        width = d["width"]
+        count_expression = d["count"]
 
         if name.startswith("*"):
             name = name[1:]
             type_ = Pointer(self.cstruct, type_)
 
-        if width is not None:
-            if width == "":
-                width = None
+        if count_expression is not None:
+            # Poor mans multi-dimensional array by abusing the eager regex match of count
+            if "][" in count_expression:
+                counts = count_expression.split("][")
             else:
-                width = Expression(self.cstruct, width)
-                try:
-                    width = width.evaluate()
-                except Exception:
-                    pass
+                counts = [count_expression]
 
-            type_ = Array(self.cstruct, type_, width)
+            for count in reversed(counts):
+                if count == "":
+                    count = None
+                else:
+                    count = Expression(self.cstruct, count)
+                    try:
+                        count = count.evaluate()
+                    except Exception:
+                        pass
 
-        if count is not None:
-            if count == "":
-                count = None
-            else:
-                count = Expression(self.cstruct, count)
-                try:
-                    count = count.evaluate()
-                except Exception:
-                    pass
+                if isinstance(type_, Array) and count is None:
+                    raise ParserError("Depth required for multi-dimensional array")
 
-            if isinstance(type_, Array) and count is None:
-                raise ParserError("Depth required for two-dimensional array")
-
-            type_ = Array(self.cstruct, type_, count)
+                type_ = Array(self.cstruct, type_, count)
 
         tokens.eol()
         return Field(name, type_, int(d["bits"]) if d["bits"] else None)
