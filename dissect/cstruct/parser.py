@@ -2,20 +2,12 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import Dict, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List
 
 from dissect.cstruct.compiler import Compiler
 from dissect.cstruct.exceptions import ParserError
 from dissect.cstruct.expression import Expression
-from dissect.cstruct.types import (
-    Array,
-    Enum,
-    Field,
-    Flag,
-    Pointer,
-    Structure,
-    Union,
-)
+from dissect.cstruct.types import Array, Enum, Field, Flag, Pointer, Structure, Union
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
@@ -244,23 +236,33 @@ class TokenParser(Parser):
         d = pattern.match(nametok.value + ";").groupdict()
 
         name = d["name"]
-        count = d["count"]
+        count_expression = d["count"]
 
         if name.startswith("*"):
             name = name[1:]
             type_ = Pointer(self.cstruct, type_)
 
-        if count is not None:
-            if count == "":
-                count = None
+        if count_expression is not None:
+            # Poor mans multi-dimensional array by abusing the eager regex match of count
+            if "][" in count_expression:
+                counts = count_expression.split("][")
             else:
-                count = Expression(self.cstruct, count)
-                try:
-                    count = count.evaluate()
-                except Exception:
-                    pass
+                counts = [count_expression]
 
-            type_ = Array(self.cstruct, type_, count)
+            for count in reversed(counts):
+                if count == "":
+                    count = None
+                else:
+                    count = Expression(self.cstruct, count)
+                    try:
+                        count = count.evaluate()
+                    except Exception:
+                        pass
+
+                if isinstance(type_, Array) and count is None:
+                    raise ParserError("Depth required for multi-dimensional array")
+
+                type_ = Array(self.cstruct, type_, count)
 
         tokens.eol()
         return Field(name, type_, int(d["bits"]) if d["bits"] else None)

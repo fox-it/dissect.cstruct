@@ -1,8 +1,9 @@
 import os
-import pytest
 
+import pytest
 from dissect import cstruct
-from dissect.cstruct.exceptions import ResolveError
+
+from dissect.cstruct.exceptions import ParserError, ResolveError
 
 from .utils import verify_compiled
 
@@ -363,7 +364,7 @@ def test_cstruct_bytearray():
 
 
 def test_multipart_type_name():
-    d = """
+    cdef = """
     enum TestEnum : unsigned int {
         A = 0,
         B = 1
@@ -374,46 +375,128 @@ def test_multipart_type_name():
         unsigned long long  b;
     };
     """
-    c = cstruct.cstruct()
-    c.load(d)
+    cs = cstruct.cstruct()
+    cs.load(cdef)
 
-    assert c.TestEnum.type == c.resolve("unsigned int")
-    assert c.test.fields[0].type == c.resolve("unsigned int")
-    assert c.test.fields[1].type == c.resolve("unsigned long long")
+    assert cs.TestEnum.type == cs.resolve("unsigned int")
+    assert cs.test.fields[0].type == cs.resolve("unsigned int")
+    assert cs.test.fields[1].type == cs.resolve("unsigned long long")
 
     with pytest.raises(ResolveError) as exc:
-        d = """
+        cdef = """
         struct test {
             unsigned long long unsigned a;
         };
         """
-        c = cstruct.cstruct()
-        c.load(d)
+        cs = cstruct.cstruct()
+        cs.load(cdef)
 
     with pytest.raises(ResolveError) as exc:
-        d = """
+        cdef = """
         enum TestEnum : unsigned int and more {
             A = 0,
             B = 1
         };
         """
-        c = cstruct.cstruct()
-        c.load(d)
+        cs = cstruct.cstruct()
+        cs.load(cdef)
 
     assert str(exc.value) == "Unknown type unsigned int and more"
 
 
 def test_dunder_bytes():
-    d = """
+    cdef = """
     struct test {
         DWORD   a;
         QWORD   b;
     };
     """
-    c = cstruct.cstruct(endian=">")
-    c.load(d)
+    cs = cstruct.cstruct(endian=">")
+    cs.load(cdef)
 
-    a = c.test(a=0xBADC0DE, b=0xACCE55ED)
+    a = cs.test(a=0xBADC0DE, b=0xACCE55ED)
     assert len(bytes(a)) == 12
     assert bytes(a) == a.dumps()
-    assert bytes(a) == b"\x0b\xad\xc0\xde\x00\x00\x00\x00\xac\xceU\xed"
+    assert bytes(a) == b"\x0b\xad\xc0\xde\x00\x00\x00\x00\xac\xce\x55\xed"
+
+
+@pytest.mark.parametrize("compiled", [True, False])
+def test_array_of_null_terminated_strings(compiled):
+    cdef = """
+    struct args {
+        uint32 argc;
+        char   argv[argc][];
+    }
+    """
+    cs = cstruct.cstruct(endian="<")
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.args, compiled)
+
+    buf = b"\x02\x00\x00\x00hello\0world\0"
+    obj = cs.args(buf)
+
+    assert obj.argc == 2
+    assert obj.argv[0] == b"hello"
+    assert obj.argv[1] == b"world"
+
+    with pytest.raises(ParserError) as exc:
+        cdef = """
+        struct args {
+            uint32 argc;
+            char   argv[][argc];
+        }
+        """
+        cs.load(cdef)
+
+    assert str(exc.value) == "Depth required for multi-dimensional array"
+
+
+@pytest.mark.parametrize("compiled", [True, False])
+def test_array_of_size_limited_strings(compiled):
+    cdef = """
+    struct args {
+        uint32 argc;
+        char   argv[argc][8];
+    }
+    """
+    cs = cstruct.cstruct(endian="<")
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.args, compiled)
+
+    buf = b"\x04\x00\x00\x00lorem\0\0\0ipsum\0\0\0dolor\0\0\0sit amet"
+    obj = cs.args(buf)
+
+    assert obj.argc == 4
+    assert obj.argv[0] == b"lorem\0\0\0"
+    assert obj.argv[1] == b"ipsum\0\0\0"
+    assert obj.argv[2] == b"dolor\0\0\0"
+    assert obj.argv[3] == b"sit amet"
+
+
+@pytest.mark.parametrize("compiled", [True, False])
+def test_array_three_dimensional(compiled):
+    cdef = """
+    struct test {
+        uint8   a[2][2][2];
+    }
+    """
+    cs = cstruct.cstruct(endian="<")
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"\x01\x02\x03\x04\x05\x06\x07\x08"
+    obj = cs.test(buf)
+
+    assert obj.a[0][0][0] == 1
+    assert obj.a[0][0][1] == 2
+    assert obj.a[0][1][0] == 3
+    assert obj.a[0][1][1] == 4
+    assert obj.a[1][0][0] == 5
+    assert obj.a[1][0][1] == 6
+    assert obj.a[1][1][0] == 7
+    assert obj.a[1][1][1] == 8
+
+    assert obj.dumps() == buf
