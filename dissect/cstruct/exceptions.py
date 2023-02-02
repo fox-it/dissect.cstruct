@@ -14,6 +14,5 @@ class NullPointerDereference(Error):
     pass
 
 
-class ArraySizeMismatch(Error):
+class ArraySizeError(Error):
     pass
-

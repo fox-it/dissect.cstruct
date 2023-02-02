@@ -503,15 +503,15 @@ def test_array_three_dimensional(compiled):
 
 
 def test_report_array_size_mismatch():
-    d = """
+    cdef = """
     struct test {
         uint8   a[2];
     };
     """
-    c = cstruct.cstruct(endian=">")
-    c.load(d)
+    cs = cstruct.cstruct(endian=">")
+    cs.load(cdef)
 
-    a = c.test(a=[1, 2, 3])
+    a = cs.test(a=[1, 2, 3])
 
     with pytest.raises(ArraySizeMismatch):
         a.dumps()
