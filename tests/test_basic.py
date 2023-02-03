@@ -3,7 +3,7 @@ import os
 import pytest
 from dissect import cstruct
 
-from dissect.cstruct.exceptions import ArraySizeMismatch, ParserError, ResolveError
+from dissect.cstruct.exceptions import ArraySizeError, ParserError, ResolveError
 
 from .utils import verify_compiled
 
@@ -513,5 +513,5 @@ def test_report_array_size_mismatch():
 
     a = cs.test(a=[1, 2, 3])
 
-    with pytest.raises(ArraySizeMismatch):
+    with pytest.raises(ArraySizeError):
         a.dumps()
