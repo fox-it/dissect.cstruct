@@ -3,7 +3,7 @@ import os
 import pytest
 from dissect import cstruct
 
-from dissect.cstruct.exceptions import ParserError, ResolveError
+from dissect.cstruct.exceptions import ArraySizeError, ParserError, ResolveError
 
 from .utils import verify_compiled
 
@@ -500,3 +500,18 @@ def test_array_three_dimensional(compiled):
     assert obj.a[1][1][1] == 8
 
     assert obj.dumps() == buf
+
+
+def test_report_array_size_mismatch():
+    cdef = """
+    struct test {
+        uint8   a[2];
+    };
+    """
+    cs = cstruct.cstruct(endian=">")
+    cs.load(cdef)
+
+    a = cs.test(a=[1, 2, 3])
+
+    with pytest.raises(ArraySizeError):
+        a.dumps()

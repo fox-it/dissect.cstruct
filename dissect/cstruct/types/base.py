@@ -3,6 +3,7 @@ from __future__ import annotations
 from io import BytesIO
 from typing import Any, BinaryIO, List, TYPE_CHECKING
 
+from dissect.cstruct.exceptions import ArraySizeError
 from dissect.cstruct.expression import Expression
 
 if TYPE_CHECKING:
@@ -49,6 +50,9 @@ class BaseType:
 
         Returns:
             The resulting bytes.
+
+        Raises:
+            ArraySizeError: Raised when ``len(data)`` does not match the size of a statically sized array field.
         """
         out = BytesIO()
         self._write(out, data)
@@ -78,6 +82,9 @@ class BaseType:
 
         Returns:
             The amount of bytes written.
+
+        Raises:
+            ArraySizeError: Raised when ``len(data)`` does not match the size of a statically sized array field.
         """
         return self._write(stream, data)
 
@@ -157,6 +164,9 @@ class Array(BaseType):
     def _write(self, stream: BinaryIO, data: List[Any]) -> int:
         if self.null_terminated:
             return self.type._write_0(stream, data)
+
+        if not self.dynamic and self.count != (actual_size := len(data)):
+            raise ArraySizeError(f"Expected static array size {self.count}, got {actual_size} instead.")
 
         return self.type._write_array(stream, data)
 
