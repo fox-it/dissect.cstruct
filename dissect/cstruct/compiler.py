@@ -3,7 +3,7 @@ from __future__ import annotations
 import struct
 from collections import OrderedDict
 from textwrap import dedent
-from typing import List, TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.expression import Expression
@@ -122,7 +122,6 @@ class {name}(Structure):
             if isinstance(field_type, Structure) or (
                 isinstance(field_type, Array) and isinstance(field_type.type, (Structure, Array))
             ):
-
                 blocks.append(self.gen_read_block(read_size, cur_block))
 
                 struct_read = "s = stream.tell()\n"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, BinaryIO, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, BinaryIO, List
 
 from dissect.cstruct.types import RawType
 
@@ -48,7 +48,6 @@ class BytesInteger(RawType):
         signed_max = (2 ** (bits - 1)) - 1
 
         for i in data:
-
             if signed and (i < signed_min or i > signed_max):
                 raise OverflowError(f"{i} exceeds bounds for signed {bits} bits BytesInteger")
             elif not signed and (i < unsigned_min or i > unsigned_max):
