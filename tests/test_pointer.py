@@ -1,6 +1,6 @@
 import pytest
-
 from dissect import cstruct
+
 from dissect.cstruct.types.pointer import PointerInstance
 
 from .utils import verify_compiled

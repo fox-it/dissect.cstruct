@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import operator
-from typing import Any, BinaryIO, Callable, Dict, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Dict, Union
 
 from dissect.cstruct.exceptions import NullPointerDereference
 from dissect.cstruct.types import BaseType, CharType, RawType

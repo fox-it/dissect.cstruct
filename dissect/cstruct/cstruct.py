@@ -11,9 +11,9 @@ from dissect.cstruct.types import (
     BaseType,
     BytesInteger,
     CharType,
-    Structure,
     PackedType,
     Pointer,
+    Structure,
     VoidType,
     WcharType,
 )

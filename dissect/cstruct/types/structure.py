@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 from collections import OrderedDict
-from typing import Any, BinaryIO, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, BinaryIO, List
 
 from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.types import BaseType, Enum, Instance

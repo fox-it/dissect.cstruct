@@ -1,7 +1,6 @@
 from io import BytesIO
 
 import pytest
-
 from dissect import cstruct
 
 from .utils import verify_compiled
