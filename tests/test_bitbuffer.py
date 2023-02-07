@@ -1,8 +1,8 @@
 from io import BytesIO
 
 import pytest
-
 from dissect import cstruct
+
 from dissect.cstruct.bitbuffer import BitBuffer
 
 

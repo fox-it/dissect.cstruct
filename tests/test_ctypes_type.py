@@ -1,8 +1,7 @@
-import pytest
 import ctypes as _ctypes
 
+import pytest
 from dissect import cstruct
-
 
 DUMMY_CSTRUCT = cstruct.cstruct()
 PACKED_TYPE_INT8 = cstruct.PackedType(DUMMY_CSTRUCT, "int8", 1, "b")

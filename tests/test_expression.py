@@ -1,8 +1,7 @@
 import pytest
-
 from dissect import cstruct
-from dissect.cstruct.expression import Expression
 
+from dissect.cstruct.expression import Expression
 
 testdata = [
     ("1 * 0", 0),

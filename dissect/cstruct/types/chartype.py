@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, BinaryIO, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.types import RawType
 

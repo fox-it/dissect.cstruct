@@ -1,5 +1,5 @@
-import string
 import pprint
+import string
 from typing import List, Tuple
 
 from dissect.cstruct.types import Instance, Structure

@@ -1,6 +1,6 @@
 import pytest
-
 from dissect import cstruct
+
 from dissect.cstruct.utils import dumpstruct, hexdump
 
 from .utils import verify_compiled
