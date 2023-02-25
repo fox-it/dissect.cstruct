@@ -502,6 +502,37 @@ def test_array_three_dimensional(compiled):
     assert obj.dumps() == buf
 
 
+@pytest.mark.parametrize("compiled", [True, False])
+def test_nested_array_of_variable_size(compiled: bool):
+    cdef = """
+    struct test {
+        uint8   outer;
+        uint8   medior;
+        uint8   inner;
+        uint8   a[outer][medior][inner];
+    }
+    """
+    cs = cstruct.cstruct(endian="<")
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"\x02\x01\x03\x01\x02\x03\x04\x05\x06"
+    obj = cs.test(buf)
+
+    assert obj.outer == 2
+    assert obj.medior == 1
+    assert obj.inner == 3
+    assert obj.a[0][0][0] == 1
+    assert obj.a[0][0][1] == 2
+    assert obj.a[0][0][2] == 3
+    assert obj.a[1][0][0] == 4
+    assert obj.a[1][0][1] == 5
+    assert obj.a[1][0][2] == 6
+
+    assert obj.dumps() == buf
+
+
 def test_report_array_size_mismatch():
     cdef = """
     struct test {

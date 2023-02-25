@@ -135,14 +135,14 @@ class {name}(Structure):
                         f"""
                         r['{field.name}'] = []
                         for _ in range({num}):
-                            r['{field.name}'].append(self.lookup['{field.name}'].type.type._read(stream))
+                            r['{field.name}'].append(self.lookup['{field.name}'].type.type._read(stream, context=r))
                         sizes['{field.name}'] = stream.tell() - s
                         """
                     )
                 elif isinstance(field_type, Structure) and field_type.anonymous:
                     struct_read += dedent(
                         f"""
-                        v = self.lookup["{field.name}"].type._read(stream)
+                        v = self.lookup["{field.name}"].type._read(stream, context=r)
                         r.update(v._values)
                         sizes.update(v._sizes)
                         """
@@ -150,7 +150,7 @@ class {name}(Structure):
                 else:
                     struct_read += dedent(
                         f"""
-                        r['{field.name}'] = self.lookup['{field.name}'].type._read(stream)
+                        r['{field.name}'] = self.lookup['{field.name}'].type._read(stream, context=r)
                         sizes['{field.name}'] = stream.tell() - s
                         """
                     )
