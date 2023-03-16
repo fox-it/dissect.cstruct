@@ -1,8 +1,25 @@
 [build-system]
-requires = ["setuptools>=43.0.0", "wheel", "setuptools_scm[toml]>=3.4.1"]
+requires = ["setuptools>=65.5.0", "setuptools_scm[toml]>=6.4.0"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools_scm]
+[project]
+name = "dissect.cstruct"
+description = "A Dissect module implementing a parser for C-like structures: structure parsing in Python made easy"
+readme = "README.md"
+requires-python = "~=3.9"
+license.text = "Apache License 2.0"
+authors = [
+  {name = "Dissect Team", email = "dissect@fox-it.com"}
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+]
+dynamic = ["version"]
+
+[project.urls]
+homepage = "https://dissect.tools"
+documentation = "https://docs.dissect.tools/en/latest/projects/dissect.cstruct"
+repository = "https://github.com/fox-it/dissect.cstruct"
 
 [tool.black]
 line-length = 120
@@ -11,3 +28,11 @@ line-length = 120
 profile = "black"
 known_first_party = ["dissect.cstruct"]
 known_third_party = ["dissect"]
+
+[tool.setuptools]
+license-files = ["LICENSE", "COPYRIGHT"]
+
+[tool.setuptools.packages.find]
+include = ["dissect.*"]
+
+[tool.setuptools_scm]
