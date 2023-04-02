@@ -84,12 +84,14 @@ class Enum(RawType):
         return [self.default() for _ in range(count)]
 
 
-class EnumInstance:
+class EnumInstance(dict):
     """Implements a value instance of an Enum"""
 
     def __init__(self, enum: Enum, value: int):
         self.enum = enum
         self.value = value
+        kwargs = {self.enum.name : self.value}
+        dict.__init__(self, **kwargs)
 
     def __eq__(self, value: Union[int, EnumInstance]) -> bool:
         if isinstance(value, EnumInstance) and value.enum is not self.enum:
