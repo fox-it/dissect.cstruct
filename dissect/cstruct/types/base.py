@@ -1,125 +1,213 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, BinaryIO, List
+from textwrap import dedent
+from types import NoneType
+from typing import TYPE_CHECKING, Any, BinaryIO, Optional, Union
 
 from dissect.cstruct.exceptions import ArraySizeError
 from dissect.cstruct.expression import Expression
 
 if TYPE_CHECKING:
-    from dissect.cstruct import cstruct
+    from dissect.cstruct.cstruct import cstruct
 
 
-class BaseType:
-    """Base class for cstruct type classes."""
+@lru_cache
+def _make_operator_method(base: type, func: str):
+    code = f"""
+    def {func}(self, other):
+        return type.__call__(self.__class__, base.{func}(self, other))
+    """
+    exec(dedent(code), {"base": base}, tmp := {})
+    return tmp[func]
 
-    def __init__(self, cstruct: cstruct):
-        self.cstruct = cstruct
 
-    def __getitem__(self, count: int) -> Array:
-        return Array(self.cstruct, self, count)
+class MetaType(type):
+    """Base metaclass for cstruct type classes."""
 
-    def __call__(self, *args, **kwargs) -> Any:
-        if len(args) > 0:
-            return self.read(*args, **kwargs)
+    cs: cstruct
+    size: int
+    dynamic: bool
+    alignment: int
 
-        result = self.default()
-        if kwargs:
-            for k, v in kwargs.items():
-                setattr(result, k, v)
+    def __new__(metacls, cls, bases, classdict, **kwargs) -> MetaType:
+        """Override specific dunder methods to return instances of this type."""
+        for func in [
+            "__add__",
+            "__sub__",
+            "__mul__",
+            "__floordiv__",
+            "__mod__",
+            "__pow__",
+            "__lshift__",
+            "__rshift__",
+            "__and__",
+            "__xor__",
+            "__or__",
+        ]:
+            for base in bases:
+                if func not in classdict and not issubclass(base, BaseType) and hasattr(base, func):
+                    # Insert custom operator dunder methods if the new class does not implement them
+                    # but the base does (e.g. int)
+                    classdict[func] = _make_operator_method(base, func)
+                    break
+        return super().__new__(metacls, cls, bases, classdict)
 
-        return result
+    def __call__(cls, *args, **kwargs) -> Union[MetaType, BaseType]:
+        """Adds support for ``TypeClass(bytes | file-like object)`` parsing syntax."""
+        if len(args) == 1 and not isinstance(args[0], cls):
+            stream = args[0]
 
-    def reads(self, data: bytes) -> Any:
-        """Parse the given data according to the type that implements this class.
+            if hasattr(stream, "read"):
+                return cls._read(stream)
+
+            if issubclass(cls, bytes) and isinstance(stream, bytes) and len(stream) == cls.size:
+                # Shortcut for char/bytes type
+                return type.__call__(cls, *args, **kwargs)
+
+            if isinstance(stream, (bytes, memoryview, bytearray)):
+                return cls.reads(stream)
+
+        return type.__call__(cls, *args, **kwargs)
+
+    def __getitem__(cls, num_entries: Union[int, Expression, NoneType]) -> ArrayMetaType:
+        """Create a new array with the given number of entries."""
+        return cls.cs._make_array(cls, num_entries)
+
+    def __len__(cls) -> int:
+        """Return the byte size of the type."""
+        if cls.size is None:
+            raise TypeError("Dynamic size")
+
+        return cls.size
+
+    def reads(cls, data: bytes) -> BaseType:
+        """Parse the given data from a bytes-like object.
 
         Args:
-            data: Byte string to parse.
+            data: Bytes-like object to parse.
 
         Returns:
             The parsed value of this type.
         """
+        return cls._read(BytesIO(data))
 
-        return self._read(BytesIO(data))
-
-    def dumps(self, data: Any) -> bytes:
-        """Dump the given data according to the type that implements this class.
-
-        Args:
-            data: Data to dump.
-
-        Returns:
-            The resulting bytes.
-
-        Raises:
-            ArraySizeError: Raised when ``len(data)`` does not match the size of a statically sized array field.
-        """
-        out = BytesIO()
-        self._write(out, data)
-        return out.getvalue()
-
-    def read(self, obj: BinaryIO, *args, **kwargs) -> Any:
-        """Parse the given data according to the type that implements this class.
+    def read(cls, obj: Union[BinaryIO, bytes]) -> BaseType:
+        """Parse the given data.
 
         Args:
-            obj: Data to parse. Can be a (byte) string or a file-like object.
+            obj: Data to parse. Can be a bytes-like object or a file-like object.
 
         Returns:
             The parsed value of this type.
         """
         if isinstance(obj, (bytes, memoryview, bytearray)):
-            return self.reads(obj)
+            return cls.reads(obj)
 
-        return self._read(obj)
+        return cls._read(obj)
 
-    def write(self, stream: BinaryIO, data: Any) -> int:
-        """Write the given data to a writable file-like object according to the
-        type that implements this class.
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> BaseType:
+        """Internal function for reading value.
+
+        Must be implemented per type.
 
         Args:
-            stream: Writable file-like object to write to.
-            data: Data to write.
+            stream: The stream to read from.
+            context: Optional reading context.
+        """
+        raise NotImplementedError()
+
+    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> list[BaseType]:
+        """Internal function for reading array values.
+
+        Allows type implementations to do optimized reading for their type.
+
+        Args:
+            stream: The stream to read from.
+            count: The amount of values to read.
+            context: Optional reading context.
+        """
+        return [cls._read(stream, context) for _ in range(count)]
+
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] = None) -> list[BaseType]:
+        """Internal function for reading null-terminated data.
+
+        "Null" is type specific, so must be implemented per type.
+
+        Args:
+            stream: The stream to read from.
+            context: Optional reading context.
+        """
+        raise NotImplementedError()
+
+    def _write(cls, stream: BinaryIO, data: Any) -> int:
+        raise NotImplementedError()
+
+    def _write_array(cls, stream: BinaryIO, array: list[BaseType]) -> int:
+        """Internal function for writing arrays.
+
+        Allows type implementations to do optimized writing for their type.
+
+        Args:
+            stream: The stream to read from.
+            array: The array to write.
+        """
+        return sum(cls._write(stream, entry) for entry in array)
+
+    def _write_0(cls, stream: BinaryIO, array: list[BaseType]) -> int:
+        """Internal function for writing null-terminated arrays.
+
+        Allows type implementations to do optimized writing for their type.
+
+        Args:
+            stream: The stream to read from.
+            array: The array to write.
+        """
+        return cls._write_array(stream, array + [cls()])
+
+
+class BaseType(metaclass=MetaType):
+    """Base class for cstruct type classes."""
+
+    def dumps(self) -> bytes:
+        """Dump this value to a byte string.
+
+        Returns:
+            The raw bytes of this type.
+        """
+        out = BytesIO()
+        self.__class__._write(out, self)
+        return out.getvalue()
+
+    def write(self, stream: BinaryIO) -> int:
+        """Write this value to a writable file-like object.
+
+        Args:
+            fh: File-like objects that supports writing.
 
         Returns:
             The amount of bytes written.
-
-        Raises:
-            ArraySizeError: Raised when ``len(data)`` does not match the size of a statically sized array field.
         """
-        return self._write(stream, data)
-
-    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> Any:
-        raise NotImplementedError()
-
-    def _read_array(self, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> List[Any]:
-        return [self._read(stream, context) for _ in range(count)]
-
-    def _read_0(self, stream: BinaryIO, context: dict[str, Any] = None) -> List[Any]:
-        raise NotImplementedError()
-
-    def _write(self, stream: BinaryIO, data: Any) -> int:
-        raise NotImplementedError()
-
-    def _write_array(self, stream: BinaryIO, data: Any) -> int:
-        num = 0
-        for i in data:
-            num += self._write(stream, i)
-
-        return num
-
-    def _write_0(self, stream: BinaryIO, data: Any) -> int:
-        raise NotImplementedError()
-
-    def default(self) -> Any:
-        """Return a default value of this type."""
-        raise NotImplementedError()
-
-    def default_array(self, count: int) -> List[Any]:
-        """Return a default array of this type."""
-        return [self.default() for _ in range(count)]
+        return self.__class__._write(stream, self)
 
 
-class Array(BaseType):
+class ArrayMetaType(MetaType):
+    """Base metaclass for array-like types."""
+
+    type: MetaType
+    num_entries: Optional[Union[int, Expression]]
+    null_terminated: bool
+
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Array:
+        if cls.null_terminated:
+            return cls.type._read_0(stream, context)
+
+        num = cls.num_entries.evaluate(context) if cls.dynamic else cls.num_entries
+        return cls.type._read_array(stream, max(0, num), context)
+
+
+class Array(list, BaseType, metaclass=ArrayMetaType):
     """Implements a fixed or dynamically sized array type.
 
     Example:
@@ -130,80 +218,16 @@ class Array(BaseType):
             x[expr] -> expr -> dynamic length.
     """
 
-    def __init__(self, cstruct: cstruct, type_: BaseType, count: int):
-        self.type = type_
-        self.count = count
-        self.null_terminated = self.count is None
-        self.dynamic = isinstance(self.count, Expression)
-        self.alignment = type_.alignment
-        super().__init__(cstruct)
+    @classmethod
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Array:
+        return cls(ArrayMetaType._read(cls, stream, context))
 
-    def __repr__(self) -> str:
-        if self.null_terminated:
-            return f"{self.type}[]"
+    @classmethod
+    def _write(cls, stream: BinaryIO, data: list[Any]) -> int:
+        if cls.null_terminated:
+            return cls.type._write_0(stream, data)
 
-        return f"{self.type}[{self.count}]"
+        if not cls.dynamic and cls.num_entries != (actual_size := len(data)):
+            raise ArraySizeError(f"Expected static array size {cls.num_entries}, got {actual_size} instead.")
 
-    def __len__(self) -> int:
-        if self.dynamic or self.null_terminated:
-            raise TypeError("Dynamic size")
-
-        return len(self.type) * self.count
-
-    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> List[Any]:
-        if self.null_terminated:
-            return self.type._read_0(stream, context)
-
-        if self.dynamic:
-            count = self.count.evaluate(context)
-        else:
-            count = self.count
-
-        return self.type._read_array(stream, max(0, count), context)
-
-    def _write(self, stream: BinaryIO, data: List[Any]) -> int:
-        if self.null_terminated:
-            return self.type._write_0(stream, data)
-
-        if not self.dynamic and self.count != (actual_size := len(data)):
-            raise ArraySizeError(f"Expected static array size {self.count}, got {actual_size} instead.")
-
-        return self.type._write_array(stream, data)
-
-    def default(self) -> List[Any]:
-        count = 0 if self.dynamic or self.null_terminated else self.count
-        return self.type.default_array(count)
-
-
-class RawType(BaseType):
-    """Base class for raw types that have a name and size."""
-
-    def __init__(self, cstruct: cstruct, name: str = None, size: int = 0, alignment: int = None):
-        self.name = name
-        self.size = size
-        self.alignment = alignment or size
-        super().__init__(cstruct)
-
-    def __len__(self) -> int:
-        return self.size
-
-    def __repr__(self) -> str:
-        if self.name:
-            return self.name
-
-        return BaseType.__repr__(self)
-
-    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> Any:
-        raise NotImplementedError()
-
-    def _read_0(self, stream: BinaryIO, context: dict[str, Any] = None) -> List[Any]:
-        raise NotImplementedError()
-
-    def _write(self, stream: BinaryIO, data: Any) -> int:
-        raise NotImplementedError()
-
-    def _write_0(self, stream: BinaryIO, data: List[Any]) -> int:
-        raise NotImplementedError()
-
-    def default(self) -> Any:
-        raise NotImplementedError()
+        return cls.type._write_array(stream, data)

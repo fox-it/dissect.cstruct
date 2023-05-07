@@ -1,15 +1,19 @@
 from __future__ import annotations
 
-from typing import BinaryIO, List, Tuple, Union
+from enum import IntFlag
+from typing import Union
 
-from dissect.cstruct.types import Enum, EnumInstance
+from dissect.cstruct.types.base import BaseType
+from dissect.cstruct.types.enum import EnumMetaType
 
 
-class Flag(Enum):
-    """Implements a Flag type.
+class Flag(BaseType, IntFlag, metaclass=EnumMetaType):
+    """Flag type supercharged with cstruct functionality.
 
-    Flags can be made using any type. The API for accessing flags and their
-    values is very similar to Python 3 native flags.
+    Flags are (mostly) compatible with the Python 3 standard library ``IntFlag`` with some notable differences:
+        - Flag members are only considered equal if the flag class is the same
+
+    Flags can be made using any integer type.
 
     Example:
         When using the default C-style parser, the following syntax is supported:
@@ -25,82 +29,26 @@ class Flag(Enum):
             };
     """
 
-    def __call__(self, value: Union[int, BinaryIO]) -> FlagInstance:
-        if isinstance(value, int):
-            return FlagInstance(self, value)
-
-        return super().__call__(value)
-
-
-class FlagInstance(EnumInstance):
-    """Implements a value instance of a Flag"""
-
-    def __bool__(self):
-        return bool(self.value)
-
-    __nonzero__ = __bool__
-
-    def __or__(self, other: Union[int, FlagInstance]) -> FlagInstance:
-        if hasattr(other, "value"):
-            other = other.value
-
-        return self.__class__(self.enum, self.value | other)
-
-    def __and__(self, other: Union[int, FlagInstance]) -> FlagInstance:
-        if hasattr(other, "value"):
-            other = other.value
-
-        return self.__class__(self.enum, self.value & other)
-
-    def __xor__(self, other: Union[int, FlagInstance]) -> FlagInstance:
-        if hasattr(other, "value"):
-            other = other.value
-
-        return self.__class__(self.enum, self.value ^ other)
-
-    __ror__ = __or__
-    __rand__ = __and__
-    __rxor__ = __xor__
-
-    def __invert__(self) -> FlagInstance:
-        return self.__class__(self.enum, ~self.value)
+    def __repr__(self) -> str:
+        result = super().__repr__()
+        if not self.__class__.__name__:
+            result = f"<{result[2:]}"
+        return result
 
     def __str__(self) -> str:
-        if self.name is not None:
-            return f"{self.enum.name}.{self.name}"
+        result = super().__str__()
+        if not self.__class__.__name__:
+            result = f"<{result[1:]}"
+        return result
 
-        members, _ = self.decompose()
-        members_str = "|".join([str(name or value) for name, value in members])
-        return f"{self.enum.name}.{members_str}"
+    def __eq__(self, other: Union[int, Flag]) -> bool:
+        if isinstance(other, Flag) and other.__class__ is not self.__class__:
+            return False
 
-    def __repr__(self) -> str:
-        base_name = f"{self.enum.name}." if self.enum.name else ""
+        return self.value == other
 
-        if self.name is not None:
-            return f"<{base_name}{self.name}: {self.value}>"
+    def __ne__(self, value: Union[int, Flag]) -> bool:
+        return not self.__eq__(value)
 
-        members, _ = self.decompose()
-        members_str = "|".join([str(name or value) for name, value in members])
-        return f"<{base_name}{members_str}: {self.value}>"
-
-    @property
-    def name(self) -> str:
-        return self.enum.reverse.get(self.value, None)
-
-    def decompose(self) -> Tuple[List[str], int]:
-        members = []
-        not_covered = self.value
-
-        for name, value in self.enum.values.items():
-            if value and ((value & self.value) == value):
-                members.append((name, value))
-                not_covered &= ~value
-
-        if not members:
-            members.append((None, self.value))
-
-        members.sort(key=lambda m: m[0], reverse=True)
-        if len(members) > 1 and members[0][1] == self.value:
-            members.pop(0)
-
-        return members, not_covered
+    def __hash__(self) -> int:
+        return hash((self.__class__, self.name, self.value))

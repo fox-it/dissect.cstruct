@@ -7,16 +7,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 from dissect.cstruct.compiler import Compiler
 from dissect.cstruct.exceptions import ParserError
 from dissect.cstruct.expression import Expression
-from dissect.cstruct.types import (
-    Array,
-    BaseType,
-    Enum,
-    Field,
-    Flag,
-    Pointer,
-    Structure,
-    Union,
-)
+from dissect.cstruct.types import ArrayMetaType, Field, MetaType
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
@@ -95,10 +86,11 @@ class TokenParser(Parser):
         except (ValueError, SyntaxError):
             pass
 
-        try:
-            value = Expression(self.cstruct, value).evaluate()
-        except Exception:
-            pass
+        if isinstance(value, str):
+            try:
+                value = Expression(self.cstruct, value).evaluate()
+            except Exception:
+                pass
 
         self.cstruct.consts[match["name"]] = value
 
@@ -118,7 +110,7 @@ class TokenParser(Parser):
         values = {}
         for line in d["values"].splitlines():
             for v in line.split(","):
-                key, sep, val = v.partition("=")
+                key, _, val = v.partition("=")
                 key = key.strip()
                 val = val.strip()
                 if not key:
@@ -139,17 +131,15 @@ class TokenParser(Parser):
         if not d["type"]:
             d["type"] = "uint32"
 
-        enumcls = Enum
+        factory = self.cstruct._make_enum
         if enumtype == "flag":
-            enumcls = Flag
+            factory = self.cstruct._make_flag
 
-        enum = enumcls(self.cstruct, d["name"], self.cstruct.resolve(d["type"]), values)
-
-        if not enum.name:
-            for name, value in enum.values.items():
-                self.cstruct.consts[name] = enum(value)
+        enum = factory(d["name"] or "", self.cstruct.resolve(d["type"]), values)
+        if not enum.__name__:
+            self.cstruct.consts.update(enum.__members__)
         else:
-            self.cstruct.addtype(enum.name, enum)
+            self.cstruct.add_type(enum.__name__, enum)
 
         tokens.eol()
 
@@ -170,7 +160,7 @@ class TokenParser(Parser):
             type_, name, bits = self._parse_field_type(type_, name)
             if bits is not None:
                 raise ParserError(f"line {self._lineno(tokens.previous)}: typedefs cannot have bitfields")
-            self.cstruct.addtype(name, type_)
+            self.cstruct.add_type(name, type_)
 
     def _struct(self, tokens: TokenConsumer, register: bool = False) -> None:
         stype = tokens.consume()
@@ -203,17 +193,19 @@ class TokenParser(Parser):
         name = names[0] if names else None
 
         if stype.value.startswith("union"):
-            class_ = Union
+            factory = self.cstruct._make_union
         else:
-            class_ = Structure
+            factory = self.cstruct._make_struct
+
         is_anonymous = False
         if not name:
             is_anonymous = True
             name = self.cstruct._next_anonymous()
 
-        st = class_(self.cstruct, name, fields, align=self.align, anonymous=is_anonymous)
-        if self.compiler and "nocompile" not in tokens.flags:
-            st = self.compiler.compile(st)
+        st = factory(name, fields, align=self.align, anonymous=is_anonymous)
+        # TODO
+        # if self.compiler and "nocompile" not in tokens.flags:
+        #     st = self.compiler.compile(st)
 
         # This is pretty dirty
         if register:
@@ -221,7 +213,8 @@ class TokenParser(Parser):
                 raise ParserError(f"line {self._lineno(stype)}: struct has no name")
 
             for name in names:
-                self.cstruct.addtype(name, st)
+                self.cstruct.add_type(name, st)
+
         tokens.reset_flags()
         return st
 
@@ -242,7 +235,7 @@ class TokenParser(Parser):
         elif tokens.next == self.TOK.STRUCT:
             type_ = self._struct(tokens)
             if tokens.next != self.TOK.NAME:
-                return Field(type_.name, type_)
+                return Field(type_.__name__, type_)
 
         if tokens.next != self.TOK.NAME:
             raise ParserError(f"line {self._lineno(tokens.next)}: expected name")
@@ -253,7 +246,7 @@ class TokenParser(Parser):
         tokens.eol()
         return Field(name.strip(), type_, bits)
 
-    def _parse_field_type(self, type_: BaseType, name: str) -> tuple[BaseType, str, Optional[int]]:
+    def _parse_field_type(self, type_: MetaType, name: str) -> tuple[MetaType, str, Optional[int]]:
         pattern = self.TOK.patterns[self.TOK.NAME]
         # Dirty trick because the regex expects a ; but we don't want it to be part of the value
         d = pattern.match(name + ";").groupdict()
@@ -263,7 +256,7 @@ class TokenParser(Parser):
 
         if name.startswith("*"):
             name = name[1:]
-            type_ = Pointer(self.cstruct, type_)
+            type_ = self.cstruct._make_pointer(type_)
 
         if count_expression is not None:
             # Poor mans multi-dimensional array by abusing the eager regex match of count
@@ -282,10 +275,10 @@ class TokenParser(Parser):
                     except Exception:
                         pass
 
-                if isinstance(type_, Array) and count is None:
+                if isinstance(type_, ArrayMetaType) and count is None:
                     raise ParserError("Depth required for multi-dimensional array")
 
-                type_ = Array(self.cstruct, type_, count)
+                type_ = self.cstruct._make_array(type_, count)
 
         return type_, name, int(d["bits"]) if d["bits"] else None
 
@@ -410,9 +403,9 @@ class CStyleParser(Parser):
 
             values = {}
             for line in d["values"].split("\n"):
-                line, sep, comment = line.partition("//")
+                line, _, _ = line.partition("//")
                 for v in line.split(","):
-                    key, sep, val = v.partition("=")
+                    key, _, val = v.partition("=")
                     key = key.strip()
                     val = val.strip()
                     if not key:
@@ -433,15 +426,15 @@ class CStyleParser(Parser):
             if not d["type"]:
                 d["type"] = "uint32"
 
-            enumcls = Enum
+            factory = self.cstruct._make_enum
             if enumtype == "flag":
-                enumcls = Flag
+                factory = self.cstruct._make_flag
 
-            enum = enumcls(self.cstruct, d["name"], self.cstruct.resolve(d["type"]), values)
-            self.cstruct.addtype(enum.name, enum)
+            enum = factory(d["name"], self.cstruct.resolve(d["type"]), values)
+            self.cstruct.add_type(enum.__name__, enum)
 
     def _structs(self, data: str) -> None:
-        compiler = Compiler(self.cstruct)
+        # compiler = Compiler(self.cstruct)
         r = re.finditer(
             r"(#(?P<flags>(?:compile))\s+)?"
             r"((?P<typedef>typedef)\s+)?"
@@ -464,21 +457,22 @@ class CStyleParser(Parser):
 
             if d["type"] == "struct":
                 data = self._parse_fields(d["fields"][1:-1].strip())
-                st = Structure(self.cstruct, name, data)
-                if d["flags"] == "compile" or self.compiled:
-                    st = compiler.compile(st)
+                st = self.cstruct._make_struct(name, data)
+                # TODO
+                # if d["flags"] == "compile" or self.compiled:
+                #     st = compiler.compile(st)
             elif d["typedef"] == "typedef":
                 st = d["type"]
             else:
                 continue
 
             if d["name"]:
-                self.cstruct.addtype(d["name"], st)
+                self.cstruct.add_type(d["name"], st)
 
             if d["defs"]:
                 for td in d["defs"].strip().split(","):
                     td = td.strip()
-                    self.cstruct.addtype(td, st)
+                    self.cstruct.add_type(td, st)
 
     def _parse_fields(self, data: str) -> None:
         fields = re.finditer(
@@ -508,11 +502,11 @@ class CStyleParser(Parser):
                     except Exception:
                         pass
 
-                type_ = Array(self.cstruct, type_, count)
+                type_ = self.cstruct._make_array(type_, count)
 
             if d["name"].startswith("*"):
                 d["name"] = d["name"][1:]
-                type_ = Pointer(self.cstruct, type_)
+                type_ = self.cstruct._make_pointer(type_)
 
             field = Field(d["name"], type_, int(d["bits"]) if d["bits"] else None)
             result.append(field)

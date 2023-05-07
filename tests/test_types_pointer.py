@@ -1,22 +1,115 @@
 from unittest.mock import patch
 
 import pytest
-from dissect import cstruct
 
-from dissect.cstruct.types.pointer import PointerInstance
+from dissect.cstruct.cstruct import cstruct
+from dissect.cstruct.exceptions import NullPointerDereference
 
 from .utils import verify_compiled
 
 
-@pytest.mark.parametrize("compiled", [True, False])
-def test_pointer_basic(compiled):
+def test_pointer(cs: cstruct):
+    cs.pointer = cs.uint8
+
+    ptr = cs._make_pointer(cs.uint8)
+    assert ptr.__name__ == "uint8*"
+
+    obj = ptr(b"\x01\xFF")
+    assert repr(obj) == "<uint8* @ 0x1>"
+
+    assert obj == 1
+    assert obj.dumps() == b"\x01"
+    assert obj.dereference() == 255
+    assert str(obj) == "255"
+
+    with pytest.raises(NullPointerDereference):
+        ptr(0, None).dereference()
+
+
+def test_pointer_char(cs: cstruct):
+    cs.pointer = cs.uint8
+
+    ptr = cs._make_pointer(cs.char)
+    assert ptr.__name__ == "char*"
+
+    obj = ptr(b"\x02\x00asdf\x00")
+    assert repr(obj) == "<char* @ 0x2>"
+
+    assert obj == 2
+    assert obj.dereference() == b"asdf"
+    assert str(obj) == "b'asdf'"
+
+
+def test_pointer_operator(cs: cstruct):
+    cs.pointer = cs.uint8
+
+    ptr = cs._make_pointer(cs.uint8)
+    obj = ptr(b"\x01\x00\xFF")
+
+    assert obj == 1
+    assert obj.dumps() == b"\x01"
+    assert obj.dereference() == 0
+
+    obj += 1
+    assert obj == 2
+    assert obj.dumps() == b"\x02"
+    assert obj.dereference() == 255
+
+    obj -= 2
+    assert obj == 0
+
+    obj += 4
+    assert obj == 4
+
+    obj -= 2
+    assert obj == 2
+
+    obj *= 12
+    assert obj == 24
+
+    obj //= 2
+    assert obj == 12
+
+    obj %= 10
+    assert obj == 2
+
+    obj **= 4
+    assert obj == 16
+
+    obj <<= 1
+    assert obj == 32
+
+    obj >>= 2
+    assert obj == 8
+
+    obj &= 2
+    assert obj == 0
+
+    obj ^= 4
+    assert obj == 4
+
+    obj |= 8
+    assert obj == 12
+
+
+def test_pointer_eof(cs: cstruct):
+    cs.pointer = cs.uint8
+
+    ptr = cs._make_pointer(cs.uint8)
+    obj = ptr(b"\x01")
+
+    with pytest.raises(EOFError):
+        obj.dereference()
+
+
+def test_pointer_struct(cs: cstruct, compiled: bool):
     cdef = """
     struct ptrtest {
         uint32  *ptr1;
         uint32  *ptr2;
     };
     """
-    cs = cstruct.cstruct(pointer="uint16")
+    cs.pointer = cs.uint16
     cs.load(cdef, compiled=compiled)
 
     assert verify_compiled(cs.ptrtest, compiled)
@@ -40,12 +133,11 @@ def test_pointer_basic(compiled):
 
     assert obj.dumps() == b"\x06\x00\x06\x00"
 
-    with pytest.raises(cstruct.NullPointerDereference):
+    with pytest.raises(NullPointerDereference):
         cs.ptrtest(b"\x00\x00\x00\x00").ptr1.dereference()
 
 
-@pytest.mark.parametrize("compiled", [True, False])
-def test_pointer_struct(compiled):
+def test_pointer_struct_pointer(cs: cstruct, compiled: bool):
     cdef = """
     struct test {
         char    magic[4];
@@ -61,7 +153,7 @@ def test_pointer_struct(compiled):
         test    *ptr;
     };
     """
-    cs = cstruct.cstruct(pointer="uint16")
+    cs.pointer = cs.uint16
     cs.load(cdef, compiled=compiled)
 
     assert verify_compiled(cs.test, compiled)
@@ -83,19 +175,18 @@ def test_pointer_struct(compiled):
 
     assert obj.dumps() == b"\x02\x00"
 
-    with pytest.raises(cstruct.NullPointerDereference):
+    with pytest.raises(NullPointerDereference):
         cs.ptrtest(b"\x00\x00\x00\x00").ptr.magic
 
 
-@pytest.mark.parametrize("compiled", [True, False])
-def test_array_of_pointers(compiled):
+def test_pointer_array(cs: cstruct, compiled: bool):
     cdef = """
     struct mainargs {
         uint8_t argc;
         char *args[4];
     }
     """
-    cs = cstruct.cstruct(pointer="uint16")
+    cs.pointer = cs.uint16
     cs.load(cdef, compiled=compiled)
 
     assert verify_compiled(cs.mainargs, compiled)
@@ -111,52 +202,14 @@ def test_array_of_pointers(compiled):
     assert obj.args[1].dereference() == b"argument two"
 
 
-def test_pointer_arithmetic():
-    inst = PointerInstance(None, None, 0, None)
-    assert inst._addr == 0
-
-    inst += 4
-    assert inst._addr == 4
-
-    inst -= 2
-    assert inst._addr == 2
-
-    inst *= 12
-    assert inst._addr == 24
-
-    inst //= 2
-    assert inst._addr == 12
-
-    inst %= 10
-    assert inst._addr == 2
-
-    inst **= 4
-    assert inst._addr == 16
-
-    inst <<= 1
-    assert inst._addr == 32
-
-    inst >>= 2
-    assert inst._addr == 8
-
-    inst &= 2
-    assert inst._addr == 0
-
-    inst ^= 4
-    assert inst._addr == 4
-
-    inst |= 8
-    assert inst._addr == 12
-
-
 def test_pointer_sys_size():
     with patch("sys.maxsize", 2**64):
-        c = cstruct.cstruct()
-        assert c.pointer is c.uint64
+        cs = cstruct()
+        assert cs.pointer is cs.uint64
 
     with patch("sys.maxsize", 2**32):
-        c = cstruct.cstruct()
-        assert c.pointer is c.uint32
+        cs = cstruct()
+        assert cs.pointer is cs.uint32
 
-    c = cstruct.cstruct(pointer="uint16")
-    assert c.pointer is c.uint16
+    cs = cstruct(pointer="uint16")
+    assert cs.pointer is cs.uint16
