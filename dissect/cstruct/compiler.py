@@ -1,3 +1,4 @@
+# TODO
 from __future__ import annotations
 
 import keyword
@@ -10,20 +11,16 @@ from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.types import (
     Array,
-    BytesInteger,
-    CharType,
+    Char,
     Enum,
-    EnumInstance,
     Field,
     Flag,
-    FlagInstance,
-    Instance,
-    PackedType,
+    Int,
+    Packed,
     Pointer,
-    PointerInstance,
     Structure,
     Union,
-    WcharType,
+    Wchar,
 )
 
 if TYPE_CHECKING:
@@ -39,10 +36,10 @@ class Compiler:
         Enum,
         Flag,
         Array,
-        PackedType,
-        CharType,
-        WcharType,
-        BytesInteger,
+        Packed,
+        Char,
+        Wchar,
+        Int,
     )
 
     COMPILE_TEMPLATE = """
