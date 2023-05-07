@@ -1,4 +1,89 @@
+import pytest
+
 from dissect.cstruct import utils
+from dissect.cstruct.cstruct import cstruct
+
+from .utils import verify_compiled
+
+
+def test_hexdump(capsys: pytest.CaptureFixture):
+    utils.hexdump(b"\x00" * 16)
+    captured = capsys.readouterr()
+    assert captured.out == "00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00   ................\n"
+
+    out = utils.hexdump(b"\x00" * 16, output="string")
+    assert out == "00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00   ................"
+
+    out = utils.hexdump(b"\x00" * 16, output="generator")
+    assert next(out) == "00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00   ................"
+
+    with pytest.raises(ValueError) as excinfo:
+        utils.hexdump("b\x00", output="str")
+    assert str(excinfo.value) == "Invalid output argument: 'str' (should be 'print', 'generator' or 'string')."
+
+
+def test_dumpstruct(cs: cstruct, capsys: pytest.CaptureFixture, compiled: bool):
+    cdef = """
+    struct test {
+        uint32 testval;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"\x39\x05\x00\x00"
+    obj = cs.test(buf)
+
+    utils.dumpstruct(cs.test, buf)
+    captured_1 = capsys.readouterr()
+
+    utils.dumpstruct(obj)
+    captured_2 = capsys.readouterr()
+
+    assert captured_1.out == captured_2.out
+
+    out_1 = utils.dumpstruct(cs.test, buf, output="string")
+    out_2 = utils.dumpstruct(obj, output="string")
+
+    assert out_1 == out_2
+
+    with pytest.raises(ValueError) as excinfo:
+        utils.dumpstruct(obj, output="generator")
+    assert str(excinfo.value) == "Invalid output argument: 'generator' (should be 'print' or 'string')."
+
+
+def test_dumpstruct_anonymous(cs: cstruct, capsys: pytest.CaptureFixture, compiled: bool):
+    cdef = """
+    struct test {
+        struct {
+            uint32 testval;
+        };
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"\x39\x05\x00\x00"
+    obj = cs.test(buf)
+
+    utils.dumpstruct(cs.test, buf)
+    captured_1 = capsys.readouterr()
+
+    utils.dumpstruct(obj)
+    captured_2 = capsys.readouterr()
+
+    assert captured_1.out == captured_2.out
+
+    out_1 = utils.dumpstruct(cs.test, buf, output="string")
+    out_2 = utils.dumpstruct(obj, output="string")
+
+    assert out_1 == out_2
+
+    with pytest.raises(ValueError) as excinfo:
+        utils.dumpstruct(obj, output="generator")
+    assert str(excinfo.value) == "Invalid output argument: 'generator' (should be 'print' or 'string')."
 
 
 def test_pack_unpack():
