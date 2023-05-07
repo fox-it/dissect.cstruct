@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, BinaryIO, Union
+from typing import TYPE_CHECKING, BinaryIO
 
 if TYPE_CHECKING:
-    from dissect.cstruct.types import RawType
+    from dissect.cstruct.types import BaseType
 
 
 class BitBuffer:
@@ -17,7 +17,7 @@ class BitBuffer:
         self._buffer = 0
         self._remaining = 0
 
-    def read(self, field_type: RawType, bits: Union[int, bytes]) -> int:
+    def read(self, field_type: BaseType, bits: int) -> int:
         if self._remaining == 0 or self._type != field_type:
             self._type = field_type
             self._remaining = field_type.size * 8
@@ -43,7 +43,7 @@ class BitBuffer:
 
         return v
 
-    def write(self, field_type: RawType, data: int, bits: int) -> None:
+    def write(self, field_type: BaseType, data: int, bits: int) -> None:
         if self._remaining == 0 or self._type != field_type:
             if self._type:
                 self.flush()

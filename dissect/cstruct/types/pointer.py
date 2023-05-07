@@ -1,52 +1,30 @@
 from __future__ import annotations
 
-import operator
-from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Dict, Union
+from typing import Any, BinaryIO
 
 from dissect.cstruct.exceptions import NullPointerDereference
-from dissect.cstruct.types import BaseType, CharType, RawType
-
-if TYPE_CHECKING:
-    from dissect.cstruct import cstruct
-
-
-class Pointer(RawType):
-    """Implements a pointer to some other type."""
-
-    def __init__(self, cstruct: cstruct, target: BaseType):
-        self.cstruct = cstruct
-        self.type = target
-        super().__init__(cstruct, "pointer", self.cstruct.pointer.size, self.cstruct.pointer.alignment)
-
-    def __repr__(self) -> str:
-        return f"<Pointer {self.type}>"
-
-    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> PointerInstance:
-        addr = self.cstruct.pointer(stream)
-        return PointerInstance(self.type, stream, addr, context)
-
-    def _write(self, stream: BinaryIO, data: Union[int, PointerInstance]):
-        if isinstance(data, PointerInstance):
-            data = data._addr
-
-        if not isinstance(data, int):
-            raise TypeError("Invalid pointer data")
-
-        return self.cstruct.pointer._write(stream, data)
+from dissect.cstruct.types.base import BaseType, MetaType
+from dissect.cstruct.types.char import Char
+from dissect.cstruct.types.void import Void
 
 
-class PointerInstance:
-    """Like the Instance class, but for structures referenced by a pointer."""
+class Pointer(int, BaseType):
+    """Pointer to some other type."""
 
-    def __init__(self, type_: BaseType, stream: BinaryIO, addr: int, ctx: Dict[str, Any]):
-        self._stream = stream
-        self._type = type_
-        self._addr = addr
-        self._ctx = ctx
-        self._value = None
+    type: MetaType
+    _stream: BinaryIO
+    _context: dict[str, Any]
+    _value: BaseType
+
+    def __new__(cls, value: int, stream: BinaryIO, context: dict[str, Any] = None) -> Pointer:
+        obj = super().__new__(cls, value)
+        obj._stream = stream
+        obj._context = context
+        obj._value = None
+        return obj
 
     def __repr__(self) -> str:
-        return f"<Pointer {self._type} @ 0x{self._addr:x}>"
+        return f"<{self.type.__name__}* @ {self:#x}>"
 
     def __str__(self) -> str:
         return str(self.dereference())
@@ -54,72 +32,62 @@ class PointerInstance:
     def __getattr__(self, attr: str) -> Any:
         return getattr(self.dereference(), attr)
 
-    def __int__(self) -> int:
-        return self._addr
+    def __add__(self, other: int) -> Pointer:
+        return type.__call__(self.__class__, int.__add__(self, other), self._stream, self._context)
 
-    def __nonzero__(self) -> bool:
-        return self._addr != 0
+    def __sub__(self, other: int) -> Pointer:
+        return type.__call__(self.__class__, int.__sub__(self, other), self._stream, self._context)
 
-    def __addr_math(self, other: Union[int, PointerInstance], op: Callable[[int, int], int]) -> PointerInstance:
-        if isinstance(other, PointerInstance):
-            other = other._addr
+    def __mul__(self, other: int) -> Pointer:
+        return type.__call__(self.__class__, int.__mul__(self, other), self._stream, self._context)
 
-        return PointerInstance(self._type, self._stream, op(self._addr, other), self._ctx)
+    def __floordiv__(self, other: int) -> Pointer:
+        return type.__call__(self.__class__, int.__floordiv__(self, other), self._stream, self._context)
 
-    def __add__(self, other: Union[int, PointerInstance]) -> PointerInstance:
-        return self.__addr_math(other, operator.__add__)
+    def __mod__(self, other: int) -> Pointer:
+        return type.__call__(self.__class__, int.__mod__(self, other), self._stream, self._context)
 
-    def __sub__(self, other: Union[int, PointerInstance]) -> PointerInstance:
-        return self.__addr_math(other, operator.__sub__)
+    def __pow__(self, other: int) -> Pointer:
+        return type.__call__(self.__class__, int.__pow__(self, other), self._stream, self._context)
 
-    def __mul__(self, other: Union[int, PointerInstance]) -> PointerInstance:
-        return self.__addr_math(other, operator.__mul__)
+    def __lshift__(self, other: int) -> Pointer:
+        return type.__call__(self.__class__, int.__lshift__(self, other), self._stream, self._context)
 
-    def __floordiv__(self, other: Union[int, PointerInstance]) -> PointerInstance:
-        return self.__addr_math(other, operator.__floordiv__)
+    def __rshift__(self, other: int) -> Pointer:
+        return type.__call__(self.__class__, int.__rshift__(self, other), self._stream, self._context)
 
-    def __mod__(self, other: Union[int, PointerInstance]) -> PointerInstance:
-        return self.__addr_math(other, operator.__mod__)
+    def __and__(self, other: int) -> Pointer:
+        return type.__call__(self.__class__, int.__and__(self, other), self._stream, self._context)
 
-    def __pow__(self, other: Union[int, PointerInstance]) -> PointerInstance:
-        return self.__addr_math(other, operator.__pow__)
+    def __xor__(self, other: int) -> Pointer:
+        return type.__call__(self.__class__, int.__xor__(self, other), self._stream, self._context)
 
-    def __lshift__(self, other: Union[int, PointerInstance]) -> PointerInstance:
-        return self.__addr_math(other, operator.__lshift__)
+    def __or__(self, other: int) -> Pointer:
+        return type.__call__(self.__class__, int.__or__(self, other), self._stream, self._context)
 
-    def __rshift__(self, other: Union[int, PointerInstance]) -> PointerInstance:
-        return self.__addr_math(other, operator.__rshift__)
+    @classmethod
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Pointer:
+        return cls.__new__(cls, cls.cs.pointer._read(stream, context), stream, context)
 
-    def __and__(self, other: Union[int, PointerInstance]) -> PointerInstance:
-        return self.__addr_math(other, operator.__and__)
-
-    def __xor__(self, other: Union[int, PointerInstance]) -> PointerInstance:
-        return self.__addr_math(other, operator.__xor__)
-
-    def __or__(self, other: Union[int, PointerInstance]) -> PointerInstance:
-        return self.__addr_math(other, operator.__or__)
-
-    def __eq__(self, other: Union[int, PointerInstance]) -> bool:
-        if isinstance(other, PointerInstance):
-            other = other._addr
-
-        return self._addr == other
+    @classmethod
+    def _write(cls, stream: BinaryIO, data: int) -> int:
+        return cls.cs.pointer._write(stream, data)
 
     def dereference(self) -> Any:
-        if self._addr == 0:
+        if self == 0:
             raise NullPointerDereference()
 
-        if self._value is None:
+        if self._value is None and not issubclass(self.type, Void):
             # Read current position of file read/write pointer
             position = self._stream.tell()
             # Reposition the file read/write pointer
-            self._stream.seek(self._addr)
+            self._stream.seek(self)
 
-            if isinstance(self._type, CharType):
+            if issubclass(self.type, Char):
                 # this makes the assumption that a char pointer is a null-terminated string
-                value = self._type._read_0(self._stream, self._ctx)
+                value = self.type._read_0(self._stream, self._context)
             else:
-                value = self._type._read(self._stream, self._ctx)
+                value = self.type._read(self._stream, self._context)
 
             self._stream.seek(position)
             self._value = value

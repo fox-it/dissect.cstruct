@@ -1,18 +1,100 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, BinaryIO, Dict, List, Union
+from enum import EnumMeta, IntEnum, IntFlag
+from typing import TYPE_CHECKING, Any, BinaryIO, Optional, Union
 
-from dissect.cstruct.types import BaseType, RawType
+from dissect.cstruct.types.base import Array, BaseType, MetaType
 
 if TYPE_CHECKING:
-    from dissect.cstruct import cstruct
+    from dissect.cstruct.cstruct import cstruct
 
 
-class Enum(RawType):
-    """Implements an Enum type.
+class EnumMetaType(EnumMeta, MetaType):
+    type: MetaType
 
-    Enums can be made using any type. The API for accessing enums and their
-    values is very similar to Python 3 native enums.
+    def __call__(
+        cls,
+        value: Union[cstruct, int, BinaryIO, bytes],
+        name: Optional[str] = None,
+        type_: Optional[MetaType] = None,
+        *args,
+        **kwargs,
+    ):
+        if name is None:
+            if not isinstance(value, int):
+                # value is a parsable value
+                value = cls.type(value)
+
+            return super().__call__(value)
+
+        cs = value
+        if not issubclass(type_, int):
+            raise TypeError("Enum can only be created from int type")
+
+        enum_cls = super().__call__(name, *args, **kwargs)
+        enum_cls.cs = cs
+        enum_cls.type = type_
+        enum_cls.size = type_.size
+        enum_cls.alignment = type_.alignment
+
+        _fix_alias_members(enum_cls)
+
+        return enum_cls
+
+    def __getitem__(cls, name: Union[str, int]) -> Union[Enum, Array]:
+        if isinstance(name, str):
+            return super().__getitem__(name)
+        return MetaType.__getitem__(cls, name)
+
+    __len__ = MetaType.__len__
+
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Enum:
+        return cls(cls.type._read(stream, context))
+
+    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> list[Enum]:
+        return list(map(cls, cls.type._read_array(stream, count, context)))
+
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] = None) -> list[Enum]:
+        return list(map(cls, cls.type._read_0(stream, context)))
+
+    def _write(cls, stream: BinaryIO, data: Enum) -> int:
+        return cls.type._write(stream, data.value)
+
+    def _write_array(cls, stream: BinaryIO, array: list[Enum]) -> int:
+        data = [entry.value if isinstance(entry, Enum) else entry for entry in array]
+        return cls.type._write_array(stream, data)
+
+    def _write_0(cls, stream: BinaryIO, array: list[BaseType]) -> int:
+        data = [entry.value if isinstance(entry, Enum) else entry for entry in array]
+        return cls._write_array(stream, data + [cls.type()])
+
+
+def _fix_alias_members(cls: type[Enum]):
+    # Emulate aenum NoAlias behaviour
+    if len(cls._member_names_) == len(cls._member_map_):
+        return
+
+    for name, member in cls._member_map_.items():
+        if name != member.name:
+            new_member = int.__new__(cls, member.value)
+            new_member._name_ = name
+            new_member._value_ = member.value
+
+            type.__setattr__(cls, name, new_member)
+            cls._member_names_.append(name)
+            cls._member_map_[name] = new_member
+            cls._value2member_map_[member.value] = new_member
+
+
+class Enum(BaseType, IntEnum, metaclass=EnumMetaType):
+    """Enum type supercharged with cstruct functionality.
+
+    Enums are (mostly) compatible with the Python 3 standard library ``IntEnum`` with some notable differences:
+        - Duplicate members are their own unique member instead of being an alias
+        - Non-existing values are allowed and handled similarly to ``IntFlag``: ``<Enum: 0>``
+        - Enum members are only considered equal if the enum class is the same
+
+    Enums can be made using any integer type.
 
     Example:
         When using the default C-style parser, the following syntax is supported:
@@ -28,97 +110,37 @@ class Enum(RawType):
             };
     """
 
-    def __init__(self, cstruct: cstruct, name: str, type_: BaseType, values: Dict[str, int]):
-        self.type = type_
-        self.values = values
-        self.reverse = {}
-
-        for k, v in values.items():
-            self.reverse[v] = k
-
-        super().__init__(cstruct, name, len(self.type), self.type.alignment)
-
-    def __call__(self, value: Union[int, BinaryIO]) -> EnumInstance:
-        if isinstance(value, int):
-            return EnumInstance(self, value)
-        return super().__call__(value)
-
-    def __getitem__(self, attr: str) -> EnumInstance:
-        return self(self.values[attr])
-
-    def __getattr__(self, attr: str) -> EnumInstance:
-        try:
-            return self(self.values[attr])
-        except KeyError:
-            raise AttributeError(attr)
-
-    def __contains__(self, attr: str) -> bool:
-        return attr in self.values
-
-    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> EnumInstance:
-        v = self.type._read(stream, context)
-        return self(v)
-
-    def _read_array(self, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> List[EnumInstance]:
-        return list(map(self, self.type._read_array(stream, count, context)))
-
-    def _read_0(self, stream: BinaryIO, context: dict[str, Any] = None) -> List[EnumInstance]:
-        return list(map(self, self.type._read_0(stream, context)))
-
-    def _write(self, stream: BinaryIO, data: Union[int, EnumInstance]) -> int:
-        data = data.value if isinstance(data, EnumInstance) else data
-        return self.type._write(stream, data)
-
-    def _write_array(self, stream: BinaryIO, data: List[Union[int, EnumInstance]]) -> int:
-        data = [d.value if isinstance(d, EnumInstance) else d for d in data]
-        return self.type._write_array(stream, data)
-
-    def _write_0(self, stream: BinaryIO, data: List[Union[int, EnumInstance]]) -> int:
-        data = [d.value if isinstance(d, EnumInstance) else d for d in data]
-        return self.type._write_0(stream, data)
-
-    def default(self) -> EnumInstance:
-        return self(0)
-
-    def default_array(self, count: int) -> List[EnumInstance]:
-        return [self.default() for _ in range(count)]
-
-
-class EnumInstance:
-    """Implements a value instance of an Enum"""
-
-    def __init__(self, enum: Enum, value: int):
-        self.enum = enum
-        self.value = value
-
-    def __eq__(self, value: Union[int, EnumInstance]) -> bool:
-        if isinstance(value, EnumInstance) and value.enum is not self.enum:
-            return False
-
-        if hasattr(value, "value"):
-            value = value.value
-
-        return self.value == value
-
-    def __ne__(self, value: Union[int, EnumInstance]) -> bool:
-        return self.__eq__(value) is False
-
-    def __hash__(self) -> int:
-        return hash((self.enum, self.value))
+    def __repr__(self) -> str:
+        result = IntFlag.__repr__(self)
+        if not self.__class__.__name__:
+            result = f"<{result[2:]}"
+        return result
 
     def __str__(self) -> str:
-        return f"{self.enum.name}.{self.name}"
+        result = IntFlag.__str__(self)
+        if not self.__class__.__name__:
+            result = f"<{result[1:]}"
+        return result
 
-    def __int__(self) -> int:
-        return self.value
+    def __eq__(self, other: Union[int, Enum]) -> bool:
+        if isinstance(other, Enum) and other.__class__ is not self.__class__:
+            return False
 
-    def __repr__(self) -> str:
-        name = f"{self.enum.name}.{self.name}" if self.enum.name else self.name
-        return f"<{name}: {self.value}>"
+        return self.value == other
 
-    @property
-    def name(self) -> str:
-        if self.value not in self.enum.reverse:
-            return f"{self.enum.name}_{self.value}"
+    def __ne__(self, value: Union[int, Enum]) -> bool:
+        return not self.__eq__(value)
 
-        return self.enum.reverse[self.value]
+    def __hash__(self) -> int:
+        return hash((self.__class__, self.name, self.value))
+
+    @classmethod
+    def _missing_(cls, value: int) -> Enum:
+        # Emulate FlagBoundary.KEEP for enum (allow values other than the defined members)
+        pseudo_member = cls._value2member_map_.get(value, None)
+        if pseudo_member is None:
+            new_member = int.__new__(cls, value)
+            new_member._name_ = None
+            new_member._value_ = value
+            pseudo_member = cls._value2member_map_.setdefault(value, new_member)
+        return pseudo_member
