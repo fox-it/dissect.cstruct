@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import io
-from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, BinaryIO, List
+from contextlib import contextmanager
+from functools import lru_cache
+from textwrap import dedent
+from types import FunctionType
+from typing import Any, BinaryIO, ContextManager, Optional
 
 from dissect.cstruct.bitbuffer import BitBuffer
-from dissect.cstruct.types import BaseType, Enum, Instance
-
-if TYPE_CHECKING:
-    from dissect.cstruct import cstruct
+from dissect.cstruct.types.base import BaseType, MetaType
+from dissect.cstruct.types.enum import EnumMetaType
 
 
 class Field:
-    """Holds a structure field."""
+    """Structure field."""
 
     def __init__(self, name: str, type_: BaseType, bits: int = None, offset: int = None):
         self.name = name
@@ -21,49 +22,82 @@ class Field:
         self.offset = offset
         self.alignment = type_.alignment
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         bits_str = f" : {self.bits}" if self.bits else ""
         return f"<Field {self.name} {self.type}{bits_str}>"
 
 
-class Structure(BaseType):
-    """Type class for structures."""
+class StructureMetaType(MetaType):
+    """Base metaclass for cstruct structure type classes."""
 
-    def __init__(
-        self, cstruct: cstruct, name: str, fields: List[Field] = None, align: bool = False, anonymous: bool = False
-    ):
-        super().__init__(cstruct)
-        self.name = name
-        self.size = None
-        self.alignment = None
+    anonymous: bool
+    align: bool
+    fields: list[Field]
+    lookup: dict[str, Field]
+    __updating__ = False
 
-        self.lookup = OrderedDict()
-        self.fields = fields
+    def __new__(metacls, cls, bases, classdict: dict[str, Any]) -> MetaType:
+        if fields := classdict.pop("fields", None):
+            metacls._update_fields(metacls, fields, align=classdict.get("align", False), classdict=classdict)
 
-        self.align = align
-        self.anonymous = anonymous
-        self.dynamic = False
+        return super().__new__(metacls, cls, bases, classdict)
 
-        for field in self.fields:
-            self.lookup[field.name] = field
-            if isinstance(field.type, Structure) and field.type.anonymous:
-                self.lookup.update(field.type.lookup)
+    def __call__(cls, *args, **kwargs) -> Structure:
+        if (
+            cls.fields
+            and len(args) == len(cls.fields) == 1
+            and isinstance(args[0], bytes)
+            and issubclass(cls.fields[0].type, bytes)
+            and len(args[0]) == cls.fields[0].type.size
+        ):
+            # Shortcut for single char/bytes type
+            return type.__call__(cls, *args, **kwargs)
+        return super().__call__(*args, **kwargs)
 
-        self._calc_size_and_offsets()
+    def _update_fields(
+        cls, fields: list[Field], align: bool = False, classdict: Optional[dict[str, Any]] = None
+    ) -> None:
+        classdict = classdict or {}
 
-    def __len__(self) -> int:
-        if self.dynamic:
-            raise TypeError("Dynamic size")
+        lookup = {}
+        for field in fields:
+            if field.name in lookup and field.name != "_":
+                raise ValueError(f"Duplicate field name: {field.name}")
 
-        if self.size is None:
-            self._calc_size_and_offsets()
+            if isinstance(field.type, StructureMetaType) and field.type.anonymous:
+                lookup.update(field.type.lookup)
+            else:
+                lookup[field.name] = field
 
-        return self.size
+        num_fields = len(lookup)
+        field_names = lookup.keys()
+        classdict["fields"] = fields
+        classdict["lookup"] = lookup
+        classdict["__init__"] = _patch_args_and_attributes(_make__init__(num_fields), field_names)
+        classdict["__bool__"] = _patch_attributes(_make__bool__(num_fields), field_names, 1)
 
-    def __repr__(self) -> str:
-        return f"<Structure {self.name}>"
+        if issubclass(cls, UnionMetaType):
+            # Not a great way to do this but it works for now
+            classdict["__eq__"] = Union.__eq__
+        else:
+            classdict["__eq__"] = _patch_attributes(_make__eq__(num_fields), field_names, 1)
 
-    def _calc_size_and_offsets(self) -> None:
+        # TODO: compile _read
+        # TODO: compile _write
+
+        # If we're calling this as a class method or a function on the metaclass
+        if issubclass(cls, type):
+            size, alignment = cls._calculate_size_and_offsets(cls, fields, align)
+        else:
+            size, alignment = cls._calculate_size_and_offsets(fields, align)
+
+        classdict["size"] = size
+        classdict["alignment"] = alignment
+        classdict["dynamic"] = size is None
+
+        return classdict
+
+    def _calculate_size_and_offsets(cls, fields: list[Field], align: bool = False) -> tuple[Optional[int], int]:
         """Iterate all fields in this structure to calculate the field offsets and total structure size.
 
         If a structure has a dynamic field, further field offsets will be set to None and self.dynamic
@@ -81,12 +115,12 @@ class Structure(BaseType):
         # How many bits we have left in the current bit field
         bits_remaining = 0
 
-        for field in self.fields:
+        for field in fields:
             if field.offset is not None:
                 # If a field already has an offset, it's leading
                 offset = field.offset
 
-            if self.align and offset is not None:
+            if align and offset is not None:
                 # Round to next alignment
                 offset += -offset & (field.alignment - 1)
 
@@ -96,7 +130,7 @@ class Structure(BaseType):
             if field.bits:
                 field_type = field.type
 
-                if isinstance(field_type, Enum):
+                if isinstance(field_type, EnumMetaType):
                     field_type = field_type.type
 
                 # Bit fields have special logic
@@ -138,43 +172,41 @@ class Structure(BaseType):
                     except TypeError:
                         # This field is dynamic
                         offset = None
-                        self.dynamic = True
                         continue
 
                     offset += field_len
 
-        if self.align and offset is not None:
+        if align and offset is not None:
             # Add "tail padding" if we need to align
             # This bit magic rounds up to the next alignment boundary
             # E.g. offset = 3; alignment = 8; -offset & (alignment - 1) = 5
             offset += -offset & (alignment - 1)
 
         # The structure size is whatever the currently calculated offset is
-        self.size = offset
-        self.alignment = alignment
+        return offset, alignment
 
-    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> Instance:
-        bit_buffer = BitBuffer(stream, self.cstruct.endian)
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Structure:
+        bit_buffer = BitBuffer(stream, cls.cs.endian)
         struct_start = stream.tell()
 
-        result = OrderedDict()
+        result = {}
         sizes = {}
-        for field in self.fields:
+        for field in cls.fields:
             offset = stream.tell()
-            field_type = self.cstruct.resolve(field.type)
+            field_type = cls.cs.resolve(field.type)
 
             if field.offset and offset != struct_start + field.offset:
                 # Field is at a specific offset, either alligned or added that way
                 offset = struct_start + field.offset
                 stream.seek(offset)
 
-            if self.align and field.offset is None:
+            if cls.align and field.offset is None:
                 # Previous field was dynamically sized and we need to align
                 offset += -offset & (field.alignment - 1)
                 stream.seek(offset)
 
             if field.bits:
-                if isinstance(field_type, Enum):
+                if isinstance(field_type, EnumMetaType):
                     value = field_type(bit_buffer.read(field_type.type, field.bits))
                 else:
                     value = bit_buffer.read(field_type, field.bits)
@@ -187,7 +219,7 @@ class Structure(BaseType):
 
             value = field_type._read(stream, result)
 
-            if isinstance(field_type, Structure) and field_type.anonymous:
+            if isinstance(field_type, StructureMetaType) and field_type.anonymous:
                 sizes.update(value._sizes)
                 result.update(value._values)
             else:
@@ -195,19 +227,34 @@ class Structure(BaseType):
                     sizes[field.name] = stream.tell() - offset
                     result[field.name] = value
 
-        if self.align:
+        if cls.align:
             # Align the stream
-            stream.seek(-stream.tell() & (self.alignment - 1), io.SEEK_CUR)
+            stream.seek(-stream.tell() & (cls.alignment - 1), io.SEEK_CUR)
 
-        return Instance(self, result, sizes)
+        obj = cls(**result)
+        obj._sizes = sizes
+        obj._values = result
+        return obj
 
-    def _write(self, stream: BinaryIO, data: Instance) -> int:
-        bit_buffer = BitBuffer(stream, self.cstruct.endian)
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] = None) -> list[Structure]:
+        result = []
+
+        while obj := cls._read(stream, context):
+            result.append(obj)
+
+        return result
+
+    def _write(cls, stream: BinaryIO, data: Structure) -> int:
+        bit_buffer = BitBuffer(stream, cls.cs.endian)
         struct_start = stream.tell()
         num = 0
 
-        for field in self.fields:
-            bit_field_type = (field.type.type if isinstance(field.type, Enum) else field.type) if field.bits else None
+        for field in cls.fields:
+            field_type = cls.cs.resolve(field.type)
+
+            bit_field_type = (
+                (field_type.type if isinstance(field_type, EnumMetaType) else field_type) if field.bits else None
+            )
             # Current field is not a bit field, but previous was
             # Or, moved to a bit field of another type, e.g. uint16 f1 : 8, uint32 f2 : 8;
             if (not field.bits and bit_buffer._type is not None) or (
@@ -223,9 +270,9 @@ class Structure(BaseType):
                 stream.write(b"\x00" * (struct_start + field.offset - offset))
                 offset = struct_start + field.offset
 
-            if self.align and field.offset is None:
+            if cls.align and field.offset is None:
                 is_bitbuffer_boundary = bit_buffer._type and (
-                    bit_buffer._remaining == 0 or bit_buffer._type != field.type
+                    bit_buffer._remaining == 0 or bit_buffer._type != field_type
                 )
                 if not bit_buffer._type or is_bitbuffer_boundary:
                     # Previous field was dynamically sized and we need to align
@@ -235,88 +282,76 @@ class Structure(BaseType):
 
             value = getattr(data, field.name, None)
             if value is None:
-                value = field.type.default()
+                value = field_type()
 
             if field.bits:
-                if isinstance(field.type, Enum):
-                    bit_buffer.write(field.type.type, value.value, field.bits)
+                if isinstance(field_type, EnumMetaType):
+                    bit_buffer.write(field_type.type, value.value, field.bits)
                 else:
-                    bit_buffer.write(field.type, value, field.bits)
+                    bit_buffer.write(field_type, value, field.bits)
             else:
-                if isinstance(field.type, Structure) and field.type.anonymous:
-                    field.type._write(stream, data)
+                if isinstance(field_type, StructureMetaType) and field_type.anonymous:
+                    field_type._write(stream, data)
                 else:
-                    field.type._write(stream, value)
+                    field_type._write(stream, value)
                 num += stream.tell() - offset
 
         if bit_buffer._type is not None:
             bit_buffer.flush()
 
-        if self.align:
+        if cls.align:
             # Align the stream
-            stream.write(b"\x00" * (-stream.tell() & (self.alignment - 1)))
+            stream.write(b"\x00" * (-stream.tell() & (cls.alignment - 1)))
 
         return num
 
-    def add_field(self, name: str, type_: BaseType, bits: int = None, offset: int = None) -> None:
-        """Add a field to this structure.
-
-        Args:
-            name: The field name.
-            type_: The field type.
-            bits: The bit of the field.
-            offset: The field offset.
-        """
+    def add_field(cls, name: str, type_: BaseType, bits: Optional[int] = None, offset: Optional[int] = None) -> None:
         field = Field(name, type_, bits=bits, offset=offset)
-        self.fields.append(field)
-        self.lookup[name] = field
-        if isinstance(field.type, Structure) and field.type.anonymous:
-            self.lookup.update(field.type.lookup)
-        self.size = None
+        cls.fields.append(field)
 
-    def default(self) -> Instance:
-        """Create and return an empty Instance from this structure.
+        if not cls.__updating__:
+            cls.commit()
 
-        Returns:
-            An empty Instance from this structure.
-        """
-        result = OrderedDict()
-        for field in self.fields:
-            if isinstance(field.type, Structure) and field.type.anonymous:
-                result.update(field.type.default()._values)
-            else:
-                result[field.name] = field.type.default()
+    @contextmanager
+    def start_update(cls) -> ContextManager:
+        try:
+            cls.__updating__ = True
+            yield
+        finally:
+            cls.commit()
+            cls.__updating__ = False
 
-        return Instance(self, result)
+    def commit(cls) -> None:
+        classdict = cls._update_fields(cls.fields, cls.align)
 
-    def show(self, indent: int = 0) -> None:
-        """Pretty print this structure."""
-        if indent == 0:
-            print(f"struct {self.name}")
-
-        for field in self.fields:
-            if field.offset is None:
-                offset = "0x??"
-            else:
-                offset = f"0x{field.offset:02x}"
-
-            print(f"{' ' * indent}+{offset} {field.name} {field.type}")
-
-            if isinstance(field.type, Structure):
-                field.type.show(indent + 1)
+        for key, value in classdict.items():
+            setattr(cls, key, value)
 
 
-class Union(Structure):
-    """Type class for unions"""
+class Structure(BaseType, metaclass=StructureMetaType):
+    """Base class for cstruct structure type classes."""
 
-    def __repr__(self) -> str:
-        return f"<Union {self.name}>"
+    _values: dict[str, Any]
+    _sizes: dict[str, int]
 
-    def _calc_size_and_offsets(self) -> None:
+    def __len__(self) -> int:
+        return len(self.dumps())
+
+    def __bytes__(self) -> bytes:
+        return self.dumps()
+
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self, item)
+
+
+class UnionMetaType(StructureMetaType):
+    """Base metaclass for cstruct union type classes."""
+
+    def _calculate_size_and_offsets(cls, fields: list[Field], align: bool = False) -> tuple[Optional[int], int]:
         size = 0
         alignment = 0
 
-        for field in self.fields:
+        for field in fields:
             if field.alignment is None:
                 # If a field already has an alignment, it's leading
                 field.alignment = field.type.alignment
@@ -324,53 +359,143 @@ class Union(Structure):
             size = max(len(field.type), size)
             alignment = max(field.alignment, alignment)
 
-        if self.align and size is not None:
+        if align and size is not None:
             # Add "tail padding" if we need to align
             # This bit magic rounds up to the next alignment boundary
             # E.g. offset = 3; alignment = 8; -offset & (alignment - 1) = 5
             size += -size & (alignment - 1)
 
-        self.size = size
-        self.alignment = alignment
+        return size, alignment
 
-    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> Instance:
-        buf = io.BytesIO(memoryview(stream.read(len(self))))
-        result = OrderedDict()
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Union:
+        buf = io.BytesIO(memoryview(stream.read(len(cls))))
+        result = {}
         sizes = {}
 
-        for field in self.fields:
+        for field in cls.fields:
             start = 0
             buf.seek(0)
-            field_type = self.cstruct.resolve(field.type)
+            field_type = cls.cs.resolve(field.type)
 
             if field.offset:
                 buf.seek(field.offset)
                 start = field.offset
 
-            v = field_type._read(buf, result)
+            value = field_type._read(buf, result)
 
-            if isinstance(field_type, Structure) and field_type.anonymous:
-                sizes.update(v._sizes)
-                result.update(v._values)
+            if isinstance(field_type, StructureMetaType) and field_type.anonymous:
+                sizes.update(value._sizes)
+                result.update(value._values)
             else:
                 sizes[field.name] = buf.tell() - start
-                result[field.name] = v
+                result[field.name] = value
 
-        return Instance(self, result, sizes)
+        obj = cls(**result)
+        obj._sizes = sizes
+        obj._values = result
+        return obj
 
-    def _write(self, stream: BinaryIO, data: Instance) -> Instance:
+    def _write(cls, stream: BinaryIO, data: Union) -> int:
         offset = stream.tell()
+        expected_offset = offset + len(cls)
 
-        # Find the largest field
-        field = max(self.fields, key=lambda e: len(e.type))
+        # Sort by largest field
+        fields = sorted(cls.fields, key=lambda e: len(e.type), reverse=True)
+        anonymous_struct = False
 
-        # Write the value to the stream using the largest field type
-        if isinstance(field.type, Structure) and field.type.anonymous:
-            field.type._write(stream, data)
-        else:
-            field.type._write(stream, getattr(data, field.name))
+        # Try to write by largest field
+        for field in fields:
+            if isinstance(field.type, StructureMetaType) and field.type.anonymous:
+                # Prefer to write regular fields initially
+                anonymous_struct = field.type
+                continue
+
+            # Skip empty values
+            if (value := getattr(data, field.name)) is None:
+                continue
+
+            # We have a value, write it
+            field.type._write(stream, value)
+            break
+
+        # If we haven't written anything yet and we initially skipped an anonymous struct, write it now
+        if stream.tell() == offset and anonymous_struct:
+            anonymous_struct._write(stream, data)
+
+        # If we haven't filled the union size yet, pad it
+        if remaining := expected_offset - stream.tell():
+            stream.write(b"\x00" * remaining)
 
         return stream.tell() - offset
 
-    def show(self, indent: int = 0) -> None:
-        raise NotImplementedError()
+
+class Union(Structure, metaclass=UnionMetaType):
+    """Base class for cstruct union type classes."""
+
+    def __eq__(self, other: Any):
+        if self.__class__ is other.__class__:
+            return bytes(self) == bytes(other)
+        return False
+
+
+def _codegen(func: FunctionType) -> FunctionType:
+    # Inspired by https://github.com/dabeaz/dataklasses
+    @lru_cache
+    def make_func_code(num_fields: int) -> FunctionType:
+        names = [f"_{n}" for n in range(num_fields)]
+        exec(func(names), {}, d := {})
+        return d.popitem()[1]
+
+    return make_func_code
+
+
+def _patch_args_and_attributes(func: FunctionType, fields: list[str], start: int = 0) -> FunctionType:
+    return type(func)(
+        func.__code__.replace(
+            co_names=(*func.__code__.co_names[:start], *fields),
+            co_varnames=("self", *fields),
+        ),
+        func.__globals__,
+        argdefs=func.__defaults__,
+    )
+
+
+def _patch_attributes(func: FunctionType, fields: list[str], start: int = 0) -> FunctionType:
+    return type(func)(
+        func.__code__.replace(co_names=(*func.__code__.co_names[:start], *fields)),
+        func.__globals__,
+    )
+
+
+@_codegen
+def _make__init__(fields: list[str]) -> str:
+    code = "def __init__(self, " + ", ".join(f"{field} = None" for field in fields) + "):\n"
+    return code + "\n".join(f" self.{name} = {name}" for name in fields)
+
+
+@_codegen
+def _make__eq__(fields: list[str]) -> str:
+    selfvals = ",".join(f"self.{name}" for name in fields)
+    othervals = ",".join(f"other.{name}" for name in fields)
+
+    # In the future this could be a looser check, e.g. an __eq__ on the classes, which compares the fields
+    code = f"""
+    def __eq__(self, other):
+        if self.__class__ is other.__class__:
+            return ({selfvals},) == ({othervals},)
+        return False
+    """
+
+    return dedent(code)
+
+
+@_codegen
+def _make__bool__(fields: list[str]) -> str:
+    vals = ", ".join(f"self.{name}" for name in fields)
+
+    code = f"""
+    def __bool__(self):
+        return any([{vals}])
+    """
+
+    return dedent(code)
