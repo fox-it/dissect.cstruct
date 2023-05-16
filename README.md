@@ -13,6 +13,12 @@ structure as you go.
 By design cstruct is incredibly simple. No complex syntax, filters, pre- or post-processing steps. Just structure
 parsing. For more information, please see [the documentation](https://docs.dissect.tools/en/latest/projects/dissect.cstruct/index.html).
 
+## Requirements
+
+This project is part of the Dissect framework and requires Python.
+
+Information on the supported Python versions can be found in the Getting Started section of [the documentation](https://docs.dissect.tools/en/latest/index.html#getting-started).
+
 ## Installation
 
 `dissect.cstruct` is available on [PyPI](https://pypi.org/project/dissect.cstruct/).
@@ -42,12 +48,12 @@ tox
 ```
 
 For a more elaborate explanation on how to build and test the project, please see [the
-documentation](https://docs.dissect.tools/en/latest/contributing/developing.html#building-testing).
+documentation](https://docs.dissect.tools/en/latest/contributing/tooling.html).
 
 ## Contributing
 
 The Dissect project encourages any contribution to the codebase. To make your contribution fit into the project, please
-refer to [the style guide](https://docs.dissect.tools/en/latest/contributing/style-guide.html).
+refer to [the development guide](https://docs.dissect.tools/en/latest/contributing/developing.html).
 
 ## Usage
 All you need to do is instantiate a new cstruct instance and load some structure definitions in there. After that you can start using them from your Python code.
