@@ -45,6 +45,10 @@ class Flag(BaseType, IntFlag, metaclass=EnumMetaType):
         if isinstance(other, Flag) and other.__class__ is not self.__class__:
             return False
 
+        # Python <= 3.10 compatibility
+        if isinstance(other, Flag):
+            other = other.value
+
         return self.value == other
 
     def __ne__(self, value: Union[int, Flag]) -> bool:

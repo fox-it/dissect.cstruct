@@ -1,3 +1,4 @@
+import sys
 from enum import Flag as StdFlag
 
 import pytest
@@ -99,16 +100,25 @@ def test_flag_struct(cs: cstruct):
     assert bool(cs.Test(1)) is True
 
     assert cs.Test.a | cs.Test.b == 3
-    assert repr(cs.Test.c | cs.Test.d) == "<Test.c|d: 12>"
-    assert repr(cs.Test.a | cs.Test.b) == "<Test.a|b: 3>"
+    if sys.version_info >= (3, 11):
+        assert repr(cs.Test.c | cs.Test.d) == "<Test.c|d: 12>"
+        assert repr(cs.Test.a | cs.Test.b) == "<Test.a|b: 3>"
+    else:
+        assert repr(cs.Test.c | cs.Test.d) == "<Test.d|c: 12>"
+        assert repr(cs.Test.a | cs.Test.b) == "<Test.b|a: 3>"
     assert cs.Test(2) == cs.Test.b
     assert cs.Test(3) == cs.Test.a | cs.Test.b
     assert cs.Test.c & 12 == cs.Test.c
     assert cs.Test.b & 12 == 0
     assert cs.Test.b ^ cs.Test.a == cs.Test.a | cs.Test.b
 
-    assert ~cs.Test.a == 14
-    assert repr(~cs.Test.a) == "<Test.b|c|d: 14>"
+    # TODO: determine if we want to stay true to Python stdlib or a consistent behaviour
+    if sys.version_info >= (3, 11):
+        assert ~cs.Test.a == 14
+        assert repr(~cs.Test.a) == "<Test.b|c|d: 14>"
+    else:
+        assert ~cs.Test.a == -2
+        assert repr(~cs.Test.a) == "<Test.d|c|b: -2>"
 
 
 def test_flag_struct_read(cs: cstruct, compiled: bool):
@@ -159,7 +169,10 @@ def test_flag_struct_read(cs: cstruct, compiled: bool):
 
     assert obj.c16 == cs.Test16.A | cs.Test16.B
     assert obj.c16 & cs.Test16.A
-    assert repr(obj.c16) == "<Test16.A|B: 3>"
+    if sys.version_info >= (3, 11):
+        assert repr(obj.c16) == "<Test16.A|B: 3>"
+    else:
+        assert repr(obj.c16) == "<Test16.B|A: 3>"
 
     assert obj.dumps() == buf
 
@@ -182,7 +195,10 @@ def test_flag_anonymous(cs: cstruct, compiled: bool):
     assert cs.A.value == 1
     assert repr(cs.A) == "<A: 1>"
 
-    assert repr(cs.A | cs.B) == "<A|B: 3>"
+    if sys.version_info >= (3, 11):
+        assert repr(cs.A | cs.B) == "<A|B: 3>"
+    else:
+        assert repr(cs.A | cs.B) == "<B|A: 3>"
 
 
 def test_flag_anonymous_struct(cs: cstruct, compiled: bool):
