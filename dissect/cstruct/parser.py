@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING
 
-from dissect.cstruct.compiler import Compiler
+from dissect.cstruct import compiler
 from dissect.cstruct.exceptions import ParserError
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.types import ArrayMetaType, Field
@@ -42,7 +42,7 @@ class TokenParser(Parser):
     def __init__(self, cs: cstruct, compiled: bool = True, align: bool = False):
         super().__init__(cs)
 
-        self.compiler = Compiler(self.cstruct) if compiled else None
+        self.compiled = compiled
         self.align = align
         self.TOK = self._tokencollection()
 
@@ -200,9 +200,8 @@ class TokenParser(Parser):
             name = self.cstruct._next_anonymous()
 
         st = factory(name, fields, align=self.align, anonymous=is_anonymous)
-        # TODO
-        # if self.compiler and "nocompile" not in tokens.flags:
-        #     st = self.compiler.compile(st)
+        if self.compiled and "nocompile" not in tokens.flags:
+            st = compiler.compile(st)
 
         # This is pretty dirty
         if register:
@@ -274,7 +273,7 @@ class TokenParser(Parser):
         tokens.eol()
         return Field(name, type_, int(d["bits"]) if d["bits"] else None)
 
-    def _names(self, tokens: TokenConsumer) -> List[str]:
+    def _names(self, tokens: TokenConsumer) -> list[str]:
         names = []
         while True:
             if tokens.next == self.TOK.EOL:
@@ -426,7 +425,6 @@ class CStyleParser(Parser):
             self.cstruct.add_type(enum.__name__, enum)
 
     def _structs(self, data: str) -> None:
-        # compiler = Compiler(self.cstruct)
         r = re.finditer(
             r"(#(?P<flags>(?:compile))\s+)?"
             r"((?P<typedef>typedef)\s+)?"
@@ -450,9 +448,8 @@ class CStyleParser(Parser):
             if d["type"] == "struct":
                 data = self._parse_fields(d["fields"][1:-1].strip())
                 st = self.cstruct._make_struct(name, data)
-                # TODO
-                # if d["flags"] == "compile" or self.compiled:
-                #     st = compiler.compile(st)
+                if d["flags"] == "compile" or self.compiled:
+                    st = compiler.compile(st)
             elif d["typedef"] == "typedef":
                 st = d["type"]
             else:
@@ -505,7 +502,7 @@ class CStyleParser(Parser):
 
         return result
 
-    def _lookups(self, data: str, consts: Dict[str, int]) -> None:
+    def _lookups(self, data: str, consts: dict[str, int]) -> None:
         r = re.finditer(r"\$(?P<name>[^\s]+) = ({[^}]+})\w*\n", data)
 
         for t in r:
@@ -542,9 +539,9 @@ class Token:
 
 class TokenCollection:
     def __init__(self):
-        self.tokens: List[Token] = []
-        self.lookup: Dict[str, str] = {}
-        self.patterns: Dict[str, re.Pattern] = {}
+        self.tokens: list[Token] = []
+        self.lookup: dict[str, str] = {}
+        self.patterns: dict[str, re.Pattern] = {}
 
     def __getattr__(self, attr: str):
         try:
@@ -564,7 +561,7 @@ class TokenCollection:
 
 
 class TokenConsumer:
-    def __init__(self, tokens: List[Token]):
+    def __init__(self, tokens: list[Token]):
         self.tokens = tokens
         self.flags = []
 

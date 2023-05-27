@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import struct
 from functools import lru_cache
+from struct import Struct
 from typing import Any, BinaryIO
 
 from dissect.cstruct.types.base import BaseType
 
 
 @lru_cache(1024)
-def _struct(endian: str, packchar: str) -> struct.Struct:
-    return struct.Struct(f"{endian}{packchar}")
+def _struct(endian: str, packchar: str) -> Struct:
+    return Struct(f"{endian}{packchar}")
 
 
 class Packed(BaseType):

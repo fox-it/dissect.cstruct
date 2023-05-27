@@ -1,5 +1,4 @@
 from dissect.cstruct.bitbuffer import BitBuffer
-from dissect.cstruct.compiler import Compiler
 from dissect.cstruct.cstruct import cstruct, ctypes, ctypes_type
 from dissect.cstruct.exceptions import (
     Error,
@@ -67,7 +66,6 @@ __all__ = [
     "Wchar",
     "WcharArray",
     "BitBuffer",
-    "Compiler",
     "dumpstruct",
     "hexdump",
     "pack",
