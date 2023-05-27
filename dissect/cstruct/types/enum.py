@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from enum import EnumMeta, IntEnum, IntFlag
 from typing import TYPE_CHECKING, Any, BinaryIO, Optional, Union
 
@@ -110,21 +111,48 @@ class Enum(BaseType, IntEnum, metaclass=EnumMetaType):
             };
     """
 
-    def __repr__(self) -> str:
-        result = IntFlag.__repr__(self)
-        if not self.__class__.__name__:
-            result = f"<{result[2:]}"
-        return result
+    if sys.version_info >= (3, 11):
 
-    def __str__(self) -> str:
-        result = IntFlag.__str__(self)
-        if not self.__class__.__name__:
-            result = f"<{result[1:]}"
-        return result
+        def __repr__(self) -> str:
+            result = IntFlag.__repr__(self)
+            if not self.__class__.__name__:
+                result = f"<{result[2:]}"
+            return result
+
+        def __str__(self) -> str:
+            result = IntFlag.__str__(self)
+            if not self.__class__.__name__:
+                result = f"<{result[1:]}"
+            return result
+
+    else:
+
+        def __repr__(self) -> str:
+            name = self.__class__.__name__
+            if self._name_ is not None:
+                if name:
+                    name += "."
+                name += self._name_
+            return f"<{name}: {self._value_!r}>"
+
+        def __str__(self) -> str:
+            name = self.__class__.__name__
+            if name:
+                name += "."
+
+            if self._name_ is not None:
+                name += f"{self._name_}"
+            else:
+                name += repr(self._value_)
+            return name
 
     def __eq__(self, other: Union[int, Enum]) -> bool:
         if isinstance(other, Enum) and other.__class__ is not self.__class__:
             return False
+
+        # Python <= 3.10 compatibility
+        if isinstance(other, Enum):
+            other = other.value
 
         return self.value == other
 
