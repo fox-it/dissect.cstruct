@@ -312,6 +312,7 @@ class cstruct:
             {
                 "cs": self,
                 "size": size,
+                "dynamic": size is None,
                 "alignment": alignment or size,
             }
         )
