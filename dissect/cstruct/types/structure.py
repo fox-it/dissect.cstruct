@@ -24,17 +24,21 @@ class Field:
 
     def __repr__(self) -> str:
         bits_str = f" : {self.bits}" if self.bits else ""
-        return f"<Field {self.name} {self.type}{bits_str}>"
+        return f"<Field {self.name} {self.type.__name__}{bits_str}>"
 
 
 class StructureMetaType(MetaType):
     """Base metaclass for cstruct structure type classes."""
 
+    # TODO: resolve field types in _update_fields, remove resolves elsewhere?
+
     anonymous: bool
     align: bool
     fields: list[Field]
     lookup: dict[str, Field]
+    __lookup__: dict[str, Field]
     __updating__ = False
+    __compiled__ = False
 
     def __new__(metacls, cls, bases, classdict: dict[str, Any]) -> MetaType:
         if fields := classdict.pop("fields", None):
@@ -60,6 +64,7 @@ class StructureMetaType(MetaType):
         classdict = classdict or {}
 
         lookup = {}
+        raw_lookup = {}
         for field in fields:
             if field.name in lookup and field.name != "_":
                 raise ValueError(f"Duplicate field name: {field.name}")
@@ -69,10 +74,13 @@ class StructureMetaType(MetaType):
             else:
                 lookup[field.name] = field
 
+            raw_lookup[field.name] = field
+
         num_fields = len(lookup)
         field_names = lookup.keys()
         classdict["fields"] = fields
         classdict["lookup"] = lookup
+        classdict["__lookup__"] = raw_lookup
         classdict["__init__"] = _patch_args_and_attributes(_make__init__(num_fields), field_names)
         classdict["__bool__"] = _patch_attributes(_make__bool__(num_fields), field_names, 1)
 
@@ -82,14 +90,23 @@ class StructureMetaType(MetaType):
         else:
             classdict["__eq__"] = _patch_attributes(_make__eq__(num_fields), field_names, 1)
 
-        # TODO: compile _read
-        # TODO: compile _write
-
         # If we're calling this as a class method or a function on the metaclass
         if issubclass(cls, type):
             size, alignment = cls._calculate_size_and_offsets(cls, fields, align)
         else:
             size, alignment = cls._calculate_size_and_offsets(fields, align)
+
+        if cls.__compiled__:
+            # If the previous class was compiled try to compile this too
+            from dissect.cstruct import compiler
+
+            try:
+                classdict["_read"] = classmethod(compiler.generate_read(cls.cs, fields, cls.align))
+                classdict["__compiled__"] = True
+            except Exception:
+                classdict["__compiled__"] = False
+        # TODO: compile _write
+        # TODO: generate cached_property for lazy reading
 
         classdict["size"] = size
         classdict["alignment"] = alignment
@@ -195,7 +212,7 @@ class StructureMetaType(MetaType):
             offset = stream.tell()
             field_type = cls.cs.resolve(field.type)
 
-            if field.offset and offset != struct_start + field.offset:
+            if field.offset is not None and offset != struct_start + field.offset:
                 # Field is at a specific offset, either alligned or added that way
                 offset = struct_start + field.offset
                 stream.seek(offset)
@@ -265,7 +282,7 @@ class StructureMetaType(MetaType):
 
             offset = stream.tell()
 
-            if field.offset and offset < struct_start + field.offset:
+            if field.offset is not None and offset < struct_start + field.offset:
                 # Field is at a specific offset, either alligned or added that way
                 stream.write(b"\x00" * (struct_start + field.offset - offset))
                 offset = struct_start + field.offset
@@ -371,7 +388,7 @@ class UnionMetaType(StructureMetaType):
             buf.seek(0)
             field_type = cls.cs.resolve(field.type)
 
-            if field.offset:
+            if field.offset is not None:
                 buf.seek(field.offset)
                 start = field.offset
 
