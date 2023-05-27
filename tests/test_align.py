@@ -1,10 +1,11 @@
 from io import BytesIO
 
-from dissect import cstruct
+from dissect.cstruct import cstruct
+from tests.utils import verify_compiled
 
 
-def test_align_struct():
-    d = """
+def test_align_struct(cs: cstruct, compiled: bool):
+    cdef = """
     struct test {
         uint32  a;  // 0x00
         uint64  b;  // 0x08
@@ -14,13 +15,14 @@ def test_align_struct():
         uint16  f;  // 0x1a
     };
     """
-    c = cstruct.cstruct()
-    c.load(d, align=True)
+    cs.load(cdef, compiled=compiled, align=True)
 
-    fields = c.test.fields
-    assert c.test.align
-    assert c.test.alignment == 8
-    assert c.test.size == 32
+    assert verify_compiled(cs.test, compiled)
+
+    fields = cs.test.fields
+    assert cs.test.align
+    assert cs.test.alignment == 8
+    assert cs.test.size == 32
     assert fields[0].offset == 0x00
     assert fields[1].offset == 0x08
     assert fields[2].offset == 0x10
@@ -35,28 +37,27 @@ def test_align_struct():
     buf = bytes.fromhex(buf)
     fh = BytesIO(buf)
 
-    obj = c.test(fh)
+    obj = cs.test(fh)
     assert fh.tell() == 32
 
     for name, value in obj._values.items():
-        assert c.test.lookup[name].offset == value
+        assert cs.test.lookup[name].offset == value
 
     assert obj.dumps() == buf
 
 
-def test_align_union():
-    d = """
+def test_align_union(cs: cstruct):
+    cdef = """
     union test {
         uint32  a;
         uint64  b;
     };
     """
-    c = cstruct.cstruct()
-    c.load(d, align=True)
+    cs.load(cdef, align=True)
 
-    assert c.test.align
-    assert c.test.alignment == 8
-    assert c.test.size == 8
+    assert cs.test.align
+    assert cs.test.alignment == 8
+    assert cs.test.size == 8
 
     buf = """
         00 00 00 01 00 00 00 02
@@ -64,7 +65,7 @@ def test_align_union():
     buf = bytes.fromhex(buf)
     fh = BytesIO(buf)
 
-    obj = c.test(fh)
+    obj = cs.test(fh)
     assert fh.tell() == 8
     assert obj.a == 0x01000000
     assert obj.b == 0x0200000001000000
@@ -72,8 +73,8 @@ def test_align_union():
     assert obj.dumps() == buf
 
 
-def test_align_array():
-    d = """
+def test_align_array(cs: cstruct, compiled: bool):
+    cdef = """
     struct test {
         uint32  a;      // 0x00
         uint64  b[4];   // 0x08
@@ -82,13 +83,14 @@ def test_align_array():
         uint64  e;      // 0x38
     };
     """
-    c = cstruct.cstruct()
-    c.load(d, align=True)
+    cs.load(cdef, compiled=compiled, align=True)
 
-    fields = c.test.fields
-    assert c.test.align
-    assert c.test.alignment == 8
-    assert c.test.size == 64
+    assert verify_compiled(cs.test, compiled)
+
+    fields = cs.test.fields
+    assert cs.test.align
+    assert cs.test.alignment == 8
+    assert cs.test.size == 64
     assert fields[0].offset == 0x00
     assert fields[1].offset == 0x08
     assert fields[2].offset == 0x28
@@ -103,7 +105,7 @@ def test_align_array():
     """
     buf = bytes.fromhex(buf)
 
-    obj = c.test(buf)
+    obj = cs.test(buf)
 
     assert obj.a == 0x00
     assert obj.b == [0x08, 0x10, 0x18, 0x20]
@@ -114,8 +116,8 @@ def test_align_array():
     assert obj.dumps() == buf
 
 
-def test_align_struct_array():
-    d = """
+def test_align_struct_array(cs: cstruct, compiled: bool):
+    cdef = """
     struct test {
         uint32  a;      // 0x00
         uint64  b;      // 0x08
@@ -125,13 +127,15 @@ def test_align_struct_array():
         test    a[4];
     };
     """
-    c = cstruct.cstruct()
-    c.load(d, align=True)
+    cs.load(cdef, compiled=compiled, align=True)
 
-    fields = c.test.fields
-    assert c.test.align
-    assert c.test.alignment == 8
-    assert c.test.size == 16
+    assert verify_compiled(cs.test, compiled)
+    assert verify_compiled(cs.array, compiled)
+
+    fields = cs.test.fields
+    assert cs.test.align
+    assert cs.test.alignment == 8
+    assert cs.test.size == 16
     assert fields[0].offset == 0x00
     assert fields[1].offset == 0x08
 
@@ -143,7 +147,7 @@ def test_align_struct_array():
     """
     buf = bytes.fromhex(buf)
 
-    obj = c.array(buf)
+    obj = cs.array(buf)
 
     assert obj.a[0].a == 0x00
     assert obj.a[0].b == 0x08
@@ -157,8 +161,8 @@ def test_align_struct_array():
     assert obj.dumps() == buf
 
 
-def test_align_dynamic():
-    d = """
+def test_align_dynamic(cs: cstruct, compiled: bool):
+    cdef = """
     struct test {
         uint8   a;      // 0x00 (value is 6 in test case)
         uint16  b[a];   // 0x02
@@ -169,10 +173,11 @@ def test_align_dynamic():
         uint64  g;      // 0x?? (0x30 in test case)
     };
     """
-    c = cstruct.cstruct()
-    c.load(d, align=True)
+    cs.load(cdef, compiled=compiled, align=True)
 
-    fields = c.test.fields
+    assert verify_compiled(cs.test, compiled)
+
+    fields = cs.test.fields
     assert fields[0].offset == 0
     assert fields[1].offset == 2
     assert fields[2].offset is None
@@ -188,7 +193,7 @@ def test_align_dynamic():
         30 00 00 00 00 00 00 00
     """
     buf = bytes.fromhex(buf)
-    obj = c.test(buf)
+    obj = cs.test(buf)
 
     assert obj.a == 0x06
     assert obj.b == [0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C]
@@ -201,8 +206,8 @@ def test_align_dynamic():
     assert obj.dumps() == buf
 
 
-def test_align_nested_struct():
-    d = """
+def test_align_nested_struct(cs: cstruct, compiled: bool):
+    cdef = """
     struct test {
         uint32  a;      // 0x00
         struct {
@@ -212,10 +217,11 @@ def test_align_nested_struct():
         uint64  d;      // 0x18
     };
     """
-    c = cstruct.cstruct()
-    c.load(d, align=True)
+    cs.load(cdef, compiled=compiled, align=True)
 
-    fields = c.test.fields
+    assert verify_compiled(cs.test, compiled)
+
+    fields = cs.test.fields
     assert fields[0].offset == 0x00
     assert fields[1].offset == 0x08
     assert fields[2].offset == 0x18
@@ -225,7 +231,7 @@ def test_align_nested_struct():
         10 00 00 00 00 00 00 00  18 00 00 00 00 00 00 00
     """
     buf = bytes.fromhex(buf)
-    obj = c.test(buf)
+    obj = cs.test(buf)
 
     assert obj.a == 0x00
     assert obj.nested.b == 0x08
@@ -235,8 +241,8 @@ def test_align_nested_struct():
     assert obj.dumps() == buf
 
 
-def test_align_bitfield():
-    d = """
+def test_align_bitfield(cs: cstruct, compiled: bool):
+    cdef = """
     struct test {
         uint16  a:4;    // 0x00
         uint16  b:4;
@@ -247,10 +253,11 @@ def test_align_bitfield():
         uint64  g;      // 0x18
     };
     """
-    c = cstruct.cstruct()
-    c.load(d, align=True)
+    cs.load(cdef, compiled=compiled, align=True)
 
-    fields = c.test.fields
+    assert verify_compiled(cs.test, compiled)
+
+    fields = cs.test.fields
     assert fields[0].offset == 0x00
     assert fields[1].offset is None
     assert fields[2].offset == 0x08
@@ -264,7 +271,7 @@ def test_align_bitfield():
         10 00 00 00 02 00 00 00  18 00 00 00 00 00 00 00
     """
     buf = bytes.fromhex(buf)
-    obj = c.test(buf)
+    obj = cs.test(buf)
 
     assert obj.a == 0b10
     assert obj.b == 0b01
@@ -277,8 +284,8 @@ def test_align_bitfield():
     assert obj.dumps() == buf
 
 
-def test_align_pointer():
-    d = """
+def test_align_pointer(cs: cstruct, compiled: bool):
+    cdef = """
     struct test {
         uint32  a;
         uint32  *b;
@@ -286,15 +293,15 @@ def test_align_pointer():
         uint16  d;
     };
     """
-    c = cstruct.cstruct(pointer="uint64")
-    c.load(d, align=True)
+    cs.pointer = cs.uint64
+    cs.load(cdef, compiled=compiled, align=True)
 
-    assert c.pointer is c.uint64
+    assert verify_compiled(cs.test, compiled)
 
-    fields = c.test.fields
-    assert c.test.align
-    assert c.test.alignment == 8
-    assert c.test.size == 24
+    fields = cs.test.fields
+    assert cs.test.align
+    assert cs.test.alignment == 8
+    assert cs.test.size == 24
     assert fields[0].offset == 0x00
     assert fields[1].offset == 0x08
     assert fields[2].offset == 0x10
@@ -305,7 +312,7 @@ def test_align_pointer():
         10 00 12 00 00 00 00 00  18 00 00 00
     """
     buf = bytes.fromhex(buf)
-    obj = c.test(buf)
+    obj = cs.test(buf)
 
     assert obj.a == 0x00
     assert obj.b.dereference() == 0x18
