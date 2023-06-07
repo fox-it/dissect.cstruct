@@ -103,6 +103,24 @@ class EnumInstance:
     def __ne__(self, value: Union[int, EnumInstance]) -> bool:
         return self.__eq__(value) is False
 
+    def __and__(self, value: Union[int, EnumInstance]) -> int:
+        if isinstance(value, EnumInstance):
+            value = value.value
+
+        return self.value & value
+
+    def __or__(self, value: Union[int, EnumInstance]) -> int:
+        if isinstance(value, EnumInstance):
+            value = value.value
+
+        return self.value | value
+
+    def __xor__(self, value: Union[int, EnumInstance]) -> int:
+        if isinstance(value, EnumInstance):
+            value = value.value
+
+        return self.value ^ value
+
     def __hash__(self) -> int:
         return hash((self.enum, self.value))
 
