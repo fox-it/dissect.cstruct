@@ -15,7 +15,10 @@ class ExpressionTokenizer:
         self.tokens = []
 
     def equal(self, token: str, expected: str) -> bool:
-        return token == expected
+        if isinstance(expected, set):
+            return token in expected
+        else:
+            return token == expected
 
     def alnum(self, token: str) -> bool:
         return token.isalnum()
@@ -70,7 +73,7 @@ class ExpressionTokenizer:
         token = ""
 
         # Loop over expression runs in linear time
-        while self.i < len(self.expression):
+        while not self.outOfBounds():
             # if token is a single character operand add it to tokens
             if self.match(func=self.operator):
                 continue
@@ -92,8 +95,16 @@ class ExpressionTokenizer:
                     if self.outOfBounds():
                         break
 
+                # checks for suffixes in numbers
+                self.match(expected={"u", "U"}, append=False)
+                self.match(expected={"l", "L"}, append=False)
+                self.match(expected={"l", "L"}, append=False)
+
                 # number cannot end on x or b in the case of binary or hexadecimal notation
                 assert token[-1] != "x" and token[-1] != "b"
+
+                if len(token) > 1 and token[0] == "0" and token[1] != "x" and token[1] != "b":
+                    token = token[:1] + "o" + token[1:]
                 self.tokens.append(token)
                 token = ""
 
@@ -138,7 +149,7 @@ class Expression:
         "|": lambda a, b: a | b,
     }
 
-    def precedence(self, o1, o2):
+    def precedence(self, o1: str, o2: str) -> bool:
         p = {
             "^": 1,
             "&": 5,
@@ -183,8 +194,14 @@ class Expression:
 
     def isNumber(self, currentToken: str) -> bool:
         return currentToken.isnumeric() or (
-            len(currentToken) > 2 and currentToken[0] == "0" and (currentToken[1] == "x" or currentToken[1] == "b")
+            len(currentToken) > 2
+            and currentToken[0] == "0"
+            and (currentToken[1] == "x" or currentToken[1] == "b" or currentToken[1] == "o")
         )
+
+    def parseErr(self, condition: bool, error: str) -> None:
+        if condition:
+            raise ExpressionParserError(error)
 
     def evaluate(self, context: Dict[str, int] = None) -> int:
         """Evaluates an expression using a Shunting-Yard implementation"""
@@ -195,7 +212,7 @@ class Expression:
         tempExpression = self.tokens
         opKeys = set(self.operators.keys())
 
-        # unary minus Tokens
+        # unary minus Tokens; we change the semantic of '-' depending on the previous token
         for i in range(len(self.tokens)):
             if self.tokens[i] == "-":
                 if i == 0:
@@ -232,18 +249,20 @@ class Expression:
             elif currentToken == "(":
                 if i > 0:
                     previousToken = tempExpression[i - 1]
-                    if self.isNumber(previousToken):
-                        raise ExpressionParserError(
-                            f"Parser expected sizeof or an arethmethic operator instead got: '{previousToken}'"
-                        )
+                    self.parseErr(
+                        self.isNumber(previousToken),
+                        f"Parser expected sizeof or an arethmethic operator instead got: '{previousToken}'",
+                    )
+
                 self.stack.append(currentToken)
             elif currentToken == ")":
                 if i > 0:
                     previousToken = tempExpression[i - 1]
-                    if previousToken == "(":
-                        raise ExpressionParserError(
-                            f"Parser expected an expression, instead received empty parenthesis. Index: {i}"
-                        )
+                    self.parseErr(
+                        previousToken == "(",
+                        f"Parser expected an expression, instead received empty parenthesis. Index: {i}",
+                    )
+
                 assert len(self.stack) != 0
                 while self.stack[-1] != "(":
                     self.evaluate_exp(context)
