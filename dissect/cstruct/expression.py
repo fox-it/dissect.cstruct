@@ -96,9 +96,16 @@ class ExpressionTokenizer:
                         break
 
                 # checks for suffixes in numbers
-                self.match(expected={"u", "U"}, append=False)
-                self.match(expected={"l", "L"}, append=False)
-                self.match(expected={"l", "L"}, append=False)
+                if self.match(expected={"u", "U"}, consume=False, append=False):
+                    self.consume()
+                    self.match(expected={"l", "L"}, append=False)
+                    self.match(expected={"l", "L"}, append=False)
+
+                elif self.match(expected={"l", "L"}, append=False):
+                    self.match(expected={"l", "L"}, append=False)
+                    self.match(expected={"u", "U"}, append=False)
+                else:
+                    pass
 
                 # number cannot end on x or b in the case of binary or hexadecimal notation
                 assert token[-1] != "x" and token[-1] != "b"
