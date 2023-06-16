@@ -84,9 +84,7 @@ class ExpressionTokenizer:
                 self.consume()
 
                 # support for binary and hexadecimal notation
-                if self.match(expected="x", consume=False, append=False) or self.match(
-                    expected="b", consume=False, append=False
-                ):
+                if self.match(expected={"x", "b", "X"}, consume=False, append=False):
                     token += self.getToken()
                     self.consume()
                 while self.match(self.digitHex, consume=False, append=False):
@@ -108,9 +106,9 @@ class ExpressionTokenizer:
                     pass
 
                 # number cannot end on x or b in the case of binary or hexadecimal notation
-                assert token[-1] != "x" and token[-1] != "b"
+                assert token[-1] != "x" and token[-1] != "b" and token[-1] != "X"
 
-                if len(token) > 1 and token[0] == "0" and token[1] != "x" and token[1] != "b":
+                if len(token) > 1 and token[0] == "0" and token[1] != "x" and token[1] != "b" and token[1] != "X":
                     token = token[:1] + "o" + token[1:]
                 self.tokens.append(token)
                 token = ""
@@ -203,7 +201,7 @@ class Expression:
         return currentToken.isnumeric() or (
             len(currentToken) > 2
             and currentToken[0] == "0"
-            and (currentToken[1] == "x" or currentToken[1] == "b" or currentToken[1] == "o")
+            and (currentToken[1] == "x" or currentToken[1] == "X" or currentToken[1] == "b" or currentToken[1] == "o")
         )
 
     def parseErr(self, condition: bool, error: str) -> None:
