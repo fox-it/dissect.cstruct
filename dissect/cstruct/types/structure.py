@@ -373,7 +373,12 @@ class UnionMetaType(StructureMetaType):
                 # If a field already has an alignment, it's leading
                 field.alignment = field.type.alignment
 
-            size = max(len(field.type), size)
+            if size is not None:
+                try:
+                    size = max(len(field.type), size)
+                except TypeError:
+                    size = None
+
             alignment = max(field.alignment, alignment)
 
         if align and size is not None:
@@ -385,19 +390,24 @@ class UnionMetaType(StructureMetaType):
         return size, alignment
 
     def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Union:
-        buf = io.BytesIO(memoryview(stream.read(len(cls))))
         result = {}
         sizes = {}
 
+        if cls.size is None:
+            offset = stream.tell()
+            buf = stream
+        else:
+            offset = 0
+            buf = io.BytesIO(stream.read(cls.size))
+
         for field in cls.fields:
-            start = 0
-            buf.seek(0)
             field_type = cls.cs.resolve(field.type)
 
+            start = 0
             if field.offset is not None:
-                buf.seek(field.offset)
                 start = field.offset
 
+            buf.seek(offset + start)
             value = field_type._read(buf, result)
 
             if isinstance(field_type, StructureMetaType) and field_type.anonymous:
