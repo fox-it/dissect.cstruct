@@ -54,6 +54,10 @@ def test_generate_struct_info(cs: cstruct, TestEnum: type[Enum]):
     fmt = strip_fields(compiler._generate_struct_info(cs, fields))
     assert fmt == [(1, "B"), (1, "h")]
 
+    fields = [f(cs.uint8), f(cs.uint16), f(cs.char[0])]
+    fmt = strip_fields(compiler._generate_struct_info(cs, fields))
+    assert fmt == [(1, "B"), (1, "H"), (0, "x")]
+
     cs.pointer = cs.uint64
     TestPointer = cs._make_pointer(TestEnum)
     fields = [f(TestEnum), f(TestPointer)]
@@ -78,6 +82,15 @@ def test_optimize_struct_fmt():
 
     fields = [(None, 1, "B"), (None, 3, "B"), (None, 2, "H")]
     assert compiler._optimize_struct_fmt(fields) == "4B2H"
+
+    fields = [(None, 1, "B"), (None, 0, "x")]
+    assert compiler._optimize_struct_fmt(fields) == "B"
+
+    fields = [(None, 1, "B"), (None, 0, "x"), (None, 2, "H")]
+    assert compiler._optimize_struct_fmt(fields) == "B2H"
+
+    fields = [(None, 1, "B"), (None, 0, "x"), (None, 2, "x"), (None, 1, "H")]
+    assert compiler._optimize_struct_fmt(fields) == "B2xH"
 
 
 def test_generate_packed_read(cs: cstruct):
