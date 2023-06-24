@@ -187,7 +187,7 @@ def test_union_definition(cs: cstruct):
     assert cs.test().dumps() == b"\x00\x00\x00\x00\x00\x00\x00\x00"
 
 
-def test_union_definitiont_nested(cs: cstruct, compiled: bool):
+def test_union_definition_nested(cs: cstruct, compiled: bool):
     cdef = """
     struct test {
         char magic[4];
@@ -247,3 +247,25 @@ def test_union_definition_anonymous(cs: cstruct, compiled: bool):
     assert obj.c == b"\x02"
     assert obj.d == 0x04040303
     assert obj.dumps() == buf
+
+
+def test_union_definition_dynamic(cs: cstruct):
+    cdef = """
+    struct dynamic {
+        uint8   size;
+        char    data[size];
+    };
+
+    union test {
+        dynamic a;
+        uint64  b;
+    };
+    """
+    cs.load(cdef, compiled=False)
+
+    buf = b"\x09aaaaaaaaa"
+    obj = cs.test(buf)
+
+    assert obj.a.size == 9
+    assert obj.a.data == b"aaaaaaaaa"
+    assert obj.b == 0x6161616161616109
