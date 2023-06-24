@@ -379,7 +379,7 @@ def _generate_struct_info(cs: cstruct, fields: list[Field], align: bool = False)
 
         # Other types are byte based
         # We don't actually unpack anything here but slice directly out of the buffer
-        if issubclass(read_type, (Char, Wchar, Int)):
+        elif issubclass(read_type, (Char, Wchar, Int)):
             yield field, count * read_type.size, "x"
 
         size = count * read_type.size
@@ -401,13 +401,14 @@ def _optimize_struct_fmt(info: Iterator[tuple[Field, int, str]]):
             continue
 
         if char != current_char:
-            chars.append((current_count, current_char))
+            if current_count:
+                chars.append((current_count, current_char))
             current_count = count
             current_char = char
         else:
             current_count += count
 
-    if current_char is not None:
+    if current_char is not None and current_count:
         chars.append((current_count, current_char))
 
     return "".join(f"{count if count > 1 else ''}{char}" for count, char in chars)
