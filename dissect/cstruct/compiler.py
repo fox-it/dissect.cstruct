@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import logging
 from enum import Enum
 from textwrap import dedent, indent
 from typing import TYPE_CHECKING, Iterator, Optional
@@ -46,6 +47,8 @@ SUPPORTED_TYPES = (
     WcharArray,
 )
 
+log = logging.getLogger(__name__)
+
 python_compile = compile
 
 
@@ -58,10 +61,9 @@ def compile(structure: type[Structure]) -> type[Structure]:
             generate_read(structure.cs, structure.fields, structure.__name__, structure.align)
         )
         structure.__compiled__ = True
-    except Exception:
+    except Exception as e:
         # Silently ignore, we didn't compile unfortunately
-        # TODO: debug log something
-        pass
+        log.debug("Failed to compile %s", structure, exc_info=e)
 
     return structure
 
