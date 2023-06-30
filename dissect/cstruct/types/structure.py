@@ -101,7 +101,9 @@ class StructureMetaType(MetaType):
             from dissect.cstruct import compiler
 
             try:
-                classdict["_read"] = classmethod(compiler.generate_read(cls.cs, fields, cls.align))
+                classdict["_read"] = classmethod(
+                    compiler.generate_read(cls.cs, fields, raw_lookup, cls.__name__, align=cls.align)
+                )
                 classdict["__compiled__"] = True
             except Exception:
                 classdict["__compiled__"] = False

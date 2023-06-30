@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 from enum import Enum
 from textwrap import dedent, indent
 from typing import TYPE_CHECKING, Iterator, Optional
@@ -47,6 +48,8 @@ SUPPORTED_TYPES = (
     WcharArray,
 )
 
+RE_TYPE_LOOKUP = re.compile(r"lookup\[[\"\'](.+?)[\"\']\].type")
+
 log = logging.getLogger(__name__)
 
 python_compile = compile
@@ -58,7 +61,7 @@ def compile(structure: type[Structure]) -> type[Structure]:
 
     try:
         structure._read = classmethod(
-            generate_read(structure.cs, structure.fields, structure.__name__, structure.align)
+            generate_read(structure.cs, structure.fields, structure.__lookup__, structure.__name__, structure.align)
         )
         structure.__compiled__ = True
     except Exception as e:
@@ -68,11 +71,26 @@ def compile(structure: type[Structure]) -> type[Structure]:
     return structure
 
 
-def generate_read(cs: cstruct, fields: list[Field], name: Optional[str] = None, align: bool = False) -> Iterator[str]:
+def generate_read(
+    cs: cstruct, fields: list[Field], lookup, name: Optional[str] = None, align: bool = False
+) -> Iterator[str]:
     source = generate_read_source(cs, fields, align)
 
-    code = python_compile(source, f"<compiled {name or 'anonymous'}>", "exec")
-    exec(code, {"BitBuffer": BitBuffer, "_struct": _struct}, d := {})
+    token_id = 0
+    token_map = {}
+
+    def _replace_token(match):
+        nonlocal token_id
+        token = f"_{token_id}"
+        token_map[token] = match.group(1)
+        token_id += 1
+        return token
+
+    source = re.sub(RE_TYPE_LOOKUP, _replace_token, source)
+    symbols = {token: lookup[field_name].type for token, field_name in token_map.items()}
+
+    code = python_compile(source, f"<compiled {name or 'anonymous'}._read>", "exec")
+    exec(code, {"BitBuffer": BitBuffer, "_struct": _struct, **symbols}, d := {})
     obj = d.popitem()[1]
     obj.__source__ = source
 
@@ -83,7 +101,6 @@ def generate_read_source(cs: cstruct, fields: list[Field], align: bool = False) 
     preamble = """
     r = {}
     s = {}
-    lookup = cls.__lookup__
     """
 
     if any(field.bits for field in fields):
@@ -92,7 +109,7 @@ def generate_read_source(cs: cstruct, fields: list[Field], align: bool = False) 
     read_code = "\n".join(generate_fields_read(cs, fields, align))
 
     outro = """
-    obj = cls(**r)
+    obj = type.__call__(cls, **r)
     obj._sizes = s
     obj._values = r
 
