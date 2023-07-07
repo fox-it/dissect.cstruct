@@ -130,18 +130,17 @@ class TokenParser(Parser):
         if not d["type"]:
             d["type"] = "uint32"
 
-        if not d["name"] and enumtype == "enum":
-            for key in values.keys():
-                self.cstruct.consts[key] = values[key]
-            tokens.eol()
-            return
-
         enumcls = Enum
         if enumtype == "flag":
             enumcls = Flag
 
         enum = enumcls(self.cstruct, d["name"], self.cstruct.resolve(d["type"]), values)
-        self.cstruct.addtype(enum.name, enum)
+
+        if not enum.name:
+            for name, value in enum.values.items():
+                self.cstruct.consts[name] = enum(value)
+        else:
+            self.cstruct.addtype(enum.name, enum)
 
         tokens.eol()
 

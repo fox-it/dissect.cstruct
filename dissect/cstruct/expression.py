@@ -79,6 +79,6 @@ class Expression:
             return int(buf, 16)
 
         if buf in self.cstruct.consts:
-            return self.cstruct.consts[buf]
+            return int(self.cstruct.consts[buf])
 
         return int(buf)

@@ -106,3 +106,44 @@ def test_flag_read(compiled):
     assert str(obj.c16) == "Test16.B|A"
 
     assert obj.dumps() == buf
+
+
+def test_flag_anonymous(compiled):
+    cdef = """
+    flag : uint16 {
+          A,
+          B,
+          C,
+    };
+    """
+    cs = cstruct.cstruct()
+    cs.load(cdef, compiled=compiled)
+
+    assert cs.A == 1
+    assert cs.B == 2
+    assert cs.C == 4
+
+    assert cs.A.name == "A"
+    assert cs.A.value == 1
+    assert repr(cs.A) == "<A: 1>"
+
+    assert repr(cs.A | cs.B) == "<B|A: 3>"
+
+
+def test_flag_anonymous_struct(compiled):
+    cdef = """
+    flag : uint32 {
+          nElements = 4
+    };
+
+    struct test {
+        uint32  arr[nElements];
+    };
+    """
+    cs = cstruct.cstruct()
+    cs.load(cdef, compiled=compiled)
+
+    test = cs.test
+
+    t = test(b"\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0A\x00\x00\x00")
+    assert t.arr == [255, 0, 0, 10]

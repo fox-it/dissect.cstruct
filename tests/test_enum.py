@@ -238,6 +238,10 @@ def test_enum_anonymous(compiled):
     assert cs.GREEN == 2
     assert cs.BLUE == 3
 
+    assert cs.RED.name == "RED"
+    assert cs.RED.value == 1
+    assert repr(cs.RED) == "<RED: 1>"
+
 
 def test_enum_anonymous_struct(compiled):
     cdef = """

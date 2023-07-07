@@ -74,12 +74,14 @@ class FlagInstance(EnumInstance):
         return f"{self.enum.name}.{members_str}"
 
     def __repr__(self) -> str:
+        base_name = f"{self.enum.name}." if self.enum.name else ""
+
         if self.name is not None:
-            return f"<{self.enum.name}.{self.name}: {self.value}>"
+            return f"<{base_name}{self.name}: {self.value}>"
 
         members, _ = self.decompose()
         members_str = "|".join([str(name or value) for name, value in members])
-        return f"<{self.enum.name}.{members_str}: {self.value}>"
+        return f"<{base_name}{members_str}: {self.value}>"
 
     @property
     def name(self) -> str:

@@ -109,8 +109,12 @@ class EnumInstance:
     def __str__(self) -> str:
         return f"{self.enum.name}.{self.name}"
 
+    def __int__(self) -> int:
+        return self.value
+
     def __repr__(self) -> str:
-        return f"<{self.enum.name}.{self.name}: {self.value}>"
+        name = f"{self.enum.name}.{self.name}" if self.enum.name else self.name
+        return f"<{name}: {self.value}>"
 
     @property
     def name(self) -> str:
