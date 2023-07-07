@@ -54,7 +54,7 @@ class TokenParser(Parser):
         TOK.add(r"typedef(?=\s)", "TYPEDEF")
         TOK.add(r"(?:struct|union)(?=\s|{)", "STRUCT")
         TOK.add(
-            r"(?P<enumtype>enum|flag)\s+(?P<name>[^\s:{]+)\s*(:\s"
+            r"(?P<enumtype>enum|flag)\s+(?P<name>[^\s:{]+)?\s*(:\s"
             r"*(?P<type>[^{]+?)\s*)?\{(?P<values>[^}]+)\}\s*(?=;)",
             "ENUM",
         )
@@ -135,7 +135,12 @@ class TokenParser(Parser):
             enumcls = Flag
 
         enum = enumcls(self.cstruct, d["name"], self.cstruct.resolve(d["type"]), values)
-        self.cstruct.addtype(enum.name, enum)
+
+        if not enum.name:
+            for name, value in enum.values.items():
+                self.cstruct.consts[name] = enum(value)
+        else:
+            self.cstruct.addtype(enum.name, enum)
 
         tokens.eol()
 
