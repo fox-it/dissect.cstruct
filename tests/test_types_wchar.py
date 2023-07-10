@@ -63,12 +63,6 @@ def test_wchar_be_array_write(cs: cstruct):
     assert cs.wchar[None](buf).dumps() == buf
 
 
-def test_wchar_operator(cs: cstruct):
-    new_wchar = cs.wchar("A") + "B"
-    assert new_wchar == "AB"
-    assert isinstance(new_wchar, cs.wchar)
-
-
 def test_wchar_eof(cs: cstruct):
     with pytest.raises(EOFError):
         cs.wchar(b"A")

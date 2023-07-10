@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from functools import lru_cache
 from io import BytesIO
-from textwrap import dedent
 from typing import TYPE_CHECKING, Any, BinaryIO, Optional, Union
 
 from dissect.cstruct.exceptions import ArraySizeError
@@ -12,16 +10,6 @@ if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
 
 
-@lru_cache
-def _make_operator_method(base: type, func: str):
-    code = f"""
-    def {func}(self, other):
-        return type.__call__(self.__class__, base.{func}(self, other))
-    """
-    exec(dedent(code), {"base": base}, tmp := {})
-    return tmp[func]
-
-
 class MetaType(type):
     """Base metaclass for cstruct type classes."""
 
@@ -29,29 +17,6 @@ class MetaType(type):
     size: int
     dynamic: bool
     alignment: int
-
-    def __new__(metacls, cls, bases, classdict, **kwargs) -> MetaType:
-        """Override specific dunder methods to return instances of this type."""
-        for func in [
-            "__add__",
-            "__sub__",
-            "__mul__",
-            "__floordiv__",
-            "__mod__",
-            "__pow__",
-            "__lshift__",
-            "__rshift__",
-            "__and__",
-            "__xor__",
-            "__or__",
-        ]:
-            for base in bases:
-                if func not in classdict and not issubclass(base, BaseType) and hasattr(base, func):
-                    # Insert custom operator dunder methods if the new class does not implement them
-                    # but the base does (e.g. int)
-                    classdict[func] = _make_operator_method(base, func)
-                    break
-        return super().__new__(metacls, cls, bases, classdict)
 
     def __call__(cls, *args, **kwargs) -> Union[MetaType, BaseType]:
         """Adds support for ``TypeClass(bytes | file-like object)`` parsing syntax."""

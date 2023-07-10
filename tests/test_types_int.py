@@ -218,16 +218,6 @@ def test_int_signed_be_array_write(cs: cstruct):
     assert int40[2]([-1, -2]).dumps() == b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xfe"
 
 
-def test_int_operator(cs: cstruct):
-    new_int = cs.int24(1) + 1
-    assert new_int == 2
-    assert isinstance(new_int, cs.int24)
-
-    new_int = cs.int24(1) | 2
-    assert new_int == 3
-    assert isinstance(new_int, cs.int24)
-
-
 def test_int_eof(cs: cstruct):
     with pytest.raises(EOFError):
         cs.int24(b"\x00")
