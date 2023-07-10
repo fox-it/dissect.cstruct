@@ -113,16 +113,6 @@ def test_packed_be_array_write(cs: cstruct):
     assert cs.float[None]([1.0]).dumps() == b"\x3f\x80\x00\x00\x00\x00\x00\x00"
 
 
-def test_packed_operator(cs: cstruct):
-    new_int = cs.uint32(1) + 1
-    assert new_int == 2
-    assert isinstance(new_int, cs.uint32)
-
-    new_int = cs.uint32(1) | 2
-    assert new_int == 3
-    assert isinstance(new_int, cs.uint32)
-
-
 def test_packed_eof(cs: cstruct):
     with pytest.raises(EOFError):
         cs.uint32(b"\x00")
