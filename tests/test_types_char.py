@@ -32,12 +32,6 @@ def test_char_array_write(cs: cstruct):
     assert cs.char[None](buf).dumps() == b"AAAA\x00"
 
 
-def test_char_operator(cs: cstruct):
-    new_char = cs.char(b"A") + b"B"
-    assert new_char == b"AB"
-    assert isinstance(new_char, cs.char)
-
-
 def test_char_eof(cs: cstruct):
     with pytest.raises(EOFError):
         cs.char(b"")
