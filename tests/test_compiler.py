@@ -100,23 +100,23 @@ def test_generate_packed_read(cs: cstruct):
         f(cs.uint32, name="c"),
         f(cs.int64, name="d"),
     ]
-    code = next(compiler.generate_packed_read(cs, fields))
+    code = next(compiler.ReadSourceGenerator(cs, fields)._generate_packed(fields))
 
     expected = """
     buf = stream.read(15)
     if len(buf) != 15: raise EOFError()
     data = _struct(cls.cs.endian, "BhIq").unpack(buf)
 
-    r["a"] = type.__call__(lookup["a"].type, data[0])
+    r["a"] = type.__call__(_0, data[0])
     s["a"] = 1
 
-    r["b"] = type.__call__(lookup["b"].type, data[1])
+    r["b"] = type.__call__(_1, data[1])
     s["b"] = 2
 
-    r["c"] = type.__call__(lookup["c"].type, data[2])
+    r["c"] = type.__call__(_2, data[2])
     s["c"] = 4
 
-    r["d"] = type.__call__(lookup["d"].type, data[3])
+    r["d"] = type.__call__(_3, data[3])
     s["d"] = 8
     """
 
@@ -130,29 +130,29 @@ def test_generate_packed_read_array(cs: cstruct):
         f(cs.uint32[4], name="c"),
         f(cs.int64[5], name="d"),
     ]
-    code = next(compiler.generate_packed_read(cs, fields))
+    code = next(compiler.ReadSourceGenerator(cs, fields)._generate_packed(fields))
 
     expected = """
     buf = stream.read(64)
     if len(buf) != 64: raise EOFError()
     data = _struct(cls.cs.endian, "2B3h4I5q").unpack(buf)
 
-    _t = lookup["a"].type
+    _t = _0
     _et = _t.type
     r["a"] = type.__call__(_t, [type.__call__(_et, e) for e in data[0:2]])
     s["a"] = 2
 
-    _t = lookup["b"].type
+    _t = _1
     _et = _t.type
     r["b"] = type.__call__(_t, [type.__call__(_et, e) for e in data[2:5]])
     s["b"] = 6
 
-    _t = lookup["c"].type
+    _t = _2
     _et = _t.type
     r["c"] = type.__call__(_t, [type.__call__(_et, e) for e in data[5:9]])
     s["c"] = 16
 
-    _t = lookup["d"].type
+    _t = _3
     _et = _t.type
     r["d"] = type.__call__(_t, [type.__call__(_et, e) for e in data[9:14]])
     s["d"] = 40
@@ -170,29 +170,29 @@ def test_generate_packed_read_byte_types(cs: cstruct):
         f(cs.int24, name="e"),
         f(cs.int24[2], name="f"),
     ]
-    code = next(compiler.generate_packed_read(cs, fields))
+    code = next(compiler.ReadSourceGenerator(cs, fields)._generate_packed(fields))
 
     expected = """
     buf = stream.read(18)
     if len(buf) != 18: raise EOFError()
     data = _struct(cls.cs.endian, "18x").unpack(buf)
 
-    r["a"] = type.__call__(lookup["a"].type, buf[0:1])
+    r["a"] = type.__call__(_0, buf[0:1])
     s["a"] = 1
 
-    r["b"] = type.__call__(lookup["b"].type, buf[1:3])
+    r["b"] = type.__call__(_1, buf[1:3])
     s["b"] = 2
 
-    r["c"] = lookup["c"].type(buf[3:5])
+    r["c"] = _2(buf[3:5])
     s["c"] = 2
 
-    r["d"] = lookup["d"].type(buf[5:9])
+    r["d"] = _3(buf[5:9])
     s["d"] = 4
 
-    r["e"] = lookup["e"].type(buf[9:12])
+    r["e"] = _4(buf[9:12])
     s["e"] = 3
 
-    _t = lookup["f"].type
+    _t = _5
     _et = _t.type
     _b = buf[12:18]
     r["f"] = type.__call__(_t, [_et(_b[i:i + 3]) for i in range(0, 6, 3)])
@@ -212,21 +212,21 @@ def test_generate_packed_read_composite_types(cs: cstruct, TestEnum: type[Enum])
         f(cs.void),
         f(TestEnum[2], name="c"),
     ]
-    code = next(compiler.generate_packed_read(cs, fields))
+    code = next(compiler.ReadSourceGenerator(cs, fields)._generate_packed(fields))
 
     expected = """
     buf = stream.read(11)
     if len(buf) != 11: raise EOFError()
     data = _struct(cls.cs.endian, "BQ2B").unpack(buf)
 
-    r["a"] = type.__call__(lookup["a"].type, data[0])
+    r["a"] = type.__call__(_0, data[0])
     s["a"] = 1
 
-    _pt = lookup['b'].type
+    _pt = _1
     r["b"] = _pt.__new__(_pt, data[1], stream, r)
     s["b"] = 8
 
-    _t = lookup["c"].type
+    _t = _2
     _et = _t.type
     r["c"] = type.__call__(_t, [type.__call__(_et, e) for e in data[2:4]])
     s["c"] = 2
@@ -240,49 +240,49 @@ def test_generate_packed_read_offsets(cs: cstruct):
         f(cs.uint8, name="a"),
         f(cs.uint8, 8, name="b"),
     ]
-    code = next(compiler.generate_packed_read(cs, fields))
+    code = next(compiler.ReadSourceGenerator(cs, fields)._generate_packed(fields))
 
     expected = """
     buf = stream.read(9)
     if len(buf) != 9: raise EOFError()
     data = _struct(cls.cs.endian, "B7xB").unpack(buf)
 
-    r["a"] = type.__call__(lookup["a"].type, data[0])
+    r["a"] = type.__call__(_0, data[0])
     s["a"] = 1
 
-    r["b"] = type.__call__(lookup["b"].type, data[1])
+    r["b"] = type.__call__(_1, data[1])
     s["b"] = 1
     """
 
     assert code == dedent(expected)
 
 
-def test_generate_structure_read():
+def test_generate_structure_read(cs: cstruct):
     mock_type = Mock()
     mock_type.anonymous = False
 
     field = Field("a", mock_type)
-    code = next(compiler.generate_structure_read(field))
+    code = next(compiler.ReadSourceGenerator(cs, [field])._generate_structure(field))
 
     expected = """
     _s = stream.tell()
-    r["a"] = lookup["a"].type._read(stream, context=r)
+    r["a"] = _0._read(stream, context=r)
     s["a"] = stream.tell() - _s
     """
 
     assert code == dedent(expected)
 
 
-def test_generate_structure_read_anonymous():
+def test_generate_structure_read_anonymous(cs: cstruct):
     mock_type = Mock()
     mock_type.anonymous = True
 
     field = Field("a", mock_type)
-    code = next(compiler.generate_structure_read(field))
+    code = next(compiler.ReadSourceGenerator(cs, [field])._generate_structure(field))
 
     expected = """
     _s = stream.tell()
-    _v = lookup["a"].type._read(stream, context=r)
+    _v = _0._read(stream, context=r)
     r.update(_v._values)
     s.update(_v._sizes)
     """
@@ -290,13 +290,13 @@ def test_generate_structure_read_anonymous():
     assert code == dedent(expected)
 
 
-def test_generate_array_read():
+def test_generate_array_read(cs: cstruct):
     field = Field("a", Mock())
-    code = next(compiler.generate_array_read(field))
+    code = next(compiler.ReadSourceGenerator(cs, [field])._generate_array(field))
 
     expected = """
     _s = stream.tell()
-    r["a"] = lookup["a"].type._read(stream, context=r)
+    r["a"] = _0._read(stream, context=r)
     s["a"] = stream.tell() - _s
     """
 
@@ -305,20 +305,20 @@ def test_generate_array_read():
 
 def test_generate_bits_read(cs: cstruct, TestEnum: type[Enum]):
     field = Field("a", cs.int8, 2)
-    code = next(compiler.generate_bits_read(field))
+    code = next(compiler.ReadSourceGenerator(cs, [field])._generate_bits(field))
 
     expected = """
-    _t = lookup["a"].type
+    _t = _0
     r["a"] = type.__call__(_t, bit_reader.read(_t, 2))
     """
 
     assert code == dedent(expected)
 
     field = Field("b", TestEnum, 2)
-    code = next(compiler.generate_bits_read(field))
+    code = next(compiler.ReadSourceGenerator(cs, [field])._generate_bits(field))
 
     expected = """
-    _t = lookup["b"].type
+    _t = _0
     r["b"] = type.__call__(_t, bit_reader.read(_t.type, 2))
     """
 

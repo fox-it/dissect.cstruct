@@ -1,7 +1,7 @@
 import inspect
 from io import BytesIO
 from types import MethodType
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -504,3 +504,26 @@ def test_structure_definition_write_anonymous(cs: cstruct):
 
     obj = cs.test(a=1, c=3)
     assert obj.dumps() == b"\x01\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00"
+
+
+def test_structure_field_discard(cs: cstruct, compiled: bool):
+    cdef = """
+    struct test {
+        uint8 a;
+        uint8 _;
+        uint16 b;
+        uint16 _;
+        uint16 c;
+        char d;
+        char _;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    with patch.object(cs.char, "__new__") as mock_char_new:
+        cs.test(b"\x01\x02\x03\x00\x04\x00\x05\x00ab")
+
+        assert len(mock_char_new.mock_calls) == 2
+        mock_char_new.assert_has_calls([call(cs.char, b"a"), call(cs.char, b"b")])
