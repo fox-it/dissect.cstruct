@@ -327,7 +327,7 @@ def test_multipart_type_name(cs: cstruct):
 
     with pytest.raises(ResolveError) as exc:
         cdef = """
-        struct test {
+        struct test1 {
             unsigned long long unsigned a;
         };
         """
@@ -381,7 +381,7 @@ def test_array_of_null_terminated_strings(cs: cstruct, compiled: bool):
 
     with pytest.raises(ParserError) as exc:
         cdef = """
-        struct args {
+        struct args2 {
             uint32 argc;
             char   argv[][argc];
         }
