@@ -41,7 +41,7 @@ class StructureMetaType(MetaType):
     __compiled__ = False
 
     def __new__(metacls, cls, bases, classdict: dict[str, Any]) -> MetaType:
-        if fields := classdict.pop("fields", None):
+        if (fields := classdict.pop("fields", None)) is not None:
             metacls._update_fields(metacls, fields, align=classdict.get("align", False), classdict=classdict)
 
         return super().__new__(metacls, cls, bases, classdict)
@@ -101,11 +101,12 @@ class StructureMetaType(MetaType):
             from dissect.cstruct import compiler
 
             try:
-                classdict["_read"] = classmethod(
-                    compiler.generate_read(cls.cs, fields, raw_lookup, cls.__name__, align=cls.align)
-                )
+                classdict["_read"] = compiler.Compiler(cls.cs).compile_read(fields, cls.__name__, align=cls.align)
+
                 classdict["__compiled__"] = True
             except Exception:
+                # Revert _read to the slower loop based method
+                classdict["_read"] = classmethod(StructureMetaType._read)
                 classdict["__compiled__"] = False
         # TODO: compile _write
         # TODO: generate cached_property for lazy reading
@@ -492,20 +493,28 @@ def _patch_attributes(func: FunctionType, fields: list[str], start: int = 0) -> 
 
 @_codegen
 def _make__init__(fields: list[str]) -> str:
-    code = "def __init__(self, " + ", ".join(f"{field} = None" for field in fields) + "):\n"
-    return code + "\n".join(f" self.{name} = {name}" for name in fields)
+    field_args = ", ".join(f"{field} = None" for field in fields)
+    field_init = "\n".join(f" self.{name} = {name}" for name in fields) or " pass"
+
+    code = f"def __init__(self{', ' + field_args if field_args else ''}):\n"
+    return code + field_init
 
 
 @_codegen
 def _make__eq__(fields: list[str]) -> str:
-    selfvals = ",".join(f"self.{name}" for name in fields)
-    othervals = ",".join(f"other.{name}" for name in fields)
+    self_vals = ",".join(f"self.{name}" for name in fields)
+    other_vals = ",".join(f"other.{name}" for name in fields)
+
+    if self_vals:
+        self_vals += ","
+    if other_vals:
+        other_vals += ","
 
     # In the future this could be a looser check, e.g. an __eq__ on the classes, which compares the fields
     code = f"""
     def __eq__(self, other):
         if self.__class__ is other.__class__:
-            return ({selfvals},) == ({othervals},)
+            return ({self_vals}) == ({other_vals})
         return False
     """
 
