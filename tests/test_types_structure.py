@@ -8,6 +8,7 @@ import pytest
 from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exceptions import ParserError
 from dissect.cstruct.types.base import Array
+from dissect.cstruct.types.pointer import Pointer
 from dissect.cstruct.types.structure import Field, Structure
 
 from .utils import verify_compiled
@@ -527,3 +528,16 @@ def test_structure_field_discard(cs: cstruct, compiled: bool):
 
         assert len(mock_char_new.mock_calls) == 2
         mock_char_new.assert_has_calls([call(cs.char, b"a"), call(cs.char, b"b")])
+
+
+def test_structure_definition_self(cs: cstruct):
+    cdef = """
+    struct test {
+        uint32 a;
+        struct test * b;
+    };
+    """
+    cs.load(cdef)
+
+    assert issubclass(cs.test.fields[1].type, Pointer)
+    assert cs.test.fields[1].type.type is cs.test
