@@ -59,7 +59,7 @@ class TokenParser(Parser):
             "ENUM",
         )
         TOK.add(r"(?<=})\s*(?P<defs>(?:[a-zA-Z0-9_]+\s*,\s*)+[a-zA-Z0-9_]+)\s*(?=;)", "DEFS")
-        TOK.add(r"(?P<name>\*?[a-zA-Z0-9_]+)(?:\s*:\s*(?P<bits>\d+))?(?:\[(?P<count>[^;\n]*)\])?\s*(?=;)", "NAME")
+        TOK.add(r"(?P<name>\*?\s*[a-zA-Z0-9_]+)(?:\s*:\s*(?P<bits>\d+))?(?:\[(?P<count>[^;\n]*)\])?\s*(?=;)", "NAME")
         TOK.add(r"[a-zA-Z_][a-zA-Z0-9_]*", "IDENTIFIER")
         TOK.add(r"[{}]", "BLOCK")
         TOK.add(r"\$(?P<name>[^\s]+) = (?P<value>{[^}]+})\w*[\r\n]+", "LOOKUP")
@@ -162,12 +162,31 @@ class TokenParser(Parser):
     def _struct(self, tokens: TokenConsumer, register: bool = False) -> None:
         stype = tokens.consume()
 
+        if stype.value.startswith("union"):
+            factory = self.cstruct._make_union
+        else:
+            factory = self.cstruct._make_struct
+
+        st = None
         names = []
+        registered = False
+
         if tokens.next == self.TOK.IDENTIFIER:
             ident = tokens.consume()
-            names.append(ident.value)
+            if register:
+                # Pre-register an empty struct for self-referencing
+                # We update this instance later with the fields
+                st = factory(ident.value, [], align=self.align)
+                if self.compiled and "nocompile" not in tokens.flags:
+                    st = compiler.compile(st)
+                self.cstruct.add_type(ident.value, st)
+                registered = True
+            else:
+                names.append(ident.value)
 
         if tokens.next == self.TOK.NAME:
+            # As part of a struct field
+            # struct type_name field_name;
             if not len(names):
                 raise ParserError(f"line {self._lineno(tokens.next)}: unexpected anonymous struct")
             return self.cstruct.resolve(names[0])
@@ -185,27 +204,27 @@ class TokenParser(Parser):
             field = self._parse_field(tokens)
             fields.append(field)
 
+        # All names from here on are from typedef's
         # Parsing names consumes the EOL token
         names.extend(self._names(tokens))
         name = names[0] if names else None
 
-        if stype.value.startswith("union"):
-            factory = self.cstruct._make_union
+        if st is None:
+            is_anonymous = False
+            if not name:
+                is_anonymous = True
+                name = self.cstruct._next_anonymous()
+
+            st = factory(name, fields, align=self.align, anonymous=is_anonymous)
+            if self.compiled and "nocompile" not in tokens.flags:
+                st = compiler.compile(st)
         else:
-            factory = self.cstruct._make_struct
-
-        is_anonymous = False
-        if not name:
-            is_anonymous = True
-            name = self.cstruct._next_anonymous()
-
-        st = factory(name, fields, align=self.align, anonymous=is_anonymous)
-        if self.compiled and "nocompile" not in tokens.flags:
-            st = compiler.compile(st)
+            st.fields.extend(fields)
+            st.commit()
 
         # This is pretty dirty
         if register:
-            if not names:
+            if not names and not registered:
                 raise ParserError(f"line {self._lineno(stype)}: struct has no name")
 
             for name in names:
@@ -271,7 +290,7 @@ class TokenParser(Parser):
                 type_ = self.cstruct._make_array(type_, count)
 
         tokens.eol()
-        return Field(name, type_, int(d["bits"]) if d["bits"] else None)
+        return Field(name.strip(), type_, int(d["bits"]) if d["bits"] else None)
 
     def _names(self, tokens: TokenConsumer) -> list[str]:
         names = []
@@ -285,7 +304,7 @@ class TokenParser(Parser):
 
             ntoken = tokens.consume()
             if ntoken == self.TOK.NAME:
-                names.append(ntoken.value)
+                names.append(ntoken.value.strip())
             elif ntoken == self.TOK.DEFS:
                 for name in ntoken.value.strip().split(","):
                     names.append(name.strip())
@@ -565,7 +584,7 @@ class TokenConsumer:
         self.tokens = tokens
         self.flags = []
 
-    def __contains__(self, token) -> bool:
+    def __contains__(self, token: Token) -> bool:
         return token in self.tokens
 
     def __len__(self) -> int:
