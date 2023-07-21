@@ -317,7 +317,6 @@ class cstruct:
             }
         )
         return types.new_class(name, bases, {}, lambda ns: ns.update(attrs))
-        # return type(name, bases, attrs)
 
     def _make_array(self, type_: MetaType, num_entries: Optional[UnionHint[int, Expression]]) -> type[Array]:
         null_terminated = num_entries is None
