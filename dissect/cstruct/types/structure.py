@@ -462,7 +462,7 @@ class UnionMetaType(StructureMetaType):
 class Union(Structure, metaclass=UnionMetaType):
     """Base class for cstruct union type classes."""
 
-    def __eq__(self, other: Any):
+    def __eq__(self, other: Any) -> bool:
         if self.__class__ is other.__class__:
             return bytes(self) == bytes(other)
         return False
