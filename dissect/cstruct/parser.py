@@ -117,7 +117,7 @@ class TokenParser(Parser):
                 if not val:
                     val = nextval
                 else:
-                    val = Expression(self.cstruct, val).evaluate()
+                    val = Expression(self.cstruct, val).evaluate(values)
 
                 if enumtype == "flag":
                     high_bit = val.bit_length() - 1
