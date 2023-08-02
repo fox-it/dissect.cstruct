@@ -260,3 +260,19 @@ def test_enum_anonymous_struct(compiled):
 
     t = test(b"\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0A\x00\x00\x00")
     assert t.arr == [255, 0, 0, 10]
+
+
+def test_enum_reference_own_member(compiled):
+    cdef = """
+    enum test {
+        A,
+        B = A + 3,
+        C
+    };
+    """
+    cs = cstruct.cstruct()
+    cs.load(cdef, compiled=compiled)
+
+    assert cs.test.A == 0
+    assert cs.test.B == 3
+    assert cs.test.C == 4
