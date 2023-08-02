@@ -4,10 +4,13 @@ from io import BytesIO
 from typing import TYPE_CHECKING, Any, BinaryIO, Optional, Union
 
 from dissect.cstruct.exceptions import ArraySizeError
-from dissect.cstruct.expression import Expression
 
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
+    from dissect.cstruct.expression import Expression
+
+
+EOF = -0xE0F  # Negative counts are illegal anyway, so abuse that for our EOF sentinel
 
 
 class MetaType(type):
@@ -93,6 +96,15 @@ class MetaType(type):
             count: The amount of values to read.
             context: Optional reading context.
         """
+        if count == EOF:
+            result = []
+            while True:
+                try:
+                    result.append(cls._read(stream, context))
+                except EOFError:
+                    break
+            return result
+
         return [cls._read(stream, context) for _ in range(count)]
 
     def _read_0(cls, stream: BinaryIO, context: dict[str, Any] = None) -> list[BaseType]:
@@ -168,8 +180,17 @@ class ArrayMetaType(MetaType):
         if cls.null_terminated:
             return cls.type._read_0(stream, context)
 
-        num = cls.num_entries.evaluate(context) if cls.dynamic else cls.num_entries
-        return cls.type._read_array(stream, max(0, num), context)
+        if cls.dynamic:
+            try:
+                num = max(0, cls.num_entries.evaluate(context))
+            except Exception:
+                if cls.num_entries.expression != "EOF":
+                    raise
+                num = EOF
+        else:
+            num = max(0, cls.num_entries)
+
+        return cls.type._read_array(stream, num, context)
 
 
 class Array(list, BaseType, metaclass=ArrayMetaType):
