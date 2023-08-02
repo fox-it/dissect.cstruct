@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, BinaryIO, Union
 
-from dissect.cstruct.types.base import ArrayMetaType, BaseType
+from dissect.cstruct.types.base import EOF, ArrayMetaType, BaseType
 
 
 class Char(bytes, BaseType):
@@ -17,8 +17,8 @@ class Char(bytes, BaseType):
         if count == 0:
             return b""
 
-        data = stream.read(count)
-        if len(data) != count:
+        data = stream.read(-1 if count == EOF else count)
+        if count != EOF and len(data) != count:
             raise EOFError(f"Read {len(data)} bytes, but expected {count}")
 
         return type.__call__(cls, data)

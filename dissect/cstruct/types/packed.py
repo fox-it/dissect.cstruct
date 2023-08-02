@@ -4,7 +4,7 @@ from functools import lru_cache
 from struct import Struct
 from typing import Any, BinaryIO
 
-from dissect.cstruct.types.base import BaseType
+from dissect.cstruct.types.base import EOF, BaseType
 
 
 @lru_cache(1024)
@@ -23,8 +23,14 @@ class Packed(BaseType):
 
     @classmethod
     def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> list[Packed]:
-        length = cls.size * count
-        data = stream.read(length)
+        if count == EOF:
+            data = stream.read()
+            length = len(data)
+            count = length // cls.size
+        else:
+            length = cls.size * count
+            data = stream.read(length)
+
         fmt = _struct(cls.cs.endian, f"{count}{cls.packchar}")
 
         if len(data) != length:
