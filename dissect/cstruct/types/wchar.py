@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from typing import Any, BinaryIO
 
-from dissect.cstruct.types.base import ArrayMetaType, BaseType
+from dissect.cstruct.types.base import EOF, ArrayMetaType, BaseType
 
 
 class Wchar(str, BaseType):
@@ -23,12 +23,14 @@ class Wchar(str, BaseType):
 
     @classmethod
     def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> Wchar:
-        count *= 2
         if count == 0:
             return ""
 
-        data = stream.read(count)
-        if len(data) != count:
+        if count != EOF:
+            count *= 2
+
+        data = stream.read(-1 if count == EOF else count)
+        if count != EOF and len(data) != count:
             raise EOFError(f"Read {len(data)} bytes, but expected {count}")
 
         return type.__call__(cls, data.decode(cls.__encoding_map__[cls.cs.endian]))
