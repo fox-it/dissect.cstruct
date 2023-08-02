@@ -294,16 +294,16 @@ class TokenParser(Parser):
     @staticmethod
     def _remove_comments(string: str) -> str:
         # https://stackoverflow.com/a/18381470
-        pattern = r"(\".*?\"|\'.*?\')|(/\*.*?\*/|//[^\r\n]*$)"
+        pattern = r"([\"\'].*?[\"\'])|(/\*.*?\*/|//[^\r\n]*$)"
         # first group captures quoted strings (double or single)
         # second group captures comments (//single-line or /* multi-line */)
         regex = re.compile(pattern, re.MULTILINE | re.DOTALL)
 
-        def _replacer(match):
+        def _replacer(match: re.Match) -> str:
             # if the 2nd group (capturing comments) is not None,
             # it means we have captured a non-quoted (real) comment string.
-            if match.group(2) is not None:
-                return ""  # so we will return empty to remove the comment
+            if comment := match.group(2):
+                return "\n" * comment.count("\n")  # so we will return empty to remove the comment
             else:  # otherwise, we will return the 1st group
                 return match.group(1)  # captured quoted-string
 
@@ -314,7 +314,7 @@ class TokenParser(Parser):
         """Quick and dirty line number calculator"""
 
         match = tok.match
-        return match.string.count("\n", 0, match.start())
+        return match.string.count("\n", 0, match.start()) + 1
 
     def _config_flag(self, tokens: TokenConsumer) -> None:
         flag_token = tokens.consume()
