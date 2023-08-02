@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Dict
+import string
+from typing import TYPE_CHECKING, Callable, Optional, Union
 
-from dissect.cstruct.exceptions import ExpressionParserError
+from dissect.cstruct.exceptions import ExpressionParserError, ExpressionTokenizerError
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
@@ -11,10 +12,10 @@ if TYPE_CHECKING:
 class ExpressionTokenizer:
     def __init__(self, expression: str):
         self.expression = expression
-        self.i: int = 0
+        self.pos = 0
         self.tokens = []
 
-    def equal(self, token: str, expected: str) -> bool:
+    def equal(self, token: str, expected: Union[str, str[str]]) -> bool:
         if isinstance(expected, set):
             return token in expected
         else:
@@ -29,18 +30,23 @@ class ExpressionTokenizer:
     def digit(self, token: str) -> bool:
         return token.isdigit()
 
-    def digitHex(self, token: str) -> bool:
-        return token.isdigit() or token in {"a", "b", "c", "d", "e", "f", "A", "B", "C", "D", "E", "F"}
+    def hexdigit(self, token: str) -> bool:
+        return token in string.hexdigits
 
-    def operator(self, token) -> bool:
-        op: set[str] = {"*", "/", "+", "-", "%", "&", "^", "|", "(", ")", "~"}
-        return token in op
+    def operator(self, token: str) -> bool:
+        return token in {"*", "/", "+", "-", "%", "&", "^", "|", "(", ")", "~"}
 
-    def match(self, func: Callable = None, expected: str = None, consume: bool = True, append: bool = True) -> bool:
-        if self.outOfBounds():
+    def match(
+        self,
+        func: Optional[Callable[[str], bool]] = None,
+        expected: Optional[str] = None,
+        consume: bool = True,
+        append: bool = True,
+    ) -> bool:
+        if self.eol():
             return False
 
-        token: str = self.getToken()
+        token = self.get_token()
 
         if expected and self.equal(token, expected):
             if append:
@@ -58,39 +64,39 @@ class ExpressionTokenizer:
 
         return False
 
-    def consume(self):
-        self.i += 1
+    def consume(self) -> None:
+        self.pos += 1
 
-    def outOfBounds(self):
-        return self.i >= len(self.expression)
+    def eol(self) -> bool:
+        return self.pos >= len(self.expression)
 
-    def getToken(self) -> str:
-        if self.i >= len(self.expression):
-            raise Exception(f"Out of bounds index: {self.i}, length: {len(self.expression)}")
-        return self.expression[self.i]
+    def get_token(self) -> str:
+        if self.eol():
+            raise ExpressionTokenizerError(f"Out of bounds index: {self.pos}, length: {len(self.expression)}")
+        return self.expression[self.pos]
 
     def tokenize(self) -> list[str]:
         token = ""
 
         # Loop over expression runs in linear time
-        while not self.outOfBounds():
+        while not self.eol():
             # if token is a single character operand add it to tokens
-            if self.match(func=self.operator):
+            if self.match(self.operator):
                 continue
 
             # if token is a single digit, keep looping over expression and build the number
             elif self.match(self.digit, consume=False, append=False):
-                token += self.getToken()
+                token += self.get_token()
                 self.consume()
 
                 # support for binary and hexadecimal notation
-                if self.match(expected={"x", "b", "X"}, consume=False, append=False):
-                    token += self.getToken()
+                if self.match(expected={"x", "X", "b", "B"}, consume=False, append=False):
+                    token += self.get_token()
                     self.consume()
-                while self.match(self.digitHex, consume=False, append=False):
-                    token += self.getToken()
+                while self.match(self.hexdigit, consume=False, append=False):
+                    token += self.get_token()
                     self.consume()
-                    if self.outOfBounds():
+                    if self.eol():
                         break
 
                 # checks for suffixes in numbers
@@ -106,9 +112,10 @@ class ExpressionTokenizer:
                     pass
 
                 # number cannot end on x or b in the case of binary or hexadecimal notation
-                assert token[-1] != "x" and token[-1] != "b" and token[-1] != "X"
+                if token[-1] in ("x", "X", "b", "B"):
+                    raise ExpressionTokenizerError("Invalid binary or hex notation")
 
-                if len(token) > 1 and token[0] == "0" and token[1] != "x" and token[1] != "b" and token[1] != "X":
+                if len(token) > 1 and token[0] == "0" and token[1] not in ("x", "X", "b", "B"):
                     token = token[:1] + "o" + token[1:]
                 self.tokens.append(token)
                 token = ""
@@ -120,9 +127,9 @@ class ExpressionTokenizer:
                 while self.match(self.alnum, consume=False, append=False) or self.match(
                     expected="_", consume=False, append=False
                 ):
-                    token += self.getToken()
+                    token += self.get_token()
                     self.consume()
-                    if self.outOfBounds():
+                    if self.eol():
                         break
                 self.tokens.append(token)
                 token = ""
@@ -134,7 +141,9 @@ class ExpressionTokenizer:
             elif self.match(expected=" ", append=False):
                 continue
             else:
-                raise Exception(f"Tokenizer does not recognize following token '{self.expression[self.i]}'")
+                raise ExpressionTokenizerError(
+                    f"Tokenizer does not recognize following token '{self.expression[self.pos]}'"
+                )
         return self.tokens
 
 
@@ -154,22 +163,20 @@ class Expression:
         "|": lambda a, b: a | b,
     }
 
-    def precedence(self, o1: str, o2: str) -> bool:
-        p = {
-            "^": 1,
-            "&": 5,
-            "<<": 3,
-            ">>": 3,
-            "+": 4,
-            "-": 4,
-            "*": 5,
-            "/": 5,
-            "%": 5,
-            "u": 6,
-            "~": 6,
-            "sizeof": 6,
-        }  # Operator precedence levels
-        return p[o1] >= p[o2]
+    precedence_levels = {
+        "^": 1,
+        "&": 5,
+        "<<": 3,
+        ">>": 3,
+        "+": 4,
+        "-": 4,
+        "*": 5,
+        "/": 5,
+        "%": 5,
+        "u": 6,
+        "~": 6,
+        "sizeof": 6,
+    }
 
     def __init__(self, cstruct: cstruct, expression: str):
         self.cstruct = cstruct
@@ -181,7 +188,10 @@ class Expression:
     def __repr__(self) -> str:
         return self.expression
 
-    def evaluate_exp(self, context: Dict[str, int] = None) -> None:
+    def precedence(self, o1: str, o2: str) -> bool:
+        return self.precedence_levels[o1] >= self.precedence_levels[o2]
+
+    def evaluate_exp(self, context: Optional[dict[str, int]] = None) -> None:
         operator = self.stack.pop(-1)
         res = 0
 
@@ -197,25 +207,18 @@ class Expression:
             res = self.operators[operator](left, right)
         self.queue.append(res)
 
-    def isNumber(self, currentToken: str) -> bool:
-        return currentToken.isnumeric() or (
-            len(currentToken) > 2
-            and currentToken[0] == "0"
-            and (currentToken[1] == "x" or currentToken[1] == "X" or currentToken[1] == "b" or currentToken[1] == "o")
-        )
+    def is_number(self, token: str) -> bool:
+        return token.isnumeric() or (len(token) > 2 and token[0] == "0" and token[1] in ("x", "X", "b", "B", "o", "O"))
 
-    def parseErr(self, condition: bool, error: str) -> None:
-        if condition:
-            raise ExpressionParserError(error)
-
-    def evaluate(self, context: Dict[str, int] = None) -> int:
-        """Evaluates an expression using a Shunting-Yard implementation"""
+    def evaluate(self, context: Optional[dict[str, int]] = None) -> int:
+        """Evaluates an expression using a Shunting-Yard implementation."""
 
         self.stack = []
         self.queue = []
+        operators = set(self.operators.keys())
+
         context = context or {}
-        tempExpression = self.tokens
-        opKeys = set(self.operators.keys())
+        tmp_expression = self.tokens
 
         # unary minus Tokens; we change the semantic of '-' depending on the previous token
         for i in range(len(self.tokens)):
@@ -223,62 +226,66 @@ class Expression:
                 if i == 0:
                     self.tokens[i] = "u"
                     continue
-                if self.tokens[i - 1] in opKeys or self.tokens[i - 1] == "u" or self.tokens[i - 1] == "(":
+                if self.tokens[i - 1] in operators or self.tokens[i - 1] == "u" or self.tokens[i - 1] == "(":
                     self.tokens[i] = "u"
                     continue
 
         i = 0
-        while i < len(tempExpression):
-            currentToken = tempExpression[i]
-            if self.isNumber(currentToken):
-                self.queue.append(int(currentToken, 0))
-            elif currentToken in context:
-                self.queue.append(context[currentToken])
-            elif currentToken in self.cstruct.consts:
-                self.queue.append(self.cstruct.consts[currentToken])
-            elif currentToken == "u":
-                self.stack.append(currentToken)
-            elif currentToken == "~":
-                self.stack.append(currentToken)
-            elif currentToken == "sizeof":
-                assert tempExpression[i + 1] == "("
-                self.queue.append(len(self.cstruct.resolve(tempExpression[i + 2])))
-                assert tempExpression[i + 3] == ")"
+        while i < len(tmp_expression):
+            current_token = tmp_expression[i]
+            if self.is_number(current_token):
+                self.queue.append(int(current_token, 0))
+            elif current_token in context:
+                self.queue.append(context[current_token])
+            elif current_token in self.cstruct.consts:
+                self.queue.append(self.cstruct.consts[current_token])
+            elif current_token == "u":
+                self.stack.append(current_token)
+            elif current_token == "~":
+                self.stack.append(current_token)
+            elif current_token == "sizeof":
+                if tmp_expression[i + 1] != "(" and tmp_expression[i + 3] != ")":
+                    raise ExpressionParserError("Invalid sizeof operation")
+                self.queue.append(len(self.cstruct.resolve(tmp_expression[i + 2])))
                 i += 3
-            elif currentToken in opKeys:
+            elif current_token in operators:
                 while (
-                    len(self.stack) != 0 and self.stack[-1] != "(" and (self.precedence(self.stack[-1], currentToken))
+                    len(self.stack) != 0 and self.stack[-1] != "(" and (self.precedence(self.stack[-1], current_token))
                 ):
                     self.evaluate_exp(context)
-                self.stack.append(currentToken)
-            elif currentToken == "(":
+                self.stack.append(current_token)
+            elif current_token == "(":
                 if i > 0:
-                    previousToken = tempExpression[i - 1]
-                    self.parseErr(
-                        self.isNumber(previousToken),
-                        f"Parser expected sizeof or an arethmethic operator instead got: '{previousToken}'",
-                    )
+                    previousToken = tmp_expression[i - 1]
+                    if self.is_number(previousToken):
+                        raise ExpressionParserError(
+                            f"Parser expected sizeof or an arethmethic operator instead got: '{previousToken}'"
+                        )
 
-                self.stack.append(currentToken)
-            elif currentToken == ")":
+                self.stack.append(current_token)
+            elif current_token == ")":
                 if i > 0:
-                    previousToken = tempExpression[i - 1]
-                    self.parseErr(
-                        previousToken == "(",
-                        f"Parser expected an expression, instead received empty parenthesis. Index: {i}",
-                    )
+                    previousToken = tmp_expression[i - 1]
+                    if previousToken == "(":
+                        raise ExpressionParserError(
+                            f"Parser expected an expression, instead received empty parenthesis. Index: {i}"
+                        )
 
-                assert len(self.stack) != 0
+                if len(self.stack) == 0:
+                    raise ExpressionParserError("Invalid expression")
+
                 while self.stack[-1] != "(":
                     self.evaluate_exp(context)
-                assert self.stack[-1] == "("
+
                 self.stack.pop(-1)
             else:
-                raise ExpressionParserError(f"unmatchedToken: '{currentToken}'")
+                raise ExpressionParserError(f"Unmatched token: '{current_token}'")
             i += 1
 
         while len(self.stack) != 0:
-            assert self.stack[-1] != "("
+            if self.stack[-1] == "(":
+                raise ExpressionParserError("Invalid expression")
+
             self.evaluate_exp(context)
 
         return self.queue[0]
