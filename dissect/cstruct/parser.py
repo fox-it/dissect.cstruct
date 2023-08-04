@@ -294,7 +294,7 @@ class TokenParser(Parser):
     @staticmethod
     def _remove_comments(string: str) -> str:
         # https://stackoverflow.com/a/18381470
-        pattern = r"([\"\'].*?[\"\'])|(/\*.*?\*/|//[^\r\n]*$)"
+        pattern = r"(\".*?\"|\'.*?\')|(/\*.*?\*/|//[^\r\n]*$)"
         # first group captures quoted strings (double or single)
         # second group captures comments (//single-line or /* multi-line */)
         regex = re.compile(pattern, re.MULTILINE | re.DOTALL)
