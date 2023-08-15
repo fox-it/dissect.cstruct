@@ -93,6 +93,7 @@ class ExpressionTokenizer:
                 if self.match(expected={"x", "X", "b", "B"}, consume=False, append=False):
                     token += self.get_token()
                     self.consume()
+
                 while self.match(self.hexdigit, consume=False, append=False):
                     token += self.get_token()
                     self.consume()
@@ -111,8 +112,8 @@ class ExpressionTokenizer:
                 else:
                     pass
 
-                # number cannot end on x or b in the case of binary or hexadecimal notation
-                if token[-1] in ("x", "X", "b", "B"):
+                # number cannot end on x in the case of binary or hexadecimal notation
+                if token[-1] in ("x", "X"):
                     raise ExpressionTokenizerError("Invalid binary or hex notation")
 
                 if len(token) > 1 and token[0] == "0" and token[1] not in ("x", "X", "b", "B"):
