@@ -152,23 +152,24 @@ class Expression:
     """Expression parser for calculations in definitions."""
 
     operators = {
+        "|": lambda a, b: a | b,
+        "^": lambda a, b: a ^ b,
+        "&": lambda a, b: a & b,
+        "<<": lambda a, b: a << b,
+        ">>": lambda a, b: a >> b,
+        "+": lambda a, b: a + b,
+        "-": lambda a, b: a - b,
         "*": lambda a, b: a * b,
         "/": lambda a, b: a // b,
         "%": lambda a, b: a % b,
-        "+": lambda a, b: a + b,
-        "-": lambda a, b: a - b,
-        ">>": lambda a, b: a >> b,
-        "<<": lambda a, b: a << b,
-        "&": lambda a, b: a & b,
-        "^": lambda a, b: a ^ b,
-        "|": lambda a, b: a | b,
         "u": lambda a: -a,
         "~": lambda a: ~a,
     }
 
     precedence_levels = {
+        "|": 0,
         "^": 1,
-        "&": 5,
+        "&": 2,
         "<<": 3,
         ">>": 3,
         "+": 4,
@@ -194,7 +195,7 @@ class Expression:
     def precedence(self, o1: str, o2: str) -> bool:
         return self.precedence_levels[o1] >= self.precedence_levels[o2]
 
-    def evaluate_exp(self, context: Optional[dict[str, int]] = None) -> None:
+    def evaluate_exp(self) -> None:
         operator = self.stack.pop(-1)
         res = 0
 
@@ -226,7 +227,7 @@ class Expression:
         context = context or {}
         tmp_expression = self.tokens
 
-        # Unary minus Tokens; we change the semantic of '-' depending on the previous token
+        # Unary minus tokens; we change the semantic of '-' depending on the previous token
         for i in range(len(self.tokens)):
             if self.tokens[i] == "-":
                 if i == 0:
@@ -258,7 +259,7 @@ class Expression:
                 while (
                     len(self.stack) != 0 and self.stack[-1] != "(" and (self.precedence(self.stack[-1], current_token))
                 ):
-                    self.evaluate_exp(context)
+                    self.evaluate_exp()
                 self.stack.append(current_token)
             elif current_token == "(":
                 if i > 0:
@@ -281,7 +282,7 @@ class Expression:
                     raise ExpressionParserError("Invalid expression")
 
                 while self.stack[-1] != "(":
-                    self.evaluate_exp(context)
+                    self.evaluate_exp()
 
                 self.stack.pop(-1)
             else:
@@ -292,6 +293,6 @@ class Expression:
             if self.stack[-1] == "(":
                 raise ExpressionParserError("Invalid expression")
 
-            self.evaluate_exp(context)
+            self.evaluate_exp()
 
         return self.queue[0]
