@@ -80,16 +80,16 @@ class ExpressionTokenizer:
 
         # Loop over expression runs in linear time
         while not self.eol():
-            # if token is a single character operand add it to tokens
+            # If token is a single character operand add it to tokens
             if self.match(self.operator):
                 continue
 
-            # if token is a single digit, keep looping over expression and build the number
+            # If token is a single digit, keep looping over expression and build the number
             elif self.match(self.digit, consume=False, append=False):
                 token += self.get_token()
                 self.consume()
 
-                # support for binary and hexadecimal notation
+                # Support for binary and hexadecimal notation
                 if self.match(expected={"x", "X", "b", "B"}, consume=False, append=False):
                     token += self.get_token()
                     self.consume()
@@ -100,7 +100,7 @@ class ExpressionTokenizer:
                     if self.eol():
                         break
 
-                # checks for suffixes in numbers
+                # Checks for suffixes in numbers
                 if self.match(expected={"u", "U"}, consume=False, append=False):
                     self.consume()
                     self.match(expected={"l", "L"}, append=False)
@@ -112,8 +112,8 @@ class ExpressionTokenizer:
                 else:
                     pass
 
-                # number cannot end on x in the case of binary or hexadecimal notation
-                if token[-1] in ("x", "X"):
+                # Number cannot end on x or b in the case of binary or hexadecimal notation
+                if len(token) == 2 and token[-1] in ("x", "X", "b", "B"):
                     raise ExpressionTokenizerError("Invalid binary or hex notation")
 
                 if len(token) > 1 and token[0] == "0" and token[1] not in ("x", "X", "b", "B"):
@@ -121,7 +121,7 @@ class ExpressionTokenizer:
                 self.tokens.append(token)
                 token = ""
 
-            # if token is alpha or underscore we need to build the identifier
+            # If token is alpha or underscore we need to build the identifier
             elif self.match(self.alpha, consume=False, append=False) or self.match(
                 expected="_", consume=False, append=False
             ):
@@ -134,7 +134,7 @@ class ExpressionTokenizer:
                         break
                 self.tokens.append(token)
                 token = ""
-            # if token is length 2 operand make sure next character is part of length 2 operand append to tokens
+            # If token is length 2 operand make sure next character is part of length 2 operand append to tokens
             elif self.match(expected=">", append=False) and self.match(expected=">", append=False):
                 self.tokens.append(">>")
             elif self.match(expected="<", append=False) and self.match(expected="<", append=False):
@@ -162,6 +162,8 @@ class Expression:
         "&": lambda a, b: a & b,
         "^": lambda a, b: a ^ b,
         "|": lambda a, b: a | b,
+        "u": lambda a: -a,
+        "~": lambda a: ~a,
     }
 
     precedence_levels = {
@@ -196,16 +198,19 @@ class Expression:
         operator = self.stack.pop(-1)
         res = 0
 
-        if operator == "u":
-            right = self.queue.pop(-1)
-            res = -1 * right
-        elif operator == "~":
-            right = self.queue.pop(-1)
-            res = ~right
+        if len(self.queue) < 1:
+            raise ExpressionParserError("Invalid expression: not enough operands")
+
+        right = self.queue.pop(-1)
+        if operator in ("u", "~"):
+            res = self.operators[operator](right)
         else:
-            right = self.queue.pop(-1)
+            if len(self.queue) < 1:
+                raise ExpressionParserError("Invalid expression: not enough operands")
+
             left = self.queue.pop(-1)
             res = self.operators[operator](left, right)
+
         self.queue.append(res)
 
     def is_number(self, token: str) -> bool:
@@ -221,7 +226,7 @@ class Expression:
         context = context or {}
         tmp_expression = self.tokens
 
-        # unary minus Tokens; we change the semantic of '-' depending on the previous token
+        # Unary minus Tokens; we change the semantic of '-' depending on the previous token
         for i in range(len(self.tokens)):
             if self.tokens[i] == "-":
                 if i == 0:
@@ -245,7 +250,7 @@ class Expression:
             elif current_token == "~":
                 self.stack.append(current_token)
             elif current_token == "sizeof":
-                if tmp_expression[i + 1] != "(" and tmp_expression[i + 3] != ")":
+                if len(tmp_expression) < i + 3 or (tmp_expression[i + 1] != "(" or tmp_expression[i + 3] != ")"):
                     raise ExpressionParserError("Invalid sizeof operation")
                 self.queue.append(len(self.cstruct.resolve(tmp_expression[i + 2])))
                 i += 3
@@ -257,17 +262,17 @@ class Expression:
                 self.stack.append(current_token)
             elif current_token == "(":
                 if i > 0:
-                    previousToken = tmp_expression[i - 1]
-                    if self.is_number(previousToken):
+                    previous_token = tmp_expression[i - 1]
+                    if self.is_number(previous_token):
                         raise ExpressionParserError(
-                            f"Parser expected sizeof or an arethmethic operator instead got: '{previousToken}'"
+                            f"Parser expected sizeof or an arethmethic operator instead got: '{previous_token}'"
                         )
 
                 self.stack.append(current_token)
             elif current_token == ")":
                 if i > 0:
-                    previousToken = tmp_expression[i - 1]
-                    if previousToken == "(":
+                    previous_token = tmp_expression[i - 1]
+                    if previous_token == "(":
                         raise ExpressionParserError(
                             f"Parser expected an expression, instead received empty parenthesis. Index: {i}"
                         )
