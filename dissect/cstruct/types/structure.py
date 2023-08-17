@@ -327,7 +327,7 @@ class Union(Structure):
         self.size = size
         self.alignment = alignment
 
-    def _read(self, stream: BinaryIO, context: dict[str, Any] = None) -> Instance:
+    def _read(self, stream: BinaryIO, context: dict[str, Any] = None, instance: Instance = None) -> Instance:
         buf = io.BytesIO(memoryview(stream.read(len(self))))
         result = OrderedDict()
         sizes = {}
@@ -342,6 +342,7 @@ class Union(Structure):
                 start = field.offset
 
             v = field_type._read(buf, result)
+            Instance.set_owner(instance, v)
 
             if isinstance(field_type, Structure) and field_type.anonymous:
                 sizes.update(v._sizes)
@@ -350,7 +351,11 @@ class Union(Structure):
                 sizes[field.name] = buf.tell() - start
                 result[field.name] = v
 
-        return Instance(self, result, sizes)
+        if isinstance(instance, Instance) and instance._type is self:
+            instance._values = result
+            instance._sizes = sizes
+        else:
+            return Instance(self, result, sizes)
 
     def _write(self, stream: BinaryIO, data: Instance) -> Instance:
         offset = stream.tell()
