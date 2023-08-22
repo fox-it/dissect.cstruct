@@ -1,8 +1,7 @@
 import pytest
-
 from dissect import cstruct
-from dissect.cstruct.exceptions import ExpressionParserError, ExpressionTokenizerError
 
+from dissect.cstruct.exceptions import ExpressionParserError, ExpressionTokenizerError
 from dissect.cstruct.expression import Expression
 
 testdata = [
