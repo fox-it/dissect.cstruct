@@ -221,3 +221,58 @@ def test_enum_write(compiled):
     obj.list = [cs.Test16.A, cs.Test16.B]
 
     assert obj.dumps() == b"\x01\x00\x02\x00\x01\x00\x00\x02\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x01\x00\x02\x00"
+
+
+def test_enum_anonymous(compiled):
+    cdef = """
+    enum : uint16 {
+          RED = 1,
+          GREEN = 2,
+          BLUE = 3,
+    };
+    """
+    cs = cstruct.cstruct()
+    cs.load(cdef, compiled=compiled)
+
+    assert cs.RED == 1
+    assert cs.GREEN == 2
+    assert cs.BLUE == 3
+
+    assert cs.RED.name == "RED"
+    assert cs.RED.value == 1
+    assert repr(cs.RED) == "<RED: 1>"
+
+
+def test_enum_anonymous_struct(compiled):
+    cdef = """
+    enum : uint32 {
+          nElements = 4
+    };
+
+    struct test {
+        uint32  arr[nElements];
+    };
+    """
+    cs = cstruct.cstruct()
+    cs.load(cdef, compiled=compiled)
+
+    test = cs.test
+
+    t = test(b"\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0A\x00\x00\x00")
+    assert t.arr == [255, 0, 0, 10]
+
+
+def test_enum_reference_own_member(compiled):
+    cdef = """
+    enum test {
+        A,
+        B = A + 3,
+        C
+    };
+    """
+    cs = cstruct.cstruct()
+    cs.load(cdef, compiled=compiled)
+
+    assert cs.test.A == 0
+    assert cs.test.B == 3
+    assert cs.test.C == 4

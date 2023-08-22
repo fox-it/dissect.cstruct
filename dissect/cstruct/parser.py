@@ -54,7 +54,7 @@ class TokenParser(Parser):
         TOK.add(r"typedef(?=\s)", "TYPEDEF")
         TOK.add(r"(?:struct|union)(?=\s|{)", "STRUCT")
         TOK.add(
-            r"(?P<enumtype>enum|flag)\s+(?P<name>[^\s:{]+)\s*(:\s"
+            r"(?P<enumtype>enum|flag)\s+(?P<name>[^\s:{]+)?\s*(:\s"
             r"*(?P<type>[^{]+?)\s*)?\{(?P<values>[^}]+)\}\s*(?=;)",
             "ENUM",
         )
@@ -117,7 +117,7 @@ class TokenParser(Parser):
                 if not val:
                     val = nextval
                 else:
-                    val = Expression(self.cstruct, val).evaluate()
+                    val = Expression(self.cstruct, val).evaluate(values)
 
                 if enumtype == "flag":
                     high_bit = val.bit_length() - 1
@@ -135,7 +135,12 @@ class TokenParser(Parser):
             enumcls = Flag
 
         enum = enumcls(self.cstruct, d["name"], self.cstruct.resolve(d["type"]), values)
-        self.cstruct.addtype(enum.name, enum)
+
+        if not enum.name:
+            for name, value in enum.values.items():
+                self.cstruct.consts[name] = enum(value)
+        else:
+            self.cstruct.addtype(enum.name, enum)
 
         tokens.eol()
 
@@ -294,11 +299,11 @@ class TokenParser(Parser):
         # second group captures comments (//single-line or /* multi-line */)
         regex = re.compile(pattern, re.MULTILINE | re.DOTALL)
 
-        def _replacer(match):
+        def _replacer(match: re.Match) -> str:
             # if the 2nd group (capturing comments) is not None,
             # it means we have captured a non-quoted (real) comment string.
-            if match.group(2) is not None:
-                return ""  # so we will return empty to remove the comment
+            if comment := match.group(2):
+                return "\n" * comment.count("\n")  # so we will return empty to remove the comment
             else:  # otherwise, we will return the 1st group
                 return match.group(1)  # captured quoted-string
 
@@ -309,7 +314,7 @@ class TokenParser(Parser):
         """Quick and dirty line number calculator"""
 
         match = tok.match
-        return match.string.count("\n", 0, match.start())
+        return match.string.count("\n", 0, match.start()) + 1
 
     def _config_flag(self, tokens: TokenConsumer) -> None:
         flag_token = tokens.consume()
