@@ -243,9 +243,9 @@ class Expression:
             if self.is_number(current_token):
                 self.queue.append(int(current_token, 0))
             elif current_token in context:
-                self.queue.append(context[current_token])
+                self.queue.append(int(context[current_token]))
             elif current_token in self.cstruct.consts:
-                self.queue.append(self.cstruct.consts[current_token])
+                self.queue.append(int(self.cstruct.consts[current_token]))
             elif current_token == "u":
                 self.stack.append(current_token)
             elif current_token == "~":

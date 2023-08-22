@@ -1,4 +1,5 @@
 import pytest
+
 from dissect import cstruct
 from dissect.cstruct.exceptions import ExpressionParserError, ExpressionTokenizerError
 
