@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import ctypes as _ctypes
 import sys
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Optional
 
 from dissect.cstruct.exceptions import ResolveError
 from dissect.cstruct.parser import CStyleParser, TokenParser
@@ -30,7 +30,7 @@ class cstruct:
     DEF_CSTYLE = 1
     DEF_LEGACY = 2
 
-    def __init__(self, endian: str = "<", pointer: str = None):
+    def __init__(self, endian: str = "<", pointer: Optional[str] = None):
         self.endian = endian
 
         self.consts = {}
@@ -146,7 +146,7 @@ class cstruct:
         }
         # fmt: on
 
-        pointer = pointer or "uint64" if sys.maxsize > 2**32 else "uint32"
+        pointer = pointer or ("uint64" if sys.maxsize > 2**32 else "uint32")
         self.pointer = self.resolve(pointer)
         self._anonymous_count = 0
 
