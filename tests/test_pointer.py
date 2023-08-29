@@ -18,7 +18,7 @@ def test_pointer_basic(compiled):
     cs.load(cdef, compiled=compiled)
 
     assert verify_compiled(cs.ptrtest, compiled)
-    assert cs.pointer == "uint16"
+    assert cs.pointer is cs.uint16
 
     buf = b"\x04\x00\x08\x00\x01\x02\x03\x04\x05\x06\x07\x08"
     obj = cs.ptrtest(buf)
@@ -64,7 +64,7 @@ def test_pointer_struct(compiled):
 
     assert verify_compiled(cs.test, compiled)
     assert verify_compiled(cs.ptrtest, compiled)
-    assert cs.pointer == "uint16"
+    assert cs.pointer is cs.uint16
 
     buf = b"\x02\x00testt\x00e\x00s\x00t\x00\x01\x02\x03\x04\x05\x06\x07lalala\x00t\x00e\x00s\x00t\x00\x00\x00"
     obj = cs.ptrtest(buf)
@@ -97,7 +97,7 @@ def test_array_of_pointers(compiled):
     cs.load(cdef, compiled=compiled)
 
     assert verify_compiled(cs.mainargs, compiled)
-    assert cs.pointer == "uint16"
+    assert cs.pointer is cs.uint16
 
     buf = b"\x02\x09\x00\x16\x00\x00\x00\x00\x00argument one\x00argument two\x00"
     obj = cs.mainargs(buf)
