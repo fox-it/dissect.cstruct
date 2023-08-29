@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch
 from dissect import cstruct
 
 from dissect.cstruct.types.pointer import PointerInstance
@@ -145,3 +146,16 @@ def test_pointer_arithmetic():
 
     inst |= 8
     assert inst._addr == 12
+
+
+def test_pointer_sys_size():
+    with patch("sys.maxsize", 2**64):
+        c = cstruct.cstruct()
+        assert c.pointer is c.uint64
+
+    with patch("sys.maxsize", 2**32):
+        c = cstruct.cstruct()
+        assert c.pointer is c.uint32
+
+    c = cstruct.cstruct(pointer="uint16")
+    assert c.pointer is c.uint16
