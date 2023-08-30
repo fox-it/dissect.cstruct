@@ -9,6 +9,9 @@ if TYPE_CHECKING:
     from dissect.cstruct import cstruct
 
 
+HEXBIN_SUFFIX = {"x", "X", "b", "B"}
+
+
 class ExpressionTokenizer:
     def __init__(self, expression: str):
         self.expression = expression
@@ -90,7 +93,7 @@ class ExpressionTokenizer:
                 self.consume()
 
                 # Support for binary and hexadecimal notation
-                if self.match(expected={"x", "X", "b", "B"}, consume=False, append=False):
+                if self.match(expected=HEXBIN_SUFFIX, consume=False, append=False):
                     token += self.get_token()
                     self.consume()
 
@@ -113,10 +116,10 @@ class ExpressionTokenizer:
                     pass
 
                 # Number cannot end on x or b in the case of binary or hexadecimal notation
-                if len(token) == 2 and token[-1] in ("x", "X", "b", "B"):
+                if len(token) == 2 and token[-1] in HEXBIN_SUFFIX:
                     raise ExpressionTokenizerError("Invalid binary or hex notation")
 
-                if len(token) > 1 and token[0] == "0" and token[1] not in ("x", "X", "b", "B"):
+                if len(token) > 1 and token[0] == "0" and token[1] not in HEXBIN_SUFFIX:
                     token = token[:1] + "o" + token[1:]
                 self.tokens.append(token)
                 token = ""
