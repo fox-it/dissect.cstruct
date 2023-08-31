@@ -335,7 +335,7 @@ def test_enum_anonymous_struct(cs: cstruct, compiled: bool):
     assert t.arr == [255, 0, 0, 10]
 
 
-def test_enum_reference_own_member(cs: cstruct, compiled):
+def test_enum_reference_own_member(cs: cstruct, compiled: bool):
     cdef = """
     enum test {
         A,
