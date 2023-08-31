@@ -16,3 +16,11 @@ class NullPointerDereference(Error):
 
 class ArraySizeError(Error):
     pass
+
+
+class ExpressionParserError(Error):
+    pass
+
+
+class ExpressionTokenizerError(Error):
+    pass

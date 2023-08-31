@@ -114,7 +114,7 @@ def test_struct_expressions(compiled):
     #define const 1
     struct test {
         uint8   flag;
-        uint8   data_1[flag & 1 * 4];
+        uint8   data_1[(flag & 1) * 4];
         uint8   data_2[flag & (1 << 2)];
         uint8   data_3[const];
     };
