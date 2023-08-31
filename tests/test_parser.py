@@ -15,7 +15,6 @@ def test_preserve_comment_newlines():
     #define multi_anchor
     """
     data = TokenParser._remove_comments(cdef)
-    print(repr(data))
 
     mock_token = Mock()
     mock_token.match.string = data

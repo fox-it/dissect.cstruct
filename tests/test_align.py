@@ -286,8 +286,10 @@ def test_align_pointer():
         uint16  d;
     };
     """
-    c = cstruct.cstruct()
+    c = cstruct.cstruct(pointer="uint64")
     c.load(d, align=True)
+
+    assert c.pointer is c.uint64
 
     fields = c.test.fields
     assert c.test.align
