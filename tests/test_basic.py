@@ -39,9 +39,9 @@ def test_type_resolve(cs: cstruct):
         cs.resolve("fake")
     assert "Unknown type" in str(excinfo.value)
 
-    cs.addtype("ref0", "uint32")
+    cs.add_type("ref0", "uint32")
     for i in range(1, 15):  # Recursion limit is currently 10
-        cs.addtype(f"ref{i}", f"ref{i - 1}")
+        cs.add_type(f"ref{i}", f"ref{i - 1}")
 
     with pytest.raises(ResolveError) as excinfo:
         cs.resolve("ref14")
