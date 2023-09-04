@@ -163,7 +163,6 @@ class ReadSourceGenerator:
                 raise TypeError(f"Unsupported type for compiler: {field_type}")
 
             if prev_was_bits and not field.bits:
-                # Reset the bit reader
                 yield "bit_reader.reset()"
                 prev_was_bits = False
                 bits_remaining = 0
@@ -177,26 +176,16 @@ class ReadSourceGenerator:
 
             # Sub structure
             if issubclass(field_type, Structure):
-                # Flush the current block
                 yield from flush()
-
-                # Align if needed
                 yield from align_to_field(field)
-
-                # Yield a structure block
                 yield from self._generate_structure(field)
 
             # Array of structures and multi-dimensional arrays
             elif issubclass(field_type, (Array, CharArray, WcharArray)) and (
                 issubclass(field_type.type, Structure) or isinstance(field_type.type, ArrayMetaType) or is_dynamic
             ):
-                # Flush the current block
                 yield from flush()
-
-                # Align if needed
                 yield from align_to_field(field)
-
-                # Yield a complex array block
                 yield from self._generate_array(field)
 
             # Bit fields
@@ -209,13 +198,8 @@ class ReadSourceGenerator:
                     bits_remaining = (size * 8) - field.bits
                     bits_rollover = True
 
-                # Flush the current block
                 yield from flush()
-
-                # Align if needed
                 yield from align_to_field(field)
-
-                # Yield a bit read block
                 yield from self._generate_bits(field)
 
             # Everything else - basic and composite types (and arrays of them)
@@ -231,7 +215,6 @@ class ReadSourceGenerator:
         yield from flush()
 
         if self.align:
-            # Align the stream
             yield f"stream.seek(-stream.tell() & (cls.alignment - 1), {io.SEEK_CUR})"
 
     def _generate_structure(self, field: Field) -> Iterator[str]:
