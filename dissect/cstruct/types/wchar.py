@@ -24,7 +24,7 @@ class Wchar(str, BaseType):
     @classmethod
     def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> Wchar:
         if count == 0:
-            return ""
+            return type.__call__(cls, "")
 
         if count != EOF:
             count *= 2
@@ -40,8 +40,8 @@ class Wchar(str, BaseType):
         buf = []
         while True:
             point = stream.read(2)
-            if len(point) != 2:
-                raise EOFError("Read 0 bytes, but expected 2")
+            if (bytes_read := len(point)) != 2:
+                raise EOFError(f"Read {bytes_read} bytes, but expected 2")
 
             if point == b"\x00\x00":
                 break
