@@ -72,6 +72,7 @@ class EnumMetaType(EnumMeta, MetaType):
 
 def _fix_alias_members(cls: type[Enum]):
     # Emulate aenum NoAlias behaviour
+    # https://github.com/ethanfurman/aenum/blob/master/aenum/doc/aenum.rst
     if len(cls._member_names_) == len(cls._member_map_):
         return
 

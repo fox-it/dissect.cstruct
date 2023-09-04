@@ -407,7 +407,7 @@ def _generate_struct_info(cs: cstruct, fields: list[Field], align: bool = False)
             current_offset += size
 
 
-def _optimize_struct_fmt(info: Iterator[tuple[Field, int, str]]):
+def _optimize_struct_fmt(info: Iterator[tuple[Field, int, str]]) -> str:
     chars = []
 
     current_count = 0
