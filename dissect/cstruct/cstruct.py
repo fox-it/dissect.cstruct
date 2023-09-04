@@ -209,8 +209,6 @@ class cstruct:
 
         self.typedefs[name] = type_
 
-    addtype = add_type
-
     def load(self, definition: str, deftype: int = None, **kwargs) -> None:
         """Parse structures from the given definitions using the given definition type.
 
