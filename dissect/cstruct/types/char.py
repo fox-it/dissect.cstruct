@@ -15,7 +15,7 @@ class Char(bytes, BaseType):
     @classmethod
     def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> Char:
         if count == 0:
-            return b""
+            return type.__call__(cls, b"")
 
         data = stream.read(-1 if count == EOF else count)
         if count != EOF and len(data) != count:
