@@ -81,7 +81,6 @@ class StructureMetaType(MetaType):
 
             if isinstance(field.type, StructureMetaType) and field.type.__anonymous__:
                 for anon_field in field.type.lookup.values():
-                    # TODO: set setting anonymous field
                     attr = f"{field.name}.{anon_field.name}"
                     classdict[anon_field.name] = property(attrgetter(attr), attrsetter(attr))
 
