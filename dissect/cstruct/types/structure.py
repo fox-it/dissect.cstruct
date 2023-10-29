@@ -537,8 +537,6 @@ class Union(Structure, metaclass=UnionMetaType):
                     nested_value = getattr(value, field.name)
                     proxy = UnionProxy(self, field.name, nested_value)
                     object.__setattr__(value, field.name, proxy)
-                    if hasattr(value, "_values"):
-                        value._values[field.name] = proxy
                     _proxy_structure(nested_value)
 
         _proxy_structure(self)
