@@ -20,7 +20,7 @@ def test_align_struct(cs: cstruct, compiled: bool):
     assert verify_compiled(cs.test, compiled)
 
     fields = cs.test.fields
-    assert cs.test.align
+    assert cs.test.__align__
     assert cs.test.alignment == 8
     assert cs.test.size == 32
     assert fields[0].offset == 0x00
@@ -55,7 +55,7 @@ def test_align_union(cs: cstruct):
     """
     cs.load(cdef, align=True)
 
-    assert cs.test.align
+    assert cs.test.__align__
     assert cs.test.alignment == 8
     assert cs.test.size == 8
 
@@ -88,7 +88,7 @@ def test_align_array(cs: cstruct, compiled: bool):
     assert verify_compiled(cs.test, compiled)
 
     fields = cs.test.fields
-    assert cs.test.align
+    assert cs.test.__align__
     assert cs.test.alignment == 8
     assert cs.test.size == 64
     assert fields[0].offset == 0x00
@@ -133,7 +133,7 @@ def test_align_struct_array(cs: cstruct, compiled: bool):
     assert verify_compiled(cs.array, compiled)
 
     fields = cs.test.fields
-    assert cs.test.align
+    assert cs.test.__align__
     assert cs.test.alignment == 8
     assert cs.test.size == 16
     assert fields[0].offset == 0x00
@@ -299,7 +299,7 @@ def test_align_pointer(cs: cstruct, compiled: bool):
     assert verify_compiled(cs.test, compiled)
 
     fields = cs.test.fields
-    assert cs.test.align
+    assert cs.test.__align__
     assert cs.test.alignment == 8
     assert cs.test.size == 24
     assert fields[0].offset == 0x00

@@ -193,7 +193,7 @@ class cstruct:
         raise AttributeError(f"Invalid attribute: {attr}")
 
     def _next_anonymous(self) -> str:
-        name = f"anonymous_{self._anonymous_count}"
+        name = f"__anonymous_{self._anonymous_count}__"
         self._anonymous_count += 1
         return name
 
@@ -373,8 +373,8 @@ class cstruct:
             None,
             attrs={
                 "fields": fields,
-                "align": align,
-                "anonymous": anonymous,
+                "__align__": align,
+                "__anonymous__": anonymous,
             },
         )
 
