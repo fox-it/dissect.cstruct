@@ -135,7 +135,10 @@ def _dumpstruct(
     ci = 0
     out = [f"struct {structure.name}:"]
     foreground, background = None, None
-    for field in instance._type.fields:
+    for field in instance._type.lookup.values():
+        if getattr(field.type, "anonymous", False):
+            continue
+
         if color:
             foreground, background = colors[ci % len(colors)]
             palette.append((instance._size(field.name), background))
