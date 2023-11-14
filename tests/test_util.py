@@ -23,12 +23,40 @@ def test_hexdump(capsys):
 
 
 def test_dumpstruct(capsys, compiled):
-    cdef_basic = """
+    cdef = """
     struct test {
         uint32 testval;
     };
     """
-    cdef_anonymous = """
+
+    cs = cstruct.cstruct()
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"\x39\x05\x00\x00"
+    obj = cs.test(buf)
+
+    dumpstruct(cs.test, buf)
+    captured_1 = capsys.readouterr()
+
+    dumpstruct(obj)
+    captured_2 = capsys.readouterr()
+
+    assert captured_1.out == captured_2.out
+
+    out_1 = dumpstruct(cs.test, buf, output="string")
+    out_2 = dumpstruct(obj, output="string")
+
+    assert out_1 == out_2
+
+    with pytest.raises(ValueError) as excinfo:
+        dumpstruct(obj, output="generator")
+    assert str(excinfo.value) == "Invalid output argument: 'generator' (should be 'print' or 'string')."
+
+
+def test_dumpstruct_anonymous(capsys, compiled):
+    cdef = """
     struct test {
         struct {
             uint32 testval;
@@ -36,28 +64,27 @@ def test_dumpstruct(capsys, compiled):
     };
     """
 
-    for cdef in [cdef_basic, cdef_anonymous]:
-        cs = cstruct.cstruct()
-        cs.load(cdef, compiled=compiled)
+    cs = cstruct.cstruct()
+    cs.load(cdef, compiled=compiled)
 
-        assert verify_compiled(cs.test, compiled)
+    assert verify_compiled(cs.test, compiled)
 
-        buf = b"\x39\x05\x00\x00"
-        obj = cs.test(buf)
+    buf = b"\x39\x05\x00\x00"
+    obj = cs.test(buf)
 
-        dumpstruct(cs.test, buf)
-        captured_1 = capsys.readouterr()
+    dumpstruct(cs.test, buf)
+    captured_1 = capsys.readouterr()
 
-        dumpstruct(obj)
-        captured_2 = capsys.readouterr()
+    dumpstruct(obj)
+    captured_2 = capsys.readouterr()
 
-        assert captured_1.out == captured_2.out
+    assert captured_1.out == captured_2.out
 
-        out_1 = dumpstruct(cs.test, buf, output="string")
-        out_2 = dumpstruct(obj, output="string")
+    out_1 = dumpstruct(cs.test, buf, output="string")
+    out_2 = dumpstruct(obj, output="string")
 
-        assert out_1 == out_2
+    assert out_1 == out_2
 
-        with pytest.raises(ValueError) as excinfo:
-            dumpstruct(obj, output="generator")
-        assert str(excinfo.value) == "Invalid output argument: 'generator' (should be 'print' or 'string')."
+    with pytest.raises(ValueError) as excinfo:
+        dumpstruct(obj, output="generator")
+    assert str(excinfo.value) == "Invalid output argument: 'generator' (should be 'print' or 'string')."
