@@ -66,7 +66,7 @@ class Compiler:
             return structure
 
         try:
-            structure._read = self.compile_read(structure.fields, structure.__name__, structure.__align__)
+            structure._read = self.compile_read(structure.__fields__, structure.__name__, structure.__align__)
             structure.__compiled__ = True
         except Exception as e:
             # Silently ignore, we didn't compile unfortunately

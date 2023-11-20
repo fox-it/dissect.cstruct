@@ -20,8 +20,8 @@ def TestUnion(cs: cstruct) -> type[Union]:
 def test_union(TestUnion: type[Union]):
     assert issubclass(TestUnion, Union)
     assert len(TestUnion.fields) == 2
-    assert TestUnion.lookup["a"].name == "a"
-    assert TestUnion.lookup["b"].name == "b"
+    assert TestUnion.fields["a"].name == "a"
+    assert TestUnion.fields["b"].name == "b"
 
     assert TestUnion.size == 4
     assert TestUnion.alignment == 4

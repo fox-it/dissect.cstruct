@@ -33,12 +33,16 @@ class StructureMetaType(MetaType):
 
     # TODO: resolve field types in _update_fields, remove resolves elsewhere?
 
-    fields: list[Field]
+    fields: dict[str, Field]
+    """Mapping of field names to :class:`Field` objects, including "folded" fields from anonymous structures."""
     lookup: dict[str, Field]
+    """Mapping of "raw" field names to :class:`Field` objects. E.g. holds the anonymous struct and not its fields."""
+    __fields__: list[Field]
+    """List of :class:`Field` objects for this structure. This is the structures' Single Source Of Truth."""
 
-    __anonymous__: bool
+    # Internal
     __align__: bool
-    __lookup__: dict[str, Field]
+    __anonymous__: bool
     __updating__ = False
     __compiled__ = False
 
@@ -50,16 +54,16 @@ class StructureMetaType(MetaType):
 
     def __call__(cls, *args, **kwargs) -> Structure:
         if (
-            cls.fields
-            and len(args) == len(cls.fields) == 1
+            cls.__fields__
+            and len(args) == len(cls.__fields__) == 1
             and isinstance(args[0], bytes)
-            and issubclass(cls.fields[0].type, bytes)
-            and len(args[0]) == cls.fields[0].type.size
+            and issubclass(cls.__fields__[0].type, bytes)
+            and len(args[0]) == cls.__fields__[0].type.size
         ):
             # Shortcut for single char/bytes type
             return type.__call__(cls, *args, **kwargs)
         elif not args and not kwargs:
-            obj = cls(**{field.name: field.type() for field in cls.fields})
+            obj = cls(**{field.name: field.type() for field in cls.__fields__})
             object.__setattr__(obj, "_values", {})
             object.__setattr__(obj, "_sizes", {})
             return obj
@@ -80,11 +84,11 @@ class StructureMetaType(MetaType):
                 raise ValueError(f"Duplicate field name: {field.name}")
 
             if isinstance(field.type, StructureMetaType) and field.type.__anonymous__:
-                for anon_field in field.type.lookup.values():
+                for anon_field in field.type.fields.values():
                     attr = f"{field.name}.{anon_field.name}"
                     classdict[anon_field.name] = property(attrgetter(attr), attrsetter(attr))
 
-                lookup.update(field.type.lookup)
+                lookup.update(field.type.fields)
             else:
                 lookup[field.name] = field
 
@@ -93,9 +97,9 @@ class StructureMetaType(MetaType):
         num_fields = len(lookup)
         field_names = lookup.keys()
         init_names = raw_lookup.keys()
-        classdict["fields"] = fields
-        classdict["lookup"] = lookup
-        classdict["__lookup__"] = raw_lookup
+        classdict["fields"] = lookup
+        classdict["lookup"] = raw_lookup
+        classdict["__fields__"] = fields
         classdict["__bool__"] = _patch_attributes(_make__bool__(num_fields), field_names, 1)
 
         if issubclass(cls, UnionMetaType) or isinstance(cls, UnionMetaType):
@@ -229,7 +233,7 @@ class StructureMetaType(MetaType):
 
         result = {}
         sizes = {}
-        for field in cls.fields:
+        for field in cls.__fields__:
             offset = stream.tell()
             field_type = cls.cs.resolve(field.type)
 
@@ -283,7 +287,7 @@ class StructureMetaType(MetaType):
         struct_start = stream.tell()
         num = 0
 
-        for field in cls.fields:
+        for field in cls.__fields__:
             field_type = cls.cs.resolve(field.type)
 
             bit_field_type = (
@@ -338,7 +342,7 @@ class StructureMetaType(MetaType):
 
     def add_field(cls, name: str, type_: BaseType, bits: Optional[int] = None, offset: Optional[int] = None) -> None:
         field = Field(name, type_, bits=bits, offset=offset)
-        cls.fields.append(field)
+        cls.__fields__.append(field)
 
         if not cls.__updating__:
             cls.commit()
@@ -353,7 +357,7 @@ class StructureMetaType(MetaType):
             cls.__updating__ = False
 
     def commit(cls) -> None:
-        classdict = cls._update_fields(cls.fields, cls.__align__)
+        classdict = cls._update_fields(cls.__fields__, cls.__align__)
 
         for key, value in classdict.items():
             setattr(cls, key, value)
@@ -378,7 +382,7 @@ class Structure(BaseType, metaclass=StructureMetaType):
         values = " ".join(
             [
                 f"{k}={hex(getattr(self, k)) if issubclass(f.type, int) else repr(getattr(self, k))}"
-                for k, f in self.__class__.lookup.items()
+                for k, f in self.__class__.fields.items()
             ]
         )
         return f"<{self.__class__.__name__} {values}>"
@@ -425,7 +429,7 @@ class UnionMetaType(StructureMetaType):
             offset = 0
             buf = io.BytesIO(stream.read(cls.size))
 
-        for field in cls.fields:
+        for field in cls.__fields__:
             field_type = cls.cs.resolve(field.type)
 
             start = 0
@@ -467,7 +471,7 @@ class UnionMetaType(StructureMetaType):
         expected_offset = offset + len(cls)
 
         # Sort by largest field
-        fields = sorted(cls.fields, key=lambda e: len(e.type), reverse=True)
+        fields = sorted(cls.__fields__, key=lambda e: len(e.type), reverse=True)
         anonymous_struct = False
 
         # Try to write by largest field
@@ -516,7 +520,7 @@ class Union(Structure, metaclass=UnionMetaType):
             cur_buf = b"\x00" * self.__class__.size
 
         buf = io.BytesIO(cur_buf)
-        field = self.__class__.lookup[attr]
+        field = self.__class__.fields[attr]
         if field.offset:
             buf.seek(field.offset)
         field.type._write(buf, getattr(self, attr))
@@ -532,7 +536,7 @@ class Union(Structure, metaclass=UnionMetaType):
 
     def _proxify(self) -> UnionProxy:
         def _proxy_structure(value: Structure) -> UnionProxy:
-            for field in value.__class__.fields:
+            for field in value.__class__.__fields__:
                 if issubclass(field.type, Structure):
                     nested_value = getattr(value, field.name)
                     proxy = UnionProxy(self, field.name, nested_value)
