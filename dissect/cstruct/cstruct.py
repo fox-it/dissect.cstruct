@@ -332,14 +332,15 @@ class cstruct:
         return self._make_type(name, bases, size, alignment=type_.alignment, attrs=attrs)
 
     def _make_int_type(self, name: str, size: int, signed: bool, *, alignment: int = None) -> type[Int]:
-        return self._make_type(name, (Int,), size, attrs={"signed": signed, "alignment": alignment})
+        return self._make_type(name, (Int,), size, alignment=alignment, attrs={"signed": signed})
 
-    def _make_packed_type(self, name: str, packchar: str, base: MetaType, *, alignment: int = None) -> type[Packed]:
+    def _make_packed_type(self, name: str, packchar: str, base: type, *, alignment: int = None) -> type[Packed]:
         return self._make_type(
             name,
             (base, Packed),
             struct.calcsize(packchar),
-            attrs={"packchar": packchar, "alignment": alignment},
+            alignment=alignment,
+            attrs={"packchar": packchar},
         )
 
     def _make_enum(self, name: str, type_: MetaType, values: dict[str, int]) -> type[Enum]:

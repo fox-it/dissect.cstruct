@@ -495,3 +495,13 @@ def test_array_class_name(cs: cstruct):
 
     assert cs.test.fields[0].type.__name__ == "uint8[2]"
     assert cs.test2.fields[1].type.__name__ == "uint8[a + 1]"
+
+
+def test_size_and_aligment(cs: cstruct):
+    test = cs._make_int_type("test", 1, False, alignment=8)
+    assert test.size == 1
+    assert test.alignment == 8
+
+    test = cs._make_packed_type("test", "B", int, alignment=8)
+    assert test.size == 1
+    assert test.alignment == 8
