@@ -188,7 +188,7 @@ class cstruct:
 
         self.typedefs[name] = type_
 
-    def load(self, definition: str, deftype: int = None, **kwargs) -> None:
+    def load(self, definition: str, deftype: int = None, **kwargs) -> "cstruct":
         """Parse structures from the given definitions using the given definition type.
 
         Definitions can be parsed using different parsers. Currently, there's
@@ -211,6 +211,8 @@ class cstruct:
             TokenParser(self, **kwargs).parse(definition)
         elif deftype == cstruct.DEF_LEGACY:
             CStyleParser(self, **kwargs).parse(definition)
+
+        return self
 
     def loadfile(self, path: str, deftype: int = None, **kwargs) -> None:
         """Load structure definitions from a file.
