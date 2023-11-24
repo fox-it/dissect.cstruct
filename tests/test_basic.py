@@ -480,8 +480,7 @@ def test_report_array_size_mismatch(cs: cstruct):
         a.dumps()
 
 
-@pytest.mark.parametrize("compiled", [True, False])
-def test_reserved_keyword(compiled: bool):
+def test_reserved_keyword(cs: cstruct, compiled: bool):
     cdef = """
     struct in {
         uint8 a;
@@ -495,7 +494,6 @@ def test_reserved_keyword(compiled: bool):
         uint8 a;
     };
     """
-    cs = cstruct.cstruct(endian="<")
     cs.load(cdef, compiled=compiled)
 
     for name in ["in", "class", "for"]:
@@ -503,3 +501,20 @@ def test_reserved_keyword(compiled: bool):
         assert verify_compiled(cs.resolve(name), compiled)
 
         assert cs.resolve(name)(b"\x01").a == 1
+
+
+def test_array_class_name(cs: cstruct):
+    cdef = """
+    struct test {
+        uint8   a[2];
+    };
+
+    struct test2 {
+        uint8   a;
+        uint8   b[a + 1];
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test.fields[0].type.__name__ == "uint8[2]"
+    assert cs.test2.fields[1].type.__name__ == "uint8[a + 1]"
