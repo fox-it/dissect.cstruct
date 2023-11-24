@@ -478,3 +478,20 @@ def test_report_array_size_mismatch(cs: cstruct):
 
     with pytest.raises(ArraySizeError):
         a.dumps()
+
+
+def test_array_class_name(cs: cstruct):
+    cdef = """
+    struct test {
+        uint8   a[2];
+    };
+
+    struct test2 {
+        uint8   a;
+        uint8   b[a + 1];
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test.fields[0].type.__name__ == "uint8[2]"
+    assert cs.test2.fields[1].type.__name__ == "uint8[a + 1]"
