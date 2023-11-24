@@ -297,7 +297,13 @@ class cstruct:
         raise ResolveError(f"Recursion limit exceeded while resolving type {name}")
 
     def _make_type(
-        self, name: str, bases: Iterator[object], size: int, *, alignment: int = None, attrs: dict[str, Any] = None
+        self,
+        name: str,
+        bases: Iterator[object],
+        size: Optional[int],
+        *,
+        alignment: int = None,
+        attrs: dict[str, Any] = None,
     ) -> type[BaseType]:
         attrs = attrs or {}
         attrs.update(
@@ -387,7 +393,7 @@ class cstruct:
 def ctypes(structure: Structure) -> _ctypes.Structure:
     """Create ctypes structures from cstruct structures."""
     fields = []
-    for field in structure.fields:
+    for field in structure.__fields__:
         t = ctypes_type(field.type)
         fields.append((field.name, t))
 
