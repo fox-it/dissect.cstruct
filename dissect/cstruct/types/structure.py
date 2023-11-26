@@ -63,7 +63,7 @@ class StructureMetaType(MetaType):
             # Shortcut for single char/bytes type
             return type.__call__(cls, *args, **kwargs)
         elif not args and not kwargs:
-            obj = cls(**{field.name: field.type() for field in cls.__fields__})
+            obj = cls(**{field.name: field.type.default() for field in cls.__fields__})
             object.__setattr__(obj, "_values", {})
             object.__setattr__(obj, "_sizes", {})
             return obj
