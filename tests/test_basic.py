@@ -493,8 +493,8 @@ def test_array_class_name(cs: cstruct):
     """
     cs.load(cdef)
 
-    assert cs.test.fields[0].type.__name__ == "uint8[2]"
-    assert cs.test2.fields[1].type.__name__ == "uint8[a + 1]"
+    assert cs.test.__fields__[0].type.__name__ == "uint8[2]"
+    assert cs.test2.__fields__[1].type.__name__ == "uint8[a + 1]"
 
 
 def test_size_and_aligment(cs: cstruct):
