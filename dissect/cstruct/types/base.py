@@ -92,7 +92,7 @@ class MetaType(type):
         """
         return cls._write(stream, value)
 
-    def dumps(cls: MetaType, value: Any) -> bytes:
+    def dumps(cls, value: Any) -> bytes:
         """Dump a value to a byte string.
 
         Args:
