@@ -67,3 +67,4 @@ class WcharArray(str, BaseType, metaclass=ArrayMetaType):
         if cls.null_terminated:
             data += "\x00"
         return stream.write(data.encode(Wchar.__encoding_map__[cls.cs.endian]))
+Wchar.ArrayType = WcharArray

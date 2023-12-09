@@ -217,3 +217,4 @@ class Array(list, BaseType, metaclass=ArrayMetaType):
             raise ArraySizeError(f"Expected static array size {cls.num_entries}, got {actual_size} instead.")
 
         return cls.type._write_array(stream, data)
+BaseType.ArrayType = Array

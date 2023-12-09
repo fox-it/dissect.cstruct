@@ -67,3 +67,4 @@ class CharArray(bytes, BaseType, metaclass=ArrayMetaType):
         if cls.null_terminated:
             return stream.write(data + b"\x00")
         return stream.write(data)
+Char.ArrayType = CharArray
