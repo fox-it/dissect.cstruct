@@ -6,8 +6,28 @@ from typing import Any, BinaryIO
 from dissect.cstruct.types.base import EOF, ArrayMetaType, BaseType
 
 
+class WcharArray(str, BaseType, metaclass=ArrayMetaType):
+    """Wide-character array type for reading and writing UTF-16 strings."""
+
+    @classmethod
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> WcharArray:
+        return type.__call__(cls, ArrayMetaType._read(cls, stream, context))
+
+    @classmethod
+    def _write(cls, stream: BinaryIO, data: str) -> int:
+        if cls.null_terminated:
+            data += "\x00"
+        return stream.write(data.encode(Wchar.__encoding_map__[cls.cs.endian]))
+
+    @classmethod
+    def default(cls) -> WcharArray:
+        return type.__call__(cls, "\x00" * (0 if cls.dynamic or cls.null_terminated else cls.num_entries))
+
+
 class Wchar(str, BaseType):
     """Wide-character type for reading and writing UTF-16 characters."""
+
+    ArrayType = WcharArray
 
     __encoding_map__ = {
         "@": f"utf-16-{sys.byteorder[0]}e",
@@ -57,21 +77,3 @@ class Wchar(str, BaseType):
     @classmethod
     def default(cls) -> Wchar:
         return type.__call__(cls, "\x00")
-
-
-class WcharArray(str, BaseType, metaclass=ArrayMetaType):
-    """Wide-character array type for reading and writing UTF-16 strings."""
-
-    @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> WcharArray:
-        return type.__call__(cls, ArrayMetaType._read(cls, stream, context))
-
-    @classmethod
-    def _write(cls, stream: BinaryIO, data: str) -> int:
-        if cls.null_terminated:
-            data += "\x00"
-        return stream.write(data.encode(Wchar.__encoding_map__[cls.cs.endian]))
-
-    @classmethod
-    def default(cls) -> WcharArray:
-        return type.__call__(cls, "\x00" * (0 if cls.dynamic or cls.null_terminated else cls.num_entries))

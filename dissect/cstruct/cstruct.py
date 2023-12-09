@@ -333,11 +333,7 @@ class cstruct:
         size = None if (null_terminated or dynamic) else (num_entries * type_.size)
         name = f"{type_.__name__}[]" if null_terminated else f"{type_.__name__}[{num_entries}]"
 
-        bases = (Array,)
-        if issubclass(type_, Char):
-            bases = (CharArray,)
-        elif issubclass(type_, Wchar):
-            bases = (WcharArray,)
+        bases = (type_.ArrayType,)
 
         attrs = {
             "type": type_,

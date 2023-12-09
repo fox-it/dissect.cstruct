@@ -203,6 +203,9 @@ class _overload:
 class BaseType(metaclass=MetaType):
     """Base class for cstruct type classes."""
 
+    # This must be the actual type, but since Array is a subclass of BaseType, we correct this at the bottom of the file
+    ArrayType: type[Array] = "Array"
+
     dumps = _overload(MetaType.dumps)
     write = _overload(MetaType.write)
 
@@ -258,3 +261,7 @@ class Array(list, BaseType, metaclass=ArrayMetaType):
             raise ArraySizeError(f"Expected static array size {cls.num_entries}, got {actual_size} instead.")
 
         return cls.type._write_array(stream, data)
+
+
+# As mentioned in the BaseType class, we correctly set the type here
+BaseType.ArrayType = Array
