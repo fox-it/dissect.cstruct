@@ -5,8 +5,34 @@ from typing import Any, BinaryIO, Union
 from dissect.cstruct.types.base import EOF, ArrayMetaType, BaseType
 
 
+class CharArray(bytes, BaseType, metaclass=ArrayMetaType):
+    """Character array type for reading and writing byte strings."""
+
+    @classmethod
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> CharArray:
+        return type.__call__(cls, ArrayMetaType._read(cls, stream, context))
+
+    @classmethod
+    def _write(cls, stream: BinaryIO, data: bytes) -> int:
+        if isinstance(data, list) and data and isinstance(data[0], int):
+            data = bytes(data)
+
+        if isinstance(data, str):
+            data = data.encode("latin-1")
+
+        if cls.null_terminated:
+            return stream.write(data + b"\x00")
+        return stream.write(data)
+
+    @classmethod
+    def default(cls) -> CharArray:
+        return type.__call__(cls, b"\x00" * (0 if cls.dynamic or cls.null_terminated else cls.num_entries))
+
+
 class Char(bytes, BaseType):
     """Character type for reading and writing bytes."""
+
+    ArrayType = CharArray
 
     @classmethod
     def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Char:
@@ -51,27 +77,3 @@ class Char(bytes, BaseType):
     @classmethod
     def default(cls) -> Char:
         return type.__call__(cls, b"\x00")
-
-
-class CharArray(bytes, BaseType, metaclass=ArrayMetaType):
-    """Character array type for reading and writing byte strings."""
-
-    @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> CharArray:
-        return type.__call__(cls, ArrayMetaType._read(cls, stream, context))
-
-    @classmethod
-    def _write(cls, stream: BinaryIO, data: bytes) -> int:
-        if isinstance(data, list) and data and isinstance(data[0], int):
-            data = bytes(data)
-
-        if isinstance(data, str):
-            data = data.encode("latin-1")
-
-        if cls.null_terminated:
-            return stream.write(data + b"\x00")
-        return stream.write(data)
-
-    @classmethod
-    def default(cls) -> CharArray:
-        return type.__call__(cls, b"\x00" * (0 if cls.dynamic or cls.null_terminated else cls.num_entries))
