@@ -223,7 +223,7 @@ def test_generate_packed_read_composite_types(cs: cstruct, TestEnum: type[Enum])
     s["a"] = 1
 
     _pt = _1
-    r["b"] = _pt.__new__(_pt, data[1], stream, r)
+    r["b"] = _pt.__new__(_pt, data[1], stream, context|r)
     s["b"] = 8
 
     _t = _2
@@ -266,7 +266,7 @@ def test_generate_structure_read(cs: cstruct):
 
     expected = """
     _s = stream.tell()
-    r["a"] = _0._read(stream, context=r)
+    r["a"] = _0._read(stream, context=context|r)
     s["a"] = stream.tell() - _s
     """
 
@@ -282,7 +282,7 @@ def test_generate_structure_read_anonymous(cs: cstruct):
 
     expected = """
     _s = stream.tell()
-    _v = _0._read(stream, context=r)
+    _v = _0._read(stream, context=context|r)
     r.update(_v._values)
     s.update(_v._sizes)
     """
@@ -296,7 +296,7 @@ def test_generate_array_read(cs: cstruct):
 
     expected = """
     _s = stream.tell()
-    r["a"] = _0._read(stream, context=r)
+    r["a"] = _0._read(stream, context=context|r)
     s["a"] = stream.tell() - _s
     """
 

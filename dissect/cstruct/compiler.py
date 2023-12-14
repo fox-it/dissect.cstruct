@@ -107,6 +107,8 @@ class ReadSourceGenerator:
 
     def generate_source(self) -> str:
         preamble = """
+        if context is None:
+            context = {}
         r = {}
         s = {}
         """
@@ -221,14 +223,14 @@ class ReadSourceGenerator:
         if field.type.anonymous:
             template = f"""
             _s = stream.tell()
-            _v = {self._map_field(field)}._read(stream, context=r)
+            _v = {self._map_field(field)}._read(stream, context=context|r)
             r.update(_v._values)
             s.update(_v._sizes)
             """
         else:
             template = f"""
             _s = stream.tell()
-            r["{field.name}"] = {self._map_field(field)}._read(stream, context=r)
+            r["{field.name}"] = {self._map_field(field)}._read(stream, context=context|r)
             s["{field.name}"] = stream.tell() - _s
             """
 
@@ -237,7 +239,7 @@ class ReadSourceGenerator:
     def _generate_array(self, field: Field) -> Iterator[str]:
         template = f"""
         _s = stream.tell()
-        r["{field.name}"] = {self._map_field(field)}._read(stream, context=r)
+        r["{field.name}"] = {self._map_field(field)}._read(stream, context=context|r)
         s["{field.name}"] = stream.tell() - _s
         """
 
@@ -310,7 +312,7 @@ class ReadSourceGenerator:
                     item_parser = parser_template.format(type="_et", getter=f"_b[i:i + {field_type.type.size}]")
                     list_comp = f"[{item_parser} for i in range(0, {count}, {field_type.type.size})]"
                 elif issubclass(field_type.type, Pointer):
-                    item_parser = "_et.__new__(_et, e, stream, r)"
+                    item_parser = "_et.__new__(_et, e, stream, context|r)"
                     list_comp = f"[{item_parser} for e in {getter}]"
                 else:
                     item_parser = parser_template.format(type="_et", getter="e")
@@ -321,7 +323,7 @@ class ReadSourceGenerator:
                 parser = f"type.__call__({self._map_field(field)}, {getter})"
             elif issubclass(field_type, Pointer):
                 reads.append(f"_pt = {self._map_field(field)}")
-                parser = f"_pt.__new__(_pt, {getter}, stream, r)"
+                parser = f"_pt.__new__(_pt, {getter}, stream, context|r)"
             else:
                 parser = parser_template.format(type=self._map_field(field), getter=getter)
 

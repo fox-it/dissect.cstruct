@@ -209,6 +209,8 @@ class StructureMetaType(MetaType):
         bit_buffer = BitBuffer(stream, cls.cs.endian)
         struct_start = stream.tell()
 
+        if context is None:
+            context = {}
         result = {}
         sizes = {}
         for field in cls.fields:
@@ -237,7 +239,7 @@ class StructureMetaType(MetaType):
             else:
                 bit_buffer.reset()
 
-            value = field_type._read(stream, result)
+            value = field_type._read(stream, context|result)
 
             if isinstance(field_type, StructureMetaType) and field_type.anonymous:
                 sizes.update(value._sizes)
@@ -387,6 +389,8 @@ class UnionMetaType(StructureMetaType):
         return size, alignment
 
     def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Union:
+        if context is None:
+            context = {}
         result = {}
         sizes = {}
 
@@ -405,7 +409,7 @@ class UnionMetaType(StructureMetaType):
                 start = field.offset
 
             buf.seek(offset + start)
-            value = field_type._read(buf, result)
+            value = field_type._read(buf, context|result)
 
             if isinstance(field_type, StructureMetaType) and field_type.anonymous:
                 sizes.update(value._sizes)
