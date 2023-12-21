@@ -17,9 +17,13 @@ class MetaType(type):
     """Base metaclass for cstruct type classes."""
 
     cs: cstruct
-    size: int
+    """The cstruct instance this type class belongs to."""
+    size: Optional[int]
+    """The size of the type in bytes. Can be ``None`` for dynamic sized types."""
     dynamic: bool
+    """Whether or not the type is dynamically sized."""
     alignment: int
+    """The alignment of the type in bytes."""
 
     def __call__(cls, *args, **kwargs) -> Union[MetaType, BaseType]:
         """Adds support for ``TypeClass(bytes | file-like object)`` parsing syntax."""

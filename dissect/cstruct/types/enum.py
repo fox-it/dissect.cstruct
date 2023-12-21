@@ -15,13 +15,16 @@ class EnumMetaType(EnumMeta, MetaType):
 
     def __call__(
         cls,
-        value: Union[cstruct, int, BinaryIO, bytes],
+        value: Union[cstruct, int, BinaryIO, bytes] = None,
         name: Optional[str] = None,
         type_: Optional[MetaType] = None,
         *args,
         **kwargs,
     ):
         if name is None:
+            if value is None:
+                value = cls.type()
+
             if not isinstance(value, int):
                 # value is a parsable value
                 value = cls.type(value)

@@ -137,7 +137,7 @@ def _dumpstruct(
     ci = 0
     out = [f"struct {structure.__class__.__name__}:"]
     foreground, background = None, None
-    for field in structure.__class__.fields:
+    for field in structure.__class__.__fields__:
         if getattr(field.type, "anonymous", False):
             continue
 
