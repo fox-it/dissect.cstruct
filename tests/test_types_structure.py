@@ -25,8 +25,8 @@ def TestStruct(cs: cstruct) -> type[Structure]:
 def test_structure(TestStruct: type[Structure]):
     assert issubclass(TestStruct, Structure)
     assert len(TestStruct.fields) == 2
-    assert TestStruct.lookup["a"].name == "a"
-    assert TestStruct.lookup["b"].name == "b"
+    assert TestStruct.fields["a"].name == "a"
+    assert TestStruct.fields["b"].name == "b"
 
     assert TestStruct.size == 8
     assert TestStruct.alignment == 4
@@ -222,8 +222,8 @@ def test_structure_definitions(cs: cstruct, compiled: bool):
     assert cs.test.__name__ == "_test"
     assert cs._test.__name__ == "_test"
 
-    assert "a" in cs.test.lookup
-    assert "b" in cs.test.lookup
+    assert "a" in cs.test.fields
+    assert "b" in cs.test.fields
 
     with pytest.raises(ParserError):
         cdef = """
@@ -539,5 +539,5 @@ def test_structure_definition_self(cs: cstruct):
     """
     cs.load(cdef)
 
-    assert issubclass(cs.test.fields[1].type, Pointer)
-    assert cs.test.fields[1].type.type is cs.test
+    assert issubclass(cs.test.fields["b"].type, Pointer)
+    assert cs.test.fields["b"].type.type is cs.test
