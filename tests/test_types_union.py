@@ -20,8 +20,8 @@ def TestUnion(cs: cstruct) -> type[Union]:
 def test_union(TestUnion: type[Union]):
     assert issubclass(TestUnion, Union)
     assert len(TestUnion.fields) == 2
-    assert TestUnion.lookup["a"].name == "a"
-    assert TestUnion.lookup["b"].name == "b"
+    assert TestUnion.fields["a"].name == "a"
+    assert TestUnion.fields["b"].name == "b"
 
     assert TestUnion.size == 4
     assert TestUnion.alignment == 4
@@ -269,3 +269,69 @@ def test_union_definition_dynamic(cs: cstruct):
     assert obj.a.size == 9
     assert obj.a.data == b"aaaaaaaaa"
     assert obj.b == 0x6161616161616109
+
+
+def test_union_update(cs: cstruct):
+    cdef = """
+    union test {
+        uint8   a;
+        uint16  b;
+    };
+    """
+    cs.load(cdef)
+
+    obj = cs.test()
+    obj.a = 1
+    assert obj.b == 1
+    obj.b = 2
+    assert obj.a == 2
+    obj.b = 0xFFFF
+    assert obj.a == 0xFF
+    assert obj.dumps() == b"\xFF\xFF"
+
+
+def test_union_nested_update(cs: cstruct):
+    cdef = """
+    struct test {
+        char magic[4];
+        union {
+            struct {
+                uint32 a;
+                uint32 b;
+            } a;
+            struct {
+                char   b[8];
+            } b;
+        } c;
+    };
+    """
+    cs.load(cdef)
+
+    obj = cs.test()
+    obj.magic = b"1337"
+    obj.c.b.b = b"ABCDEFGH"
+    assert obj.c.a.a == 0x44434241
+    assert obj.c.a.b == 0x48474645
+    assert obj.dumps() == b"1337ABCDEFGH"
+
+
+def test_union_anonymous_update(cs: cstruct):
+    cdef = """
+    typedef struct test
+    {
+        union {
+            uint32 a;
+            struct
+            {
+                char b[3];
+                char c;
+            };
+        };
+        uint32 d;
+    }
+    """
+    cs.load(cdef)
+
+    obj = cs.test()
+    obj.a = 0x41414141
+    assert obj.b == b"AAA"

@@ -219,7 +219,7 @@ class TokenParser(Parser):
             if self.compiled and "nocompile" not in tokens.flags:
                 st = compiler.compile(st)
         else:
-            st.fields.extend(fields)
+            st.__fields__.extend(fields)
             st.commit()
 
         # This is pretty dirty
