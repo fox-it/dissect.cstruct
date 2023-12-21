@@ -19,8 +19,8 @@ def test_align_struct(cs: cstruct, compiled: bool):
 
     assert verify_compiled(cs.test, compiled)
 
-    fields = cs.test.fields
-    assert cs.test.align
+    fields = cs.test.__fields__
+    assert cs.test.__align__
     assert cs.test.alignment == 8
     assert cs.test.size == 32
     assert fields[0].offset == 0x00
@@ -41,7 +41,7 @@ def test_align_struct(cs: cstruct, compiled: bool):
     assert fh.tell() == 32
 
     for name, value in obj._values.items():
-        assert cs.test.lookup[name].offset == value
+        assert cs.test.fields[name].offset == value
 
     assert obj.dumps() == buf
 
@@ -55,7 +55,7 @@ def test_align_union(cs: cstruct):
     """
     cs.load(cdef, align=True)
 
-    assert cs.test.align
+    assert cs.test.__align__
     assert cs.test.alignment == 8
     assert cs.test.size == 8
 
@@ -87,8 +87,8 @@ def test_align_array(cs: cstruct, compiled: bool):
 
     assert verify_compiled(cs.test, compiled)
 
-    fields = cs.test.fields
-    assert cs.test.align
+    fields = cs.test.__fields__
+    assert cs.test.__align__
     assert cs.test.alignment == 8
     assert cs.test.size == 64
     assert fields[0].offset == 0x00
@@ -132,8 +132,8 @@ def test_align_struct_array(cs: cstruct, compiled: bool):
     assert verify_compiled(cs.test, compiled)
     assert verify_compiled(cs.array, compiled)
 
-    fields = cs.test.fields
-    assert cs.test.align
+    fields = cs.test.__fields__
+    assert cs.test.__align__
     assert cs.test.alignment == 8
     assert cs.test.size == 16
     assert fields[0].offset == 0x00
@@ -177,7 +177,7 @@ def test_align_dynamic(cs: cstruct, compiled: bool):
 
     assert verify_compiled(cs.test, compiled)
 
-    fields = cs.test.fields
+    fields = cs.test.__fields__
     assert fields[0].offset == 0
     assert fields[1].offset == 2
     assert fields[2].offset is None
@@ -221,7 +221,7 @@ def test_align_nested_struct(cs: cstruct, compiled: bool):
 
     assert verify_compiled(cs.test, compiled)
 
-    fields = cs.test.fields
+    fields = cs.test.__fields__
     assert fields[0].offset == 0x00
     assert fields[1].offset == 0x08
     assert fields[2].offset == 0x18
@@ -257,7 +257,7 @@ def test_align_bitfield(cs: cstruct, compiled: bool):
 
     assert verify_compiled(cs.test, compiled)
 
-    fields = cs.test.fields
+    fields = cs.test.__fields__
     assert fields[0].offset == 0x00
     assert fields[1].offset is None
     assert fields[2].offset == 0x08
@@ -298,8 +298,8 @@ def test_align_pointer(cs: cstruct, compiled: bool):
 
     assert verify_compiled(cs.test, compiled)
 
-    fields = cs.test.fields
-    assert cs.test.align
+    fields = cs.test.__fields__
+    assert cs.test.__align__
     assert cs.test.alignment == 8
     assert cs.test.size == 24
     assert fields[0].offset == 0x00

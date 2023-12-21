@@ -66,7 +66,7 @@ class Compiler:
             return structure
 
         try:
-            structure._read = self.compile_read(structure.fields, structure.__name__, structure.align)
+            structure._read = self.compile_read(structure.__fields__, structure.__name__, structure.__align__)
             structure.__compiled__ = True
         except Exception as e:
             # Silently ignore, we didn't compile unfortunately
@@ -218,19 +218,11 @@ class ReadSourceGenerator:
             yield f"stream.seek(-stream.tell() & (cls.alignment - 1), {io.SEEK_CUR})"
 
     def _generate_structure(self, field: Field) -> Iterator[str]:
-        if field.type.anonymous:
-            template = f"""
-            _s = stream.tell()
-            _v = {self._map_field(field)}._read(stream, context=r)
-            r.update(_v._values)
-            s.update(_v._sizes)
-            """
-        else:
-            template = f"""
-            _s = stream.tell()
-            r["{field.name}"] = {self._map_field(field)}._read(stream, context=r)
-            s["{field.name}"] = stream.tell() - _s
-            """
+        template = f"""
+        _s = stream.tell()
+        r["{field.name}"] = {self._map_field(field)}._read(stream, context=r)
+        s["{field.name}"] = stream.tell() - _s
+        """
 
         yield dedent(template)
 

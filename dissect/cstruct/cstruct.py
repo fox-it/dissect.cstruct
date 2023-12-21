@@ -193,7 +193,7 @@ class cstruct:
         raise AttributeError(f"Invalid attribute: {attr}")
 
     def _next_anonymous(self) -> str:
-        name = f"anonymous_{self._anonymous_count}"
+        name = f"__anonymous_{self._anonymous_count}__"
         self._anonymous_count += 1
         return name
 
@@ -297,7 +297,13 @@ class cstruct:
         raise ResolveError(f"Recursion limit exceeded while resolving type {name}")
 
     def _make_type(
-        self, name: str, bases: Iterator[object], size: int, *, alignment: int = None, attrs: dict[str, Any] = None
+        self,
+        name: str,
+        bases: Iterator[object],
+        size: Optional[int],
+        *,
+        alignment: int = None,
+        attrs: dict[str, Any] = None,
     ) -> type[BaseType]:
         attrs = attrs or {}
         attrs.update(
@@ -373,8 +379,8 @@ class cstruct:
             None,
             attrs={
                 "fields": fields,
-                "align": align,
-                "anonymous": anonymous,
+                "__align__": align,
+                "__anonymous__": anonymous,
             },
         )
 
@@ -387,7 +393,7 @@ class cstruct:
 def ctypes(structure: Structure) -> _ctypes.Structure:
     """Create ctypes structures from cstruct structures."""
     fields = []
-    for field in structure.fields:
+    for field in structure.__fields__:
         t = ctypes_type(field.type)
         fields.append((field.name, t))
 

@@ -3,9 +3,10 @@ from __future__ import annotations
 import io
 from contextlib import contextmanager
 from functools import lru_cache
+from operator import attrgetter
 from textwrap import dedent
 from types import FunctionType
-from typing import Any, BinaryIO, ContextManager, Optional
+from typing import Any, BinaryIO, Callable, ContextManager, Optional
 
 from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.types.base import BaseType, MetaType
@@ -15,7 +16,7 @@ from dissect.cstruct.types.enum import EnumMetaType
 class Field:
     """Structure field."""
 
-    def __init__(self, name: str, type_: BaseType, bits: int = None, offset: int = None):
+    def __init__(self, name: str, type_: MetaType, bits: int = None, offset: int = None):
         self.name = name
         self.type = type_
         self.bits = bits
@@ -32,11 +33,16 @@ class StructureMetaType(MetaType):
 
     # TODO: resolve field types in _update_fields, remove resolves elsewhere?
 
-    anonymous: bool
-    align: bool
-    fields: list[Field]
+    fields: dict[str, Field]
+    """Mapping of field names to :class:`Field` objects, including "folded" fields from anonymous structures."""
     lookup: dict[str, Field]
-    __lookup__: dict[str, Field]
+    """Mapping of "raw" field names to :class:`Field` objects. E.g. holds the anonymous struct and not its fields."""
+    __fields__: list[Field]
+    """List of :class:`Field` objects for this structure. This is the structures' Single Source Of Truth."""
+
+    # Internal
+    __align__: bool
+    __anonymous__: bool
     __updating__ = False
     __compiled__ = False
 
@@ -48,14 +54,20 @@ class StructureMetaType(MetaType):
 
     def __call__(cls, *args, **kwargs) -> Structure:
         if (
-            cls.fields
-            and len(args) == len(cls.fields) == 1
+            cls.__fields__
+            and len(args) == len(cls.__fields__) == 1
             and isinstance(args[0], bytes)
-            and issubclass(cls.fields[0].type, bytes)
-            and len(args[0]) == cls.fields[0].type.size
+            and issubclass(cls.__fields__[0].type, bytes)
+            and len(args[0]) == cls.__fields__[0].type.size
         ):
             # Shortcut for single char/bytes type
             return type.__call__(cls, *args, **kwargs)
+        elif not args and not kwargs:
+            obj = cls(**{field.name: field.type() for field in cls.__fields__})
+            object.__setattr__(obj, "_values", {})
+            object.__setattr__(obj, "_sizes", {})
+            return obj
+
         return super().__call__(*args, **kwargs)
 
     def _update_fields(
@@ -65,12 +77,18 @@ class StructureMetaType(MetaType):
 
         lookup = {}
         raw_lookup = {}
+        init_names = []
+        field_names = []
         for field in fields:
             if field.name in lookup and field.name != "_":
                 raise ValueError(f"Duplicate field name: {field.name}")
 
-            if isinstance(field.type, StructureMetaType) and field.type.anonymous:
-                lookup.update(field.type.lookup)
+            if isinstance(field.type, StructureMetaType) and field.type.__anonymous__:
+                for anon_field in field.type.fields.values():
+                    attr = f"{field.name}.{anon_field.name}"
+                    classdict[anon_field.name] = property(attrgetter(attr), attrsetter(attr))
+
+                lookup.update(field.type.fields)
             else:
                 lookup[field.name] = field
 
@@ -78,16 +96,20 @@ class StructureMetaType(MetaType):
 
         num_fields = len(lookup)
         field_names = lookup.keys()
-        classdict["fields"] = fields
-        classdict["lookup"] = lookup
-        classdict["__lookup__"] = raw_lookup
-        classdict["__init__"] = _patch_args_and_attributes(_make__init__(num_fields), field_names)
+        init_names = raw_lookup.keys()
+        classdict["fields"] = lookup
+        classdict["lookup"] = raw_lookup
+        classdict["__fields__"] = fields
         classdict["__bool__"] = _patch_attributes(_make__bool__(num_fields), field_names, 1)
 
-        if issubclass(cls, UnionMetaType):
+        if issubclass(cls, UnionMetaType) or isinstance(cls, UnionMetaType):
+            classdict["__init__"] = _patch_setattr_args_and_attributes(
+                _make_setattr__init__(len(init_names)), init_names
+            )
             # Not a great way to do this but it works for now
             classdict["__eq__"] = Union.__eq__
         else:
+            classdict["__init__"] = _patch_args_and_attributes(_make__init__(len(init_names)), init_names)
             classdict["__eq__"] = _patch_attributes(_make__eq__(num_fields), field_names, 1)
 
         # If we're calling this as a class method or a function on the metaclass
@@ -101,13 +123,13 @@ class StructureMetaType(MetaType):
             from dissect.cstruct import compiler
 
             try:
-                classdict["_read"] = compiler.Compiler(cls.cs).compile_read(fields, cls.__name__, align=cls.align)
-
+                classdict["_read"] = compiler.Compiler(cls.cs).compile_read(fields, cls.__name__, align=cls.__align__)
                 classdict["__compiled__"] = True
             except Exception:
                 # Revert _read to the slower loop based method
                 classdict["_read"] = classmethod(StructureMetaType._read)
                 classdict["__compiled__"] = False
+
         # TODO: compile _write
         # TODO: generate cached_property for lazy reading
 
@@ -211,7 +233,7 @@ class StructureMetaType(MetaType):
 
         result = {}
         sizes = {}
-        for field in cls.fields:
+        for field in cls.__fields__:
             offset = stream.tell()
             field_type = cls.cs.resolve(field.type)
 
@@ -220,7 +242,7 @@ class StructureMetaType(MetaType):
                 offset = struct_start + field.offset
                 stream.seek(offset)
 
-            if cls.align and field.offset is None:
+            if cls.__align__ and field.offset is None:
                 # Previous field was dynamically sized and we need to align
                 offset += -offset & (field.alignment - 1)
                 stream.seek(offset)
@@ -239,15 +261,11 @@ class StructureMetaType(MetaType):
 
             value = field_type._read(stream, result)
 
-            if isinstance(field_type, StructureMetaType) and field_type.anonymous:
-                sizes.update(value._sizes)
-                result.update(value._values)
-            else:
-                if field.name:
-                    sizes[field.name] = stream.tell() - offset
-                    result[field.name] = value
+            if field.name:
+                sizes[field.name] = stream.tell() - offset
+                result[field.name] = value
 
-        if cls.align:
+        if cls.__align__:
             # Align the stream
             stream.seek(-stream.tell() & (cls.alignment - 1), io.SEEK_CUR)
 
@@ -269,7 +287,7 @@ class StructureMetaType(MetaType):
         struct_start = stream.tell()
         num = 0
 
-        for field in cls.fields:
+        for field in cls.__fields__:
             field_type = cls.cs.resolve(field.type)
 
             bit_field_type = (
@@ -290,7 +308,7 @@ class StructureMetaType(MetaType):
                 stream.write(b"\x00" * (struct_start + field.offset - offset))
                 offset = struct_start + field.offset
 
-            if cls.align and field.offset is None:
+            if cls.__align__ and field.offset is None:
                 is_bitbuffer_boundary = bit_buffer._type and (
                     bit_buffer._remaining == 0 or bit_buffer._type != field_type
                 )
@@ -310,16 +328,13 @@ class StructureMetaType(MetaType):
                 else:
                     bit_buffer.write(field_type, value, field.bits)
             else:
-                if isinstance(field_type, StructureMetaType) and field_type.anonymous:
-                    field_type._write(stream, data)
-                else:
-                    field_type._write(stream, value)
+                field_type._write(stream, value)
                 num += stream.tell() - offset
 
         if bit_buffer._type is not None:
             bit_buffer.flush()
 
-        if cls.align:
+        if cls.__align__:
             # Align the stream
             stream.write(b"\x00" * (-stream.tell() & (cls.alignment - 1)))
 
@@ -327,7 +342,7 @@ class StructureMetaType(MetaType):
 
     def add_field(cls, name: str, type_: BaseType, bits: Optional[int] = None, offset: Optional[int] = None) -> None:
         field = Field(name, type_, bits=bits, offset=offset)
-        cls.fields.append(field)
+        cls.__fields__.append(field)
 
         if not cls.__updating__:
             cls.commit()
@@ -342,7 +357,7 @@ class StructureMetaType(MetaType):
             cls.__updating__ = False
 
     def commit(cls) -> None:
-        classdict = cls._update_fields(cls.fields, cls.align)
+        classdict = cls._update_fields(cls.__fields__, cls.__align__)
 
         for key, value in classdict.items():
             setattr(cls, key, value)
@@ -363,9 +378,26 @@ class Structure(BaseType, metaclass=StructureMetaType):
     def __getitem__(self, item: str) -> Any:
         return getattr(self, item)
 
+    def __repr__(self) -> str:
+        values = " ".join(
+            [
+                f"{k}={hex(getattr(self, k)) if issubclass(f.type, int) else repr(getattr(self, k))}"
+                for k, f in self.__class__.fields.items()
+            ]
+        )
+        return f"<{self.__class__.__name__} {values}>"
+
 
 class UnionMetaType(StructureMetaType):
     """Base metaclass for cstruct union type classes."""
+
+    def __call__(cls, *args, **kwargs) -> Union:
+        obj = super().__call__(*args, **kwargs)
+        if kwargs:
+            # Calling with kwargs means we are initializing with values
+            # Proxify all values
+            obj._proxify()
+        return obj
 
     def _calculate_size_and_offsets(cls, fields: list[Field], align: bool = False) -> tuple[Optional[int], int]:
         size = 0
@@ -386,7 +418,7 @@ class UnionMetaType(StructureMetaType):
 
         return size, alignment
 
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Union:
+    def _read_fields(cls, stream: BinaryIO, context: dict[str, Any] = None) -> tuple[dict[str, Any], dict[str, int]]:
         result = {}
         sizes = {}
 
@@ -397,7 +429,7 @@ class UnionMetaType(StructureMetaType):
             offset = 0
             buf = io.BytesIO(stream.read(cls.size))
 
-        for field in cls.fields:
+        for field in cls.__fields__:
             field_type = cls.cs.resolve(field.type)
 
             start = 0
@@ -407,16 +439,31 @@ class UnionMetaType(StructureMetaType):
             buf.seek(offset + start)
             value = field_type._read(buf, result)
 
-            if isinstance(field_type, StructureMetaType) and field_type.anonymous:
-                sizes.update(value._sizes)
-                result.update(value._values)
-            else:
-                sizes[field.name] = buf.tell() - start
-                result[field.name] = value
+            sizes[field.name] = buf.tell() - start
+            result[field.name] = value
 
-        obj = cls(**result)
-        obj._sizes = sizes
-        obj._values = result
+        return result, sizes
+
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Union:
+        if cls.size is None:
+            start = stream.tell()
+            result, sizes = cls._read_fields(stream, context)
+            size = stream.tell() - start
+            stream.seek(start)
+            buf = stream.read(size)
+        else:
+            result = {}
+            sizes = {}
+            buf = stream.read(cls.size)
+
+        obj: Union = cls(**result)
+        object.__setattr__(obj, "_values", result)
+        object.__setattr__(obj, "_sizes", sizes)
+        object.__setattr__(obj, "_buf", buf)
+
+        if cls.size is not None:
+            obj._update()
+
         return obj
 
     def _write(cls, stream: BinaryIO, data: Union) -> int:
@@ -424,12 +471,12 @@ class UnionMetaType(StructureMetaType):
         expected_offset = offset + len(cls)
 
         # Sort by largest field
-        fields = sorted(cls.fields, key=lambda e: len(e.type), reverse=True)
+        fields = sorted(cls.__fields__, key=lambda e: len(e.type), reverse=True)
         anonymous_struct = False
 
         # Try to write by largest field
         for field in fields:
-            if isinstance(field.type, StructureMetaType) and field.type.anonymous:
+            if isinstance(field.type, StructureMetaType) and field.type.__anonymous__:
                 # Prefer to write regular fields initially
                 anonymous_struct = field.type
                 continue
@@ -456,8 +503,89 @@ class UnionMetaType(StructureMetaType):
 class Union(Structure, metaclass=UnionMetaType):
     """Base class for cstruct union type classes."""
 
+    _buf: bytes
+
     def __eq__(self, other: Any) -> bool:
         return self.__class__ is other.__class__ and bytes(self) == bytes(other)
+
+    def __setattr__(self, attr: str, value: Any) -> None:
+        if self.__class__.dynamic:
+            raise NotImplementedError("Modifying a dynamic union is not yet supported")
+
+        super().__setattr__(attr, value)
+        self._rebuild(attr)
+
+    def _rebuild(self, attr: str) -> None:
+        if (cur_buf := getattr(self, "_buf", None)) is None:
+            cur_buf = b"\x00" * self.__class__.size
+
+        buf = io.BytesIO(cur_buf)
+        field = self.__class__.fields[attr]
+        if field.offset:
+            buf.seek(field.offset)
+        field.type._write(buf, getattr(self, attr))
+
+        object.__setattr__(self, "_buf", buf.getvalue())
+        self._update()
+
+    def _update(self) -> None:
+        result, sizes = self.__class__._read_fields(io.BytesIO(self._buf))
+        self.__dict__.update(result)
+        object.__setattr__(self, "_values", result)
+        object.__setattr__(self, "_sizes", sizes)
+
+    def _proxify(self) -> None:
+        def _proxy_structure(value: Structure) -> None:
+            for field in value.__class__.__fields__:
+                if issubclass(field.type, Structure):
+                    nested_value = getattr(value, field.name)
+                    proxy = UnionProxy(self, field.name, nested_value)
+                    object.__setattr__(value, field.name, proxy)
+                    _proxy_structure(nested_value)
+
+        _proxy_structure(self)
+
+
+class UnionProxy:
+    __union__: Union
+    __attr__: str
+    __target__: Structure
+
+    def __init__(self, union: Union, attr: str, target: Structure):
+        object.__setattr__(self, "__union__", union)
+        object.__setattr__(self, "__attr__", attr)
+        object.__setattr__(self, "__target__", target)
+
+    def __len__(self) -> int:
+        return len(self.__target__.dumps())
+
+    def __bytes__(self) -> bytes:
+        return self.__target__.dumps()
+
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self.__target__, item)
+
+    def __repr__(self) -> str:
+        return repr(self.__target__)
+
+    def __getattr__(self, attr: str) -> Any:
+        return getattr(self.__target__, attr)
+
+    def __setattr__(self, attr: str, value: Any) -> None:
+        setattr(self.__target__, attr, value)
+        self.__union__._rebuild(self.__attr__)
+
+
+def attrsetter(path: str) -> Callable[[Any], Any]:
+    path, _, attr = path.rpartition(".")
+    path = path.split(".")
+
+    def _func(obj: Any, value: Any) -> Any:
+        for name in path:
+            obj = getattr(obj, name)
+        setattr(obj, attr, value)
+
+    return _func
 
 
 def _codegen(func: FunctionType) -> FunctionType:
@@ -482,6 +610,17 @@ def _patch_args_and_attributes(func: FunctionType, fields: list[str], start: int
     )
 
 
+def _patch_setattr_args_and_attributes(func: FunctionType, fields: list[str], start: int = 0) -> FunctionType:
+    return type(func)(
+        func.__code__.replace(
+            co_consts=(None, *fields),
+            co_varnames=("self", *fields),
+        ),
+        func.__globals__,
+        argdefs=func.__defaults__,
+    )
+
+
 def _patch_attributes(func: FunctionType, fields: list[str], start: int = 0) -> FunctionType:
     return type(func)(
         func.__code__.replace(co_names=(*func.__code__.co_names[:start], *fields)),
@@ -492,10 +631,19 @@ def _patch_attributes(func: FunctionType, fields: list[str], start: int = 0) -> 
 @_codegen
 def _make__init__(fields: list[str]) -> str:
     field_args = ", ".join(f"{field} = None" for field in fields)
-    field_init = "\n".join(f" self.{name} = {name}" for name in fields) or " pass"
+    field_init = "\n".join(f" self.{name} = {name}" for name in fields)
 
     code = f"def __init__(self{', ' + field_args if field_args else ''}):\n"
-    return code + field_init
+    return code + (field_init or " pass")
+
+
+@_codegen
+def _make_setattr__init__(fields: list[str]) -> str:
+    field_args = ", ".join(f"{field} = None" for field in fields)
+    field_init = "\n".join(f" object.__setattr__(self, {name!r}, {name})" for name in fields)
+
+    code = f"def __init__(self{', ' + field_args if field_args else ''}):\n"
+    return code + (field_init or " pass")
 
 
 @_codegen
