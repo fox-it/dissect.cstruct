@@ -535,7 +535,7 @@ class Union(Structure, metaclass=UnionMetaType):
         object.__setattr__(self, "_sizes", sizes)
 
     def _proxify(self) -> None:
-        def _proxy_structure(value: Structure) -> UnionProxy:
+        def _proxy_structure(value: Structure) -> None:
             for field in value.__class__.__fields__:
                 if issubclass(field.type, Structure):
                     nested_value = getattr(value, field.name)
