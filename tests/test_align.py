@@ -73,7 +73,7 @@ def test_align_union(cs: cstruct):
     assert obj.dumps() == buf
 
 
-def test_align_union_tail(cs: cstruct, compiled: bool):
+def test_align_union_tail(cs: cstruct):
     cdef = """
     union test {
         uint64 a;
@@ -82,9 +82,7 @@ def test_align_union_tail(cs: cstruct, compiled: bool):
     """
     cs.load(cdef, align=True)
 
-    assert verify_compiled(cs.test, compiled)
-
-    assert cs.test.align
+    assert cs.test.__align__
     assert cs.test.alignment == 8
     assert cs.test.size == 16
 
