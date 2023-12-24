@@ -528,3 +528,20 @@ def test_size_and_aligment(cs: cstruct):
     test = cs._make_packed_type("test", "B", int, alignment=8)
     assert test.size == 1
     assert test.alignment == 8
+
+
+def test_dynamic_substruct_size(cs: cstruct):
+    cdef = """
+    struct {
+        int32 len;
+        char str[len];
+    } sub;
+
+    struct {
+        sub data[1];
+    } test;
+    """
+    cs.load(cdef)
+
+    assert cs.sub.dynamic
+    assert cs.test.dynamic
