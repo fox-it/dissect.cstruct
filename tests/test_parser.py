@@ -56,3 +56,20 @@ def test_typedef_types(cs: cstruct):
 
     with pytest.raises(ParserError, match="line 1: typedefs cannot have bitfields"):
         cs.load("""typedef uint8 with_bits : 4;""")
+
+
+def test_dynamic_substruct_size(cs: cstruct):
+    cdef = """
+    struct {
+        int32 len;
+        char str[len];
+    } sub;
+
+    struct {
+        sub data[1];
+    } test;
+    """
+    cs.load(cdef)
+
+    assert cs.sub.dynamic
+    assert cs.test.dynamic
