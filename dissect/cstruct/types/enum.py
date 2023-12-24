@@ -39,6 +39,7 @@ class EnumMetaType(EnumMeta, MetaType):
         enum_cls.cs = cs
         enum_cls.type = type_
         enum_cls.size = type_.size
+        enum_cls.dynamic = type_.dynamic
         enum_cls.alignment = type_.alignment
 
         _fix_alias_members(enum_cls)
