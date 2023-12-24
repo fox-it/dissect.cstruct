@@ -318,8 +318,8 @@ class cstruct:
 
     def _make_array(self, type_: MetaType, num_entries: Optional[UnionHint[int, Expression]]) -> type[Array]:
         null_terminated = num_entries is None
-        dynamic = isinstance(num_entries, Expression)
-        size = None if null_terminated or dynamic else num_entries * type_.size
+        dynamic = isinstance(num_entries, Expression) or type_.dynamic
+        size = None if (null_terminated or dynamic) else (num_entries * type_.size)
         name = f"{type_.__name__}[]" if null_terminated else f"{type_.__name__}[{num_entries}]"
 
         bases = (Array,)
