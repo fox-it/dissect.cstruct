@@ -416,6 +416,12 @@ class UnionMetaType(StructureMetaType):
 
             alignment = max(field.alignment, alignment)
 
+        if align and size is not None:
+            # Add "tail padding" if we need to align
+            # This bit magic rounds up to the next alignment boundary
+            # E.g. offset = 3; alignment = 8; -offset & (alignment - 1) = 5
+            size += -size & (alignment - 1)
+
         return size, alignment
 
     def _read_fields(cls, stream: BinaryIO, context: dict[str, Any] = None) -> tuple[dict[str, Any], dict[str, int]]:
