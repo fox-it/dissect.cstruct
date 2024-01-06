@@ -22,7 +22,7 @@ class Field:
         self.alignment = type_.alignment
 
     def __repr__(self):
-        bits_str = " : {self.bits}" if self.bits else ""
+        bits_str = f" : {self.bits}" if self.bits else ""
         return f"<Field {self.name} {self.type}{bits_str}>"
 
 
