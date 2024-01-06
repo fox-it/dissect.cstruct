@@ -215,7 +215,7 @@ class cstruct:
 
     addtype = add_type
 
-    def load(self, definition: str, deftype: int = None, **kwargs) -> "cstruct":
+    def load(self, definition: str, deftype: int = None, **kwargs) -> cstruct:
         """Parse structures from the given definitions using the given definition type.
 
         Definitions can be parsed using different parsers. Currently, there's
