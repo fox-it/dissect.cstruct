@@ -281,6 +281,7 @@ class {name}(Structure):
 
             if isinstance(read_type, BytesInteger):
                 getter = "BytesInteger.parse(buf[{slice}], {size}, {count}, {signed}, self.cstruct.endian){data_slice}"
+
                 getter = getter.format(
                     slice=read_slice,
                     size=read_type.size,
