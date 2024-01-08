@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import functools
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, BinaryIO, Optional, Union
+from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Optional, Union
 
 from dissect.cstruct.exceptions import ArraySizeError
 
@@ -83,6 +84,31 @@ class MetaType(type):
 
         return cls._read(obj)
 
+    def write(cls, stream: BinaryIO, value: Any) -> int:
+        """Write a value to a writable file-like object.
+
+        Args:
+            stream: File-like objects that supports writing.
+            value: Value to write.
+
+        Returns:
+            The amount of bytes written.
+        """
+        return cls._write(stream, value)
+
+    def dumps(cls, value: Any) -> bytes:
+        """Dump a value to a byte string.
+
+        Args:
+            value: Value to dump.
+
+        Returns:
+            The raw bytes of this type.
+        """
+        out = BytesIO()
+        cls._write(out, value)
+        return out.getvalue()
+
     def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> BaseType:
         """Internal function for reading value.
 
@@ -152,29 +178,33 @@ class MetaType(type):
         return cls._write_array(stream, array + [cls()])
 
 
+class _overload:
+    """Descriptor to use on the ``write`` and ``dumps`` methods on cstruct types.
+
+    Allows for calling these methods on both the type and instance.
+
+    Example:
+        >>> int32.dumps(123)
+        b'\\x7b\\x00\\x00\\x00'
+        >>> int32(123).dumps()
+        b'\\x7b\\x00\\x00\\x00'
+    """
+
+    def __init__(self, func: Callable[[Any], Any]) -> None:
+        self.func = func
+
+    def __get__(self, instance: Optional[BaseType], owner: MetaType) -> Callable[[Any], bytes]:
+        if instance is None:
+            return functools.partial(self.func, owner)
+        else:
+            return functools.partial(self.func, instance.__class__, value=instance)
+
+
 class BaseType(metaclass=MetaType):
     """Base class for cstruct type classes."""
 
-    def dumps(self) -> bytes:
-        """Dump this value to a byte string.
-
-        Returns:
-            The raw bytes of this type.
-        """
-        out = BytesIO()
-        self.__class__._write(out, self)
-        return out.getvalue()
-
-    def write(self, stream: BinaryIO) -> int:
-        """Write this value to a writable file-like object.
-
-        Args:
-            fh: File-like objects that supports writing.
-
-        Returns:
-            The amount of bytes written.
-        """
-        return self.__class__._write(stream, self)
+    dumps = _overload(MetaType.dumps)
+    write = _overload(MetaType.write)
 
 
 class ArrayMetaType(MetaType):
