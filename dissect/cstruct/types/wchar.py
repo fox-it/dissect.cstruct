@@ -54,6 +54,10 @@ class Wchar(str, BaseType):
     def _write(cls, stream: BinaryIO, data: str) -> int:
         return stream.write(data.encode(cls.__encoding_map__[cls.cs.endian]))
 
+    @classmethod
+    def default(cls) -> Wchar:
+        return type.__call__(cls, "\x00")
+
 
 class WcharArray(str, BaseType, metaclass=ArrayMetaType):
     """Wide-character array type for reading and writing UTF-16 strings."""
@@ -67,3 +71,7 @@ class WcharArray(str, BaseType, metaclass=ArrayMetaType):
         if cls.null_terminated:
             data += "\x00"
         return stream.write(data.encode(Wchar.__encoding_map__[cls.cs.endian]))
+
+    @classmethod
+    def default(cls) -> WcharArray:
+        return type.__call__(cls, "\x00" * (0 if cls.dynamic or cls.null_terminated else cls.num_entries))
