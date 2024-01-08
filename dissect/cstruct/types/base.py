@@ -54,6 +54,10 @@ class MetaType(type):
 
         return cls.size
 
+    def default(cls) -> BaseType:
+        """Return the default value of this type."""
+        return cls()
+
     def reads(cls, data: bytes) -> BaseType:
         """Parse the given data from a bytes-like object.
 
@@ -195,6 +199,9 @@ class ArrayMetaType(MetaType):
             num = max(0, cls.num_entries)
 
         return cls.type._read_array(stream, num, context)
+
+    def default(cls) -> BaseType:
+        return [cls.type.default() for _ in range(0 if cls.dynamic or cls.null_terminated else cls.num_entries)]
 
 
 class Array(list, BaseType, metaclass=ArrayMetaType):

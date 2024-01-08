@@ -107,95 +107,93 @@ def test_lookups(cs: cstruct, compiled: bool):
     assert cs.lookups["a"] == {1: 3, 2: 4}
 
 
-# TODO:
-# def test_default_constructors(cs: cstruct, compiled: bool):
-#     cdef = """
-#     enum Enum {
-#         a = 0,
-#         b = 1
-#     };
+def test_default_constructors(cs: cstruct, compiled: bool):
+    cdef = """
+    enum Enum {
+        a = 0,
+        b = 1
+    };
 
-#     flag Flag {
-#         a = 0,
-#         b = 1
-#     };
+    flag Flag {
+        a = 0,
+        b = 1
+    };
 
-#     struct test {
-#         uint32  t_int;
-#         uint32  t_int_array[2];
-#         uint24  t_bytesint;
-#         uint24  t_bytesint_array[2];
-#         char    t_char;
-#         char    t_char_array[2];
-#         wchar   t_wchar;
-#         wchar   t_wchar_array[2];
-#         Enum    t_enum;
-#         Enum    t_enum_array[2];
-#         Flag    t_flag;
-#         Flag    t_flag_array[2];
-#     };
-#     """
-#     cs.load(cdef, compiled=compiled)
+    struct test {
+        uint32  t_int;
+        uint32  t_int_array[2];
+        uint24  t_bytesint;
+        uint24  t_bytesint_array[2];
+        char    t_char;
+        char    t_char_array[2];
+        wchar   t_wchar;
+        wchar   t_wchar_array[2];
+        Enum    t_enum;
+        Enum    t_enum_array[2];
+        Flag    t_flag;
+        Flag    t_flag_array[2];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
 
-#     assert verify_compiled(cs.test, compiled)
+    assert verify_compiled(cs.test, compiled)
 
-#     obj = cs.test()
-#     assert obj.t_int == 0
-#     assert obj.t_int_array == [0, 0]
-#     assert obj.t_bytesint == 0
-#     assert obj.t_bytesint_array == [0, 0]
-#     assert obj.t_char == b"\x00"
-#     assert obj.t_char_array == b"\x00\x00"
-#     assert obj.t_wchar == "\x00"
-#     assert obj.t_wchar_array == "\x00\x00"
-#     assert obj.t_enum == cs.Enum(0)
-#     assert obj.t_enum_array == [cs.Enum(0), cs.Enum(0)]
-#     assert obj.t_flag == cs.Flag(0)
-#     assert obj.t_flag_array == [cs.Flag(0), cs.Flag(0)]
+    obj = cs.test()
+    assert obj.t_int == 0
+    assert obj.t_int_array == [0, 0]
+    assert obj.t_bytesint == 0
+    assert obj.t_bytesint_array == [0, 0]
+    assert obj.t_char == b"\x00"
+    assert obj.t_char_array == b"\x00\x00"
+    assert obj.t_wchar == "\x00"
+    assert obj.t_wchar_array == "\x00\x00"
+    assert obj.t_enum == cs.Enum(0)
+    assert obj.t_enum_array == [cs.Enum(0), cs.Enum(0)]
+    assert obj.t_flag == cs.Flag(0)
+    assert obj.t_flag_array == [cs.Flag(0), cs.Flag(0)]
 
-#     assert obj.dumps() == b"\x00" * 54
+    assert obj.dumps() == b"\x00" * 54
 
 
-# TODO:
-# def test_default_constructors_dynamic(cs: cstruct, compiled: bool):
-#     cdef = """
-#     enum Enum {
-#         a = 0,
-#         b = 1
-#     };
-#     flag Flag {
-#         a = 0,
-#         b = 1
-#     };
-#     struct test {
-#         uint8   x;
-#         uint32  t_int_array_n[];
-#         uint32  t_int_array_d[x];
-#         uint24  t_bytesint_array_n[];
-#         uint24  t_bytesint_array_d[x];
-#         char    t_char_array_n[];
-#         char    t_char_array_d[x];
-#         wchar   t_wchar_array_n[];
-#         wchar   t_wchar_array_d[x];
-#         Enum    t_enum_array_n[];
-#         Enum    t_enum_array_d[x];
-#         Flag    t_flag_array_n[];
-#         Flag    t_flag_array_d[x];
-#     };
-#     """
-#     cs.load(cdef, compiled=compiled)
+def test_default_constructors_dynamic(cs: cstruct, compiled: bool):
+    cdef = """
+    enum Enum {
+        a = 0,
+        b = 1
+    };
+    flag Flag {
+        a = 0,
+        b = 1
+    };
+    struct test {
+        uint8   x;
+        uint32  t_int_array_n[];
+        uint32  t_int_array_d[x];
+        uint24  t_bytesint_array_n[];
+        uint24  t_bytesint_array_d[x];
+        char    t_char_array_n[];
+        char    t_char_array_d[x];
+        wchar   t_wchar_array_n[];
+        wchar   t_wchar_array_d[x];
+        Enum    t_enum_array_n[];
+        Enum    t_enum_array_d[x];
+        Flag    t_flag_array_n[];
+        Flag    t_flag_array_d[x];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
 
-#     assert verify_compiled(cs.test, compiled)
+    assert verify_compiled(cs.test, compiled)
 
-#     obj = cs.test()
+    obj = cs.test()
 
-#     assert obj.t_int_array_n == obj.t_int_array_d == []
-#     assert obj.t_bytesint_array_n == obj.t_bytesint_array_d == []
-#     assert obj.t_char_array_n == obj.t_char_array_d == b""
-#     assert obj.t_wchar_array_n == obj.t_wchar_array_d == ""
-#     assert obj.t_enum_array_n == obj.t_enum_array_d == []
-#     assert obj.t_flag_array_n == obj.t_flag_array_d == []
-#     assert obj.dumps() == b"\x00" * 19
+    assert obj.t_int_array_n == obj.t_int_array_d == []
+    assert obj.t_bytesint_array_n == obj.t_bytesint_array_d == []
+    assert obj.t_char_array_n == obj.t_char_array_d == b""
+    assert obj.t_wchar_array_n == obj.t_wchar_array_d == ""
+    assert obj.t_enum_array_n == obj.t_enum_array_d == []
+    assert obj.t_flag_array_n == obj.t_flag_array_d == []
+    assert obj.dumps() == b"\x00" * 19
 
 
 def test_config_flag_nocompile(cs: cstruct, compiled: bool):
