@@ -1,7 +1,7 @@
 import pprint
 import string
 import sys
-from typing import Union
+from typing import Iterator, Union
 
 from dissect.cstruct.types.structure import Structure
 
@@ -36,7 +36,7 @@ ENDIANNESS_MAP = {
 Palette = list[tuple[str, str]]
 
 
-def _hexdump(data: bytes, palette: Palette = None, offset: int = 0, prefix: str = ""):
+def _hexdump(data: bytes, palette: Palette = None, offset: int = 0, prefix: str = "") -> Iterator[str]:
     """Hexdump some data.
 
     Args:
@@ -96,7 +96,9 @@ def _hexdump(data: bytes, palette: Palette = None, offset: int = 0, prefix: str 
         yield f"{prefix}{offset + i:08x}  {values:48s}  {chars}"
 
 
-def hexdump(data: bytes, palette=None, offset: int = 0, prefix: str = "", output: str = "print"):
+def hexdump(
+    data: bytes, palette=None, offset: int = 0, prefix: str = "", output: str = "print"
+) -> Iterator[str] | str | None:
     """Hexdump some data.
 
     Args:
@@ -123,7 +125,7 @@ def _dumpstruct(
     offset: int,
     color: bool,
     output: str,
-):
+) -> str | None:
     palette = []
     colors = [
         (COLOR_RED, COLOR_BG_RED),
@@ -178,7 +180,7 @@ def dumpstruct(
     offset: int = 0,
     color: bool = True,
     output: str = "print",
-):
+) -> str | None:
     """Dump a structure or parsed structure instance.
 
     Prints a colorized hexdump and parsed structure output.
