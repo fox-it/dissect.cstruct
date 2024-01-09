@@ -72,6 +72,21 @@ def test_align_union():
     assert obj.dumps() == buf
 
 
+def test_align_union_tail():
+    d = """
+    union test {
+        uint64 a;
+        uint32 b[3];
+    };
+    """
+    c = cstruct.cstruct()
+    c.load(d, align=True)
+
+    assert c.test.align
+    assert c.test.alignment == 8
+    assert c.test.size == 16
+
+
 def test_align_array():
     d = """
     struct test {
