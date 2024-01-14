@@ -151,6 +151,13 @@ class cstruct:
             "uint64_t": "uint64",
             "uint128_t": "uint128",
 
+            # IDA types
+            "_BYTE": "uint8",
+            "_WORD": "uint16",
+            "_DWORD": "uint32",
+            "_QWORD": "uint64",
+            "_OWORD": "uint128",
+
             # Other convenience types
             "u1": "uint8",
             "u2": "uint16",
