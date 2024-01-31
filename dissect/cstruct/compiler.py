@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import keyword
 import struct
 from collections import OrderedDict
 from textwrap import dedent
@@ -75,6 +76,8 @@ class {name}(Structure):
             return structure
 
         structure_name = structure.name
+        if keyword.iskeyword(structure_name):
+            structure_name += "_"
 
         try:
             # Generate struct class based on provided structure type
@@ -104,7 +107,9 @@ class {name}(Structure):
         }
 
         exec(code_object, env)
-        return env[structure_name](self.cstruct, structure, source)
+        klass = env[structure_name]
+        klass.__name__ = structure.name
+        return klass(self.cstruct, structure, source)
 
     def gen_struct_class(self, name: str, structure: Structure) -> str:
         blocks = []

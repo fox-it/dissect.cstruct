@@ -546,3 +546,28 @@ def test_report_array_size_mismatch():
 
     with pytest.raises(ArraySizeError):
         a.dumps()
+
+
+@pytest.mark.parametrize("compiled", [True, False])
+def test_reserved_keyword(compiled: bool):
+    cdef = """
+    struct in {
+        uint8 a;
+    };
+
+    struct class {
+        uint8 a;
+    };
+
+    struct for {
+        uint8 a;
+    };
+    """
+    cs = cstruct.cstruct(endian="<")
+    cs.load(cdef, compiled=compiled)
+
+    for name in ["in", "class", "for"]:
+        assert name in cs.typedefs
+        assert verify_compiled(cs.resolve(name), compiled)
+
+        assert cs.resolve(name)(b"\x01").a == 1

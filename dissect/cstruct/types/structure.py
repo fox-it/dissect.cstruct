@@ -22,7 +22,7 @@ class Field:
         self.alignment = type_.alignment
 
     def __repr__(self):
-        bits_str = " : {self.bits}" if self.bits else ""
+        bits_str = f" : {self.bits}" if self.bits else ""
         return f"<Field {self.name} {self.type}{bits_str}>"
 
 
@@ -323,6 +323,12 @@ class Union(Structure):
 
             size = max(len(field.type), size)
             alignment = max(field.alignment, alignment)
+
+        if self.align and size is not None:
+            # Add "tail padding" if we need to align
+            # This bit magic rounds up to the next alignment boundary
+            # E.g. offset = 3; alignment = 8; -offset & (alignment - 1) = 5
+            size += -size & (alignment - 1)
 
         self.size = size
         self.alignment = alignment
