@@ -136,3 +136,21 @@ def test_leb128_nested_struct_signed(cs: cstruct):
     assert obj.name_len == 8
     assert obj.name == b"Testfile"
     assert obj.n_entries == 300
+
+
+def test_leb128_unsigned_write(cs: cstruct):
+    assert cs.uleb128(2).dumps() == b"\x02"
+    assert cs.uleb128(4747).dumps() == b"\x8b%"
+    assert cs.uleb128(13371337).dumps() == b"\xc9\x8f\xb0\x06"
+    assert cs.uleb128(126).dumps() == b"~"
+    assert cs.uleb128(11637).dumps() == b"\xf5Z"
+    assert cs.uleb128(261352286).dumps() == b"\xde\xd6\xcf|"
+
+
+def test_leb128_signed_write(cs: cstruct):
+    assert cs.ileb128(2).dumps() == b"\x02"
+    assert cs.ileb128(4747).dumps() == b"\x8b%"
+    assert cs.ileb128(13371337).dumps() == b"\xc9\x8f\xb0\x06"
+    assert cs.ileb128(-2).dumps() == b"~"
+    assert cs.ileb128(-4747).dumps() == b"\xf5Z"
+    assert cs.ileb128(-7083170).dumps() == b"\xde\xd6\xcf|"
