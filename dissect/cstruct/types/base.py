@@ -178,6 +178,13 @@ class MetaType(type):
         """
         return cls._write_array(stream, [*array, cls.__default__()])
 
+    def to_stub(cls, name: str = "") -> str:
+        output_str = ""
+        if bases := getattr(cls, "__bases__", None):
+            output_str = bases[0].__name__
+
+        return f"{name}: {output_str}"
+
 
 class _overload:
     """Descriptor to use on the ``write`` and ``dumps`` methods on cstruct types.
