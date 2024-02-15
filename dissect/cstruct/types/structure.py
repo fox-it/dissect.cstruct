@@ -4,7 +4,7 @@ import io
 from contextlib import contextmanager
 from functools import lru_cache
 from operator import attrgetter
-from textwrap import dedent
+from textwrap import dedent, indent
 from types import FunctionType
 from typing import Any, BinaryIO, Callable, ContextManager
 
@@ -362,6 +362,19 @@ class StructureMetaType(MetaType):
 
         for key, value in classdict.items():
             setattr(cls, key, value)
+
+    def to_stub(cls, name: str = ""):
+        with io.StringIO() as data:
+            data.write(f"class {cls.__name__}:\n")
+            call_args = ["self"]
+            for field in cls.__fields__:
+                if not getattr(field.type, "__anonymous__", False):
+                    type_info = f"{field.name}{field.type.to_stub()}"
+                    call_args.append(f"{type_info}=...")
+                    data.write(indent(f"{type_info}\n", prefix=" " * 4))
+            call = ", ".join(call_args)
+            data.write(indent(f"def __call__({call}): ...", prefix=" " * 4))
+            return data.getvalue()
 
 
 class Structure(BaseType, metaclass=StructureMetaType):
