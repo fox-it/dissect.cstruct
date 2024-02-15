@@ -33,3 +33,15 @@ class LEB128(int, BaseType):
                 result |= ~0 << shift
 
         return result
+
+    @classmethod
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] = None) -> LEB128:
+        result = []
+
+        while True:
+            if (value := cls._read(stream, context)) == 0:
+                break
+
+            result.append(value)
+
+        return result

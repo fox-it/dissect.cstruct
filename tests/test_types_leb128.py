@@ -46,6 +46,40 @@ def test_leb128_struct_unsigned(cs: cstruct):
     assert len(buf) == 3119 + 2
 
 
+def test_leb128_struct_unsigned_zero(cs: cstruct):
+    cdef = """
+    struct test {
+        uleb128 numbers[];
+    };
+    """
+    cs.load(cdef)
+
+    buf = b"\xaf\x18\x8b%\xc9\x8f\xb0\x06\x00"
+    obj = cs.test(buf)
+
+    assert len(obj.numbers) == 3
+    assert obj.numbers[0] == 3119
+    assert obj.numbers[1] == 4747
+    assert obj.numbers[2] == 13371337
+
+
+def test_leb128_struct_signed_zero(cs: cstruct):
+    cdef = """
+    struct test {
+        ileb128 numbers[];
+    };
+    """
+    cs.load(cdef)
+
+    buf = b"\xaf\x18\xf5Z\xde\xd6\xcf|\x00"
+    obj = cs.test(buf)
+
+    assert len(obj.numbers) == 3
+    assert obj.numbers[0] == 3119
+    assert obj.numbers[1] == -4747
+    assert obj.numbers[2] == -7083170
+
+
 def test_leb128_nested_struct_unsigned(cs: cstruct):
     cdef = """
     struct entry {
