@@ -1,4 +1,12 @@
+import pytest
+
 from dissect.cstruct.cstruct import cstruct
+
+
+def test_leb128_unsigned_read_EOF(cs: cstruct):
+    with pytest.raises(EOFError) as ex:
+        cs.uleb128(b"\x8b")
+    assert str(ex.value) == "EOF reached, while final LEB128 byte was not yet read."
 
 
 def test_leb128_unsigned_read(cs: cstruct):
@@ -19,14 +27,14 @@ def test_leb128_signed_read(cs: cstruct):
     assert cs.ileb128(b"\xde\xd6\xcf|") == -7083170
 
 
-def test_leb128_struct_unsigned(cs: cstruct, compiled: bool):
+def test_leb128_struct_unsigned(cs: cstruct):
     cdef = """
     struct test {
         uleb128 len;
         char  data[len];
     };
     """
-    cs.load(cdef, compiled=compiled)
+    cs.load(cdef)
 
     buf = b"\xaf\x18"
     buf += b"A" * 3119
@@ -38,7 +46,7 @@ def test_leb128_struct_unsigned(cs: cstruct, compiled: bool):
     assert len(buf) == 3119 + 2
 
 
-def test_leb128_nested_struct_unsigned(cs: cstruct, compiled: bool):
+def test_leb128_nested_struct_unsigned(cs: cstruct):
     cdef = """
     struct entry {
         uleb128 len;
@@ -52,7 +60,7 @@ def test_leb128_nested_struct_unsigned(cs: cstruct, compiled: bool):
         entry    entries[n_entries];
     };
     """
-    cs.load(cdef, compiled=compiled)
+    cs.load(cdef)
 
     # Dummy file format specifying 300 entries
     buf = b"\x08Testfile\xac\x02"
@@ -67,7 +75,7 @@ def test_leb128_nested_struct_unsigned(cs: cstruct, compiled: bool):
     assert obj.n_entries == 300
 
 
-def test_leb128_nested_struct_signed(cs: cstruct, compiled: bool):
+def test_leb128_nested_struct_signed(cs: cstruct):
     cdef = """
     struct entry {
         ileb128 len;
@@ -81,7 +89,7 @@ def test_leb128_nested_struct_signed(cs: cstruct, compiled: bool):
         entry    entries[n_entries];
     };
     """
-    cs.load(cdef, compiled=compiled)
+    cs.load(cdef)
 
     # Dummy file format specifying 300 entries
     buf = b"\x08Testfile\xac\x02"

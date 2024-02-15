@@ -7,7 +7,9 @@ from dissect.cstruct.types.base import BaseType
 
 class LEB128(int, BaseType):
     """Variable-length code compression to store an arbitrarily large integer in a small number of bytes.
-    See https://en.wikipedia.org/wiki/LEB128 for more information and an explanation of the algorithm."""
+
+    See https://en.wikipedia.org/wiki/LEB128 for more information and an explanation of the algorithm.
+    """
 
     signed: bool
 
@@ -16,12 +18,18 @@ class LEB128(int, BaseType):
         result = 0
         shift = 0
         while True:
-            b = ord(stream.read(1))
+            b = stream.read(1)
+            if b == b"":
+                raise EOFError("EOF reached, while final LEB128 byte was not yet read.")
+
+            b = ord(b)
             result |= (b & 0x7F) << shift
             shift += 7
             if (b & 0x80) == 0:
                 break
+
         if cls.signed:
             if b & 0x40 != 0:
                 result |= ~0 << shift
+
         return result
