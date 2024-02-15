@@ -29,6 +29,7 @@ from dissect.cstruct.types import (
     Wchar,
     WcharArray,
 )
+from dissect.cstruct.types.leb128 import LEB128
 
 
 class cstruct:
@@ -70,6 +71,9 @@ class cstruct:
             "uint48": self._make_int_type("int48", 6, False, alignment=8),
             "int128": self._make_int_type("int128", 16, True, alignment=16),
             "uint128": self._make_int_type("uint128", 16, False, alignment=16),
+
+            "uleb128": self._make_type('uleb128', (LEB128,), None, alignment=4, attrs={"signed": False}),
+            "ileb128": self._make_type('ileb128', (LEB128,), None, alignment=4, attrs={"signed": True}),
 
             "void": self._make_type("void", (Void,), 0),
 
