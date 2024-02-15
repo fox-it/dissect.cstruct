@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes as _ctypes
+import io
 import struct
 import sys
 import types
@@ -408,6 +409,21 @@ class cstruct:
         self, name: str, fields: list[Field], *, align: bool = False, anonymous: bool = False
     ) -> type[Structure]:
         return self._make_struct(name, fields, align=align, anonymous=anonymous, base=Union)
+
+    def to_stub(self, name: str = ""):
+        output_data = io.StringIO()
+
+        for const, value in self.consts.items():
+            output_data.write(f"{const}: {type(value).__name__}=...\n")
+
+        for name, type_def in self.typedefs.items():
+            if not isinstance(type_def, str):
+                output_data.write(type_def.to_stub(name))
+                output_data.write("\n")
+
+        output_value = output_data.getvalue()
+        output_data.close()
+        return output_value
 
 
 def ctypes(structure: Structure) -> _ctypes.Structure:
