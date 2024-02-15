@@ -154,3 +154,10 @@ def test_leb128_signed_write(cs: cstruct):
     assert cs.ileb128(-2).dumps() == b"~"
     assert cs.ileb128(-4747).dumps() == b"\xf5Z"
     assert cs.ileb128(-7083170).dumps() == b"\xde\xd6\xcf|"
+
+
+def test_leb128_write_negatives(cs: cstruct):
+    with pytest.raises(ValueError) as ex:
+        cs.uleb128(-2).dumps()
+    assert str(ex.value) == "Attempt to encode a negative integer using unsigned LEB128 encoding."
+    assert cs.ileb128(-2).dumps() == b"~"

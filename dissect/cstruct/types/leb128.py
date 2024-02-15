@@ -50,7 +50,7 @@ class LEB128(int, BaseType):
     def _write(cls, stream: BinaryIO, data: int) -> LEB128:
         # only write negative numbers when in signed mode
         if data < 0 and not cls.signed:
-            return 0
+            raise ValueError("Attempt to encode a negative integer using unsigned LEB128 encoding.")
 
         result = bytearray()
         while True:
