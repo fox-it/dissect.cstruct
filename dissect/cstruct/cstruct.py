@@ -72,6 +72,9 @@ class cstruct:
             "int128": self._make_int_type("int128", 16, True, alignment=16),
             "uint128": self._make_int_type("uint128", 16, False, alignment=16),
 
+            "uleb128": self._make_type('uleb128', (LEB128,), None, alignment=4, attrs={"signed": False}),
+            "ileb128": self._make_type('ileb128', (LEB128,), None, alignment=4, attrs={"signed": True}),
+
             "void": self._make_type("void", (Void,), 0),
 
             # Common C types not covered by internal types
