@@ -11,6 +11,7 @@ from dissect.cstruct.exceptions import ResolveError
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.parser import CStyleParser, TokenParser
 from dissect.cstruct.types import (
+    LEB128,
     Array,
     ArrayMetaType,
     BaseType,
@@ -29,7 +30,6 @@ from dissect.cstruct.types import (
     Wchar,
     WcharArray,
 )
-from dissect.cstruct.types.leb128 import LEB128
 
 
 class cstruct:

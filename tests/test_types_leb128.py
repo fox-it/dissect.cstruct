@@ -1,3 +1,5 @@
+import io
+
 import pytest
 
 from dissect.cstruct.cstruct import cstruct
@@ -159,3 +161,17 @@ def test_leb128_write_negatives(cs: cstruct):
     with pytest.raises(ValueError, match="Attempt to encode a negative integer using unsigned LEB128 encoding"):
         cs.uleb128(-2).dumps()
     assert cs.ileb128(-2).dumps() == b"\x7e"
+
+
+def test_leb128_unsigned_write_amount_written(cs: cstruct):
+    out1 = io.BytesIO()
+    bytes_written1 = cs.uleb128(2).write(out1)
+    assert bytes_written1 == out1.tell()
+
+    out2 = io.BytesIO()
+    bytes_written2 = cs.uleb128(4747).write(out2)
+    assert bytes_written2 == out2.tell()
+
+    out3 = io.BytesIO()
+    bytes_written3 = cs.uleb128(13371337).write(out3)
+    assert bytes_written3 == out3.tell()
