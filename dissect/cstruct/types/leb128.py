@@ -20,7 +20,7 @@ class LEB128(int, BaseType):
         while True:
             b = stream.read(1)
             if b == b"":
-                raise EOFError("EOF reached, while final LEB128 byte was not yet read.")
+                raise EOFError("EOF reached, while final LEB128 byte was not yet read")
 
             b = ord(b)
             result |= (b & 0x7F) << shift
@@ -50,7 +50,7 @@ class LEB128(int, BaseType):
     def _write(cls, stream: BinaryIO, data: int) -> LEB128:
         # only write negative numbers when in signed mode
         if data < 0 and not cls.signed:
-            raise ValueError("Attempt to encode a negative integer using unsigned LEB128 encoding.")
+            raise ValueError("Attempt to encode a negative integer using unsigned LEB128 encoding")
 
         result = bytearray()
         while True:
