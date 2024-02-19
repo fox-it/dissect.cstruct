@@ -8,6 +8,7 @@ from dissect.cstruct.exceptions import (
 )
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.types import (
+    LEB128,
     Array,
     BaseType,
     Char,
@@ -48,6 +49,7 @@ __all__ = [
     "cstruct",
     "ctypes",
     "ctypes_type",
+    "LEB128",
     "Array",
     "BaseType",
     "Char",
