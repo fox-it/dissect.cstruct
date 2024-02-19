@@ -4,12 +4,13 @@ from typing import Any, BinaryIO, Dict
 from dissect.cstruct.types import BaseType
 
 
-class Instance:
+class Instance(dict):
     """Holds parsed structure data."""
 
     __slots__ = ("_type", "_values", "_sizes")
 
     def __init__(self, type_: BaseType, values: Dict[str, Any], sizes: Dict[str, int] = None):
+        dict.__init__(self, **values)
         # Done in this manner to check if the attr is in the lookup
         object.__setattr__(self, "_type", type_)
         object.__setattr__(self, "_values", values)
@@ -45,6 +46,9 @@ class Instance:
 
     def _size(self, field: str) -> int:
         return self._sizes[field]
+
+    def __iter__(self):
+        yield from self._values.items()
 
     def write(self, stream: BinaryIO) -> int:
         """Write this structure to a writable file-like object.
