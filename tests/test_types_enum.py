@@ -41,6 +41,7 @@ def test_enum_read(TestEnum: type[Enum]):
 
 def test_enum_write(TestEnum: type[Enum]):
     assert TestEnum.B.dumps() == b"\x02"
+    assert TestEnum(b"\x02").dumps() == b"\x02"
 
 
 def test_enum_array_read(TestEnum: type[Enum]):

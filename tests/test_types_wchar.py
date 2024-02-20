@@ -15,6 +15,7 @@ def test_wchar_read(cs: cstruct):
 
 def test_wchar_write(cs: cstruct):
     assert cs.wchar("A").dumps() == b"A\x00"
+    assert cs.wchar(b"A\x00").dumps() == b"A\x00"
 
 
 def test_wchar_array(cs: cstruct):

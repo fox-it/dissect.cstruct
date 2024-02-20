@@ -30,6 +30,8 @@ def test_int_unsigned_write(cs: cstruct):
     assert cs.uint128(0x41414141414141414141414141414141).dumps() == b"A" * 16
     assert cs.uint128(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).dumps() == b"\xff" * 16
 
+    assert cs.uint128(b"A" * 16).dumps() == b"A" * 16
+
     uint40 = cs._make_int_type("uint40", 5, False)
     assert uint40(0x4141414141).dumps() == b"AAAAA"
     assert uint40(0xFFFFFFFFFF).dumps() == b"\xff\xff\xff\xff\xff"
@@ -90,6 +92,8 @@ def test_int_signed_write(cs: cstruct):
 
     assert cs.int128(0x41414141414141414141414141414141).dumps() == b"A" * 16
     assert cs.int128(-1).dumps() == b"\xff" * 16
+
+    assert cs.int128(b"A" * 16).dumps() == b"A" * 16
 
     int40 = cs._make_int_type("int40", 5, True)
     assert int40(0x4141414141).dumps() == b"AAAAA"
