@@ -2,6 +2,7 @@ import pytest
 
 from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exceptions import ArraySizeError
+from dissect.cstruct.types.base import ArrayMetaType, BaseType
 
 from .utils import verify_compiled
 
@@ -78,3 +79,48 @@ def test_eof(cs: cstruct, compiled: bool):
     assert test_eof_field.data == b"a"
     assert test_eof_field.remainder == 2
     assert test_eof_field.dumps() == b"\x01a\x02"
+
+
+def test_custom_array_type(cs: cstruct, compiled: bool):
+    class CustomType(BaseType):
+        def __init__(self, value):
+            self.value = value.upper()
+
+        @classmethod
+        def _read(cls, stream, context=None):
+            length = stream.read(1)[0]
+            value = stream.read(length)
+            return type.__call__(cls, value)
+
+        class ArrayType(BaseType, metaclass=ArrayMetaType):
+            @classmethod
+            def _read(cls, stream, context=None):
+                value = cls.type._read(stream, context)
+                if str(cls.num_entries) == "lower":
+                    value.value = value.value.lower()
+
+                return value
+
+    cs.add_custom_type("custom", CustomType, None, 1)
+
+    result = cs.custom(b"\x04asdf")
+    assert isinstance(result, CustomType)
+    assert result.value == b"ASDF"
+
+    result = cs.custom["lower"](b"\x04asdf")
+    assert isinstance(result, CustomType)
+    assert result.value == b"asdf"
+
+    cdef = """
+    struct test {
+        custom  a;
+        custom  b[lower];
+    };
+    """
+    cs.load(cdef)
+
+    result = cs.test(b"\x04asdf\x04asdf")
+    assert isinstance(result.a, CustomType)
+    assert isinstance(result.b, CustomType)
+    assert result.a.value == b"ASDF"
+    assert result.b.value == b"asdf"

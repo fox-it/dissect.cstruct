@@ -5,18 +5,15 @@ import struct
 import sys
 import types
 from typing import Any, BinaryIO, Iterator, Optional
-from typing import Union as UnionHint
 
 from dissect.cstruct.exceptions import ResolveError
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.parser import CStyleParser, TokenParser
 from dissect.cstruct.types import (
     LEB128,
-    Array,
     ArrayMetaType,
     BaseType,
     Char,
-    CharArray,
     Enum,
     Field,
     Flag,
@@ -28,7 +25,6 @@ from dissect.cstruct.types import (
     Union,
     Void,
     Wchar,
-    WcharArray,
 )
 
 
@@ -72,8 +68,8 @@ class cstruct:
             "int128": self._make_int_type("int128", 16, True, alignment=16),
             "uint128": self._make_int_type("uint128", 16, False, alignment=16),
 
-            "uleb128": self._make_type('uleb128', (LEB128,), None, alignment=4, attrs={"signed": False}),
-            "ileb128": self._make_type('ileb128', (LEB128,), None, alignment=4, attrs={"signed": True}),
+            "uleb128": self._make_type("uleb128", (LEB128,), None, alignment=4, attrs={"signed": False}),
+            "ileb128": self._make_type("ileb128", (LEB128,), None, alignment=4, attrs={"signed": True}),
 
             "void": self._make_type("void", (Void,), 0),
 
@@ -208,13 +204,14 @@ class cstruct:
         self._anonymous_count += 1
         return name
 
-    def add_type(self, name: str, type_: MetaType, replace: bool = False) -> None:
+    def add_type(self, name: str, type_: MetaType | str, replace: bool = False) -> None:
         """Add a type or type reference.
+
+        Only use this method when creating type aliases or adding already bound types.
 
         Args:
             name: Name of the type to be added.
-            type_: The type to be added. Can be a str reference to another type
-                or a compatible type class.
+            type_: The type to be added. Can be a str reference to another type or a compatible type class.
 
         Raises:
             ValueError: If the type already exists.
@@ -225,6 +222,23 @@ class cstruct:
         self.typedefs[name] = type_
 
     addtype = add_type
+
+    def add_custom_type(
+        self, name: str, type_: MetaType, size: Optional[int] = None, alignment: Optional[int] = None, **kwargs
+    ) -> None:
+        """Add a custom type.
+
+        Use this method to add custom types to this cstruct instance. This is largely a convenience method for
+        the internal :func:`_make_type` method, which binds a class to this cstruct instance.
+
+        Args:
+            name: Name of the type to be added.
+            type_: The type to be added.
+            size: The size of the type.
+            alignment: The alignment of the type.
+            **kwargs: Additional attributes to add to the type.
+        """
+        self.add_type(name, self._make_type(name, (type_,), size, alignment=alignment, attrs=kwargs))
 
     def load(self, definition: str, deftype: int = None, **kwargs) -> cstruct:
         """Parse structures from the given definitions using the given definition type.
@@ -316,6 +330,10 @@ class cstruct:
         alignment: int = None,
         attrs: dict[str, Any] = None,
     ) -> type[BaseType]:
+        """Create a new type class bound to this cstruct instance.
+
+        All types are created using this method. This method automatically binds the type to this cstruct instance.
+        """
         attrs = attrs or {}
         attrs.update(
             {
@@ -327,7 +345,7 @@ class cstruct:
         )
         return types.new_class(name, bases, {}, lambda ns: ns.update(attrs))
 
-    def _make_array(self, type_: MetaType, num_entries: Optional[UnionHint[int, Expression]]) -> type[Array]:
+    def _make_array(self, type_: MetaType, num_entries: Optional[int | Expression]) -> ArrayMetaType:
         null_terminated = num_entries is None
         dynamic = isinstance(num_entries, Expression) or type_.dynamic
         size = None if (null_terminated or dynamic) else (num_entries * type_.size)

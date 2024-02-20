@@ -26,6 +26,10 @@ class MetaType(type):
     alignment: int
     """The alignment of the type in bytes."""
 
+    # This must be the actual type, but since Array is a subclass of BaseType, we correct this at the bottom of the file
+    ArrayType: type[Array] = "Array"
+    """The array type for this type class."""
+
     def __call__(cls, *args, **kwargs) -> Union[MetaType, BaseType]:
         """Adds support for ``TypeClass(bytes | file-like object)`` parsing syntax."""
         # TODO: add support for Type(cs) API to create new bounded type classes, similar to the old API?
@@ -203,9 +207,6 @@ class _overload:
 class BaseType(metaclass=MetaType):
     """Base class for cstruct type classes."""
 
-    # This must be the actual type, but since Array is a subclass of BaseType, we correct this at the bottom of the file
-    ArrayType: type[Array] = "Array"
-
     dumps = _overload(MetaType.dumps)
     write = _overload(MetaType.write)
 
@@ -264,4 +265,4 @@ class Array(list, BaseType, metaclass=ArrayMetaType):
 
 
 # As mentioned in the BaseType class, we correctly set the type here
-BaseType.ArrayType = Array
+MetaType.ArrayType = Array
