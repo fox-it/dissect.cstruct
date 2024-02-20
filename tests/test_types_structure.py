@@ -108,22 +108,6 @@ def test_structure_array_write(TestStruct: type[Structure]):
     assert obj.dumps() == b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 
 
-def test_structure_nested(cs: cstruct):
-    pass  # TODO
-
-
-def test_structure_nested_anonymous(cs: cstruct):
-    pass  # TODO
-
-
-def test_structure_bits(cs: cstruct):
-    pass  # TODO
-
-
-def test_structure_offset(cs: cstruct):
-    pass  # TODO
-
-
 def test_structure_modify(cs: cstruct):
     TestStruct = cs._make_struct("Test", [Field("a", cs.char)])
 
@@ -192,7 +176,8 @@ def test_structure_cmp(TestStruct: type[Structure]):
 
 
 def test_structure_repr(TestStruct: type[Structure]):
-    pass  # TODO
+    obj = TestStruct(1, 2)
+    assert repr(obj) == f"<{TestStruct.__name__} a=0x1 b=0x2>"
 
 
 def test_structure_eof(TestStruct: type[Structure]):

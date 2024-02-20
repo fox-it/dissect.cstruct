@@ -152,7 +152,8 @@ def test_union_cmp(TestUnion: type[Union]):
 
 
 def test_union_repr(TestUnion: type[Union]):
-    pass  # TODO
+    obj = TestUnion(1, 2)
+    assert repr(obj) == f"<{TestUnion.__name__} a=0x1 b=0x2>"
 
 
 def test_union_eof(TestUnion: type[Union]):
