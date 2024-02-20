@@ -101,7 +101,7 @@ def test_custom_array_type(cs: cstruct, compiled: bool):
 
                 return value
 
-    cs.add_custom_type("custom", CustomType, None, 1)
+    cs.add_custom_type("custom", CustomType)
 
     result = cs.custom(b"\x04asdf")
     assert isinstance(result, CustomType)

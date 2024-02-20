@@ -23,8 +23,8 @@ class MetaType(type):
     """The size of the type in bytes. Can be ``None`` for dynamic sized types."""
     dynamic: bool
     """Whether or not the type is dynamically sized."""
-    alignment: int
-    """The alignment of the type in bytes."""
+    alignment: Optional[int]
+    """The alignment of the type in bytes. A value of ``None`` will be treated as 1-byte aligned."""
 
     # This must be the actual type, but since Array is a subclass of BaseType, we correct this at the bottom of the file
     ArrayType: type[Array] = "Array"
