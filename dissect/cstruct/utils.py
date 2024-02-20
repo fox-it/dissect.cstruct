@@ -3,7 +3,7 @@ from __future__ import annotations
 import pprint
 import string
 import sys
-from typing import Iterator, Union
+from typing import Iterator
 
 from dissect.cstruct.types.structure import Structure
 
@@ -177,7 +177,7 @@ def _dumpstruct(
 
 
 def dumpstruct(
-    obj: Union[Structure, type[Structure]],
+    obj: Structure | type[Structure],
     data: bytes = None,
     offset: int = 0,
     color: bool = True,

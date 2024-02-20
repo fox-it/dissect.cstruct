@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from enum import EnumMeta, IntEnum, IntFlag
-from typing import TYPE_CHECKING, Any, BinaryIO, Optional, Union
+from typing import TYPE_CHECKING, Any, BinaryIO, Optional
 
 from dissect.cstruct.types.base import Array, BaseType, MetaType
 
@@ -15,12 +15,12 @@ class EnumMetaType(EnumMeta, MetaType):
 
     def __call__(
         cls,
-        value: Union[cstruct, int, BinaryIO, bytes] = None,
+        value: cstruct | int | BinaryIO | bytes = None,
         name: Optional[str] = None,
         type_: Optional[MetaType] = None,
         *args,
         **kwargs,
-    ):
+    ) -> EnumMetaType:
         if name is None:
             if value is None:
                 value = cls.type()
@@ -46,7 +46,7 @@ class EnumMetaType(EnumMeta, MetaType):
 
         return enum_cls
 
-    def __getitem__(cls, name: Union[str, int]) -> Union[Enum, Array]:
+    def __getitem__(cls, name: str | int) -> Enum | Array:
         if isinstance(name, str):
             return super().__getitem__(name)
         return MetaType.__getitem__(cls, name)
@@ -74,7 +74,7 @@ class EnumMetaType(EnumMeta, MetaType):
         return cls._write_array(stream, data + [cls.type()])
 
 
-def _fix_alias_members(cls: type[Enum]):
+def _fix_alias_members(cls: type[Enum]) -> None:
     # Emulate aenum NoAlias behaviour
     # https://github.com/ethanfurman/aenum/blob/master/aenum/doc/aenum.rst
     if len(cls._member_names_) == len(cls._member_map_):
@@ -151,7 +151,7 @@ class Enum(BaseType, IntEnum, metaclass=EnumMetaType):
                 name += repr(self._value_)
             return name
 
-    def __eq__(self, other: Union[int, Enum]) -> bool:
+    def __eq__(self, other: int | Enum) -> bool:
         if isinstance(other, Enum) and other.__class__ is not self.__class__:
             return False
 
@@ -161,7 +161,7 @@ class Enum(BaseType, IntEnum, metaclass=EnumMetaType):
 
         return self.value == other
 
-    def __ne__(self, value: Union[int, Enum]) -> bool:
+    def __ne__(self, value: int | Enum) -> bool:
         return not self.__eq__(value)
 
     def __hash__(self) -> int:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from enum import IntFlag
-from typing import Union
 
 from dissect.cstruct.types.base import BaseType
 from dissect.cstruct.types.enum import EnumMetaType
@@ -41,7 +40,7 @@ class Flag(BaseType, IntFlag, metaclass=EnumMetaType):
             result = f"<{result[1:]}"
         return result
 
-    def __eq__(self, other: Union[int, Flag]) -> bool:
+    def __eq__(self, other: int | Flag) -> bool:
         if isinstance(other, Flag) and other.__class__ is not self.__class__:
             return False
 
@@ -51,7 +50,7 @@ class Flag(BaseType, IntFlag, metaclass=EnumMetaType):
 
         return self.value == other
 
-    def __ne__(self, value: Union[int, Flag]) -> bool:
+    def __ne__(self, value: int | Flag) -> bool:
         return not self.__eq__(value)
 
     def __hash__(self) -> int:
