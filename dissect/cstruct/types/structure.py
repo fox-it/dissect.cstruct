@@ -21,7 +21,7 @@ class Field:
         self.type = type_
         self.bits = bits
         self.offset = offset
-        self.alignment = type_.alignment
+        self.alignment = type_.alignment or 1
 
     def __repr__(self) -> str:
         bits_str = f" : {self.bits}" if self.bits else ""
@@ -167,7 +167,7 @@ class StructureMetaType(MetaType):
                 offset += -offset & (field.alignment - 1)
 
             # The alignment of this struct is equal to its largest members' alignment
-            alignment = max(alignment, field.type.alignment)
+            alignment = max(alignment, field.alignment)
 
             if field.bits:
                 field_type = field.type
@@ -404,10 +404,6 @@ class UnionMetaType(StructureMetaType):
         alignment = 0
 
         for field in fields:
-            if field.alignment is None:
-                # If a field already has an alignment, it's leading
-                field.alignment = field.type.alignment
-
             if size is not None:
                 try:
                     size = max(len(field.type), size)
