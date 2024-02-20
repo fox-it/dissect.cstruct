@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, BinaryIO, Union
+from typing import Any, BinaryIO
 
 from dissect.cstruct.types.base import EOF, ArrayMetaType, BaseType
 
@@ -65,7 +65,7 @@ class Char(bytes, BaseType):
         return type.__call__(cls, b"".join(buf))
 
     @classmethod
-    def _write(cls, stream: BinaryIO, data: Union[bytes, int, str]) -> int:
+    def _write(cls, stream: BinaryIO, data: bytes | int | str) -> int:
         if isinstance(data, int):
             data = chr(data)
 

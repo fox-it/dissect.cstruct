@@ -8,7 +8,6 @@ from enum import Enum
 from textwrap import dedent, indent
 from types import MethodType
 from typing import TYPE_CHECKING, Iterator, Optional
-from typing import Union as UnionHint
 
 from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.types import (
@@ -408,7 +407,7 @@ def _optimize_struct_fmt(info: Iterator[tuple[Field, int, str]]) -> str:
     return "".join(f"{count if count > 1 else ''}{char}" for count, char in chars)
 
 
-def _get_read_type(cs: cstruct, type_: UnionHint[MetaType, str]) -> MetaType:
+def _get_read_type(cs: cstruct, type_: MetaType | str) -> MetaType:
     type_ = cs.resolve(type_)
 
     if issubclass(type_, (Enum, Flag)):

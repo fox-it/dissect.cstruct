@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import functools
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Optional
 
 from dissect.cstruct.exceptions import ArraySizeError
 
@@ -30,7 +30,7 @@ class MetaType(type):
     ArrayType: type[Array] = "Array"
     """The array type for this type class."""
 
-    def __call__(cls, *args, **kwargs) -> Union[MetaType, BaseType]:
+    def __call__(cls, *args, **kwargs) -> MetaType | BaseType:
         """Adds support for ``TypeClass(bytes | file-like object)`` parsing syntax."""
         # TODO: add support for Type(cs) API to create new bounded type classes, similar to the old API?
         if len(args) == 1 and not isinstance(args[0], cls):
@@ -48,7 +48,7 @@ class MetaType(type):
 
         return type.__call__(cls, *args, **kwargs)
 
-    def __getitem__(cls, num_entries: Optional[Union[int, Expression]]) -> ArrayMetaType:
+    def __getitem__(cls, num_entries: Optional[int | Expression]) -> ArrayMetaType:
         """Create a new array with the given number of entries."""
         return cls.cs._make_array(cls, num_entries)
 
@@ -74,7 +74,7 @@ class MetaType(type):
         """
         return cls._read(BytesIO(data))
 
-    def read(cls, obj: Union[BinaryIO, bytes]) -> BaseType:
+    def read(cls, obj: BinaryIO | bytes) -> BaseType:
         """Parse the given data.
 
         Args:
@@ -215,7 +215,7 @@ class ArrayMetaType(MetaType):
     """Base metaclass for array-like types."""
 
     type: MetaType
-    num_entries: Optional[Union[int, Expression]]
+    num_entries: Optional[int | Expression]
     null_terminated: bool
 
     def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Array:
