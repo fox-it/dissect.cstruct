@@ -179,13 +179,6 @@ class cstruct:
         self.pointer = self.resolve(pointer)
         self._anonymous_count = 0
 
-        try:
-            self._module = sys._getframe(1).f_globals["__name__"]
-        except (AttributeError, ValueError, KeyError):
-            import traceback
-
-            traceback.print_exc()
-
     def __getattr__(self, attr: str) -> Any:
         try:
             return self.consts[attr]
