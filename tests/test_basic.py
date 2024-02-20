@@ -155,6 +155,9 @@ def test_default_constructors(cs: cstruct, compiled: bool):
 
     assert obj.dumps() == b"\x00" * 54
 
+    for name in obj.fields.keys():
+        assert isinstance(getattr(obj, name), BaseType)
+
 
 def test_default_constructors_dynamic(cs: cstruct, compiled: bool):
     cdef = """
@@ -195,6 +198,9 @@ def test_default_constructors_dynamic(cs: cstruct, compiled: bool):
     assert obj.t_enum_array_n == obj.t_enum_array_d == []
     assert obj.t_flag_array_n == obj.t_flag_array_d == []
     assert obj.dumps() == b"\x00" * 19
+
+    for name in obj.fields.keys():
+        assert isinstance(getattr(obj, name), BaseType)
 
 
 def test_config_flag_nocompile(cs: cstruct, compiled: bool):

@@ -7,7 +7,7 @@ import pytest
 
 from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exceptions import ParserError
-from dissect.cstruct.types.base import Array
+from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.pointer import Pointer
 from dissect.cstruct.types.structure import Field, Structure
 
@@ -304,6 +304,9 @@ def test_structure_definition_simple_be(cs: cstruct, compiled: bool):
     assert obj.string == b"lalala"
     assert obj.wstring == "test"
     assert obj.dumps() == buf
+
+    for name in obj.fields.keys():
+        assert isinstance(getattr(obj, name), BaseType)
 
 
 def test_structure_definition_expressions(cs: cstruct, compiled: bool):
