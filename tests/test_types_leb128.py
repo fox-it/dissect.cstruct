@@ -32,7 +32,7 @@ def test_leb128_struct_unsigned(cs: cstruct):
     cdef = """
     struct test {
         uleb128 len;
-        char  data[len];
+        char    data[len];
     };
     """
     cs.load(cdef)
@@ -45,6 +45,8 @@ def test_leb128_struct_unsigned(cs: cstruct):
     assert obj.data == (b"\x41" * 3119)
     assert len(obj.data) == 3119
     assert len(buf) == 3119 + 2
+
+    assert obj.dumps() == buf
 
 
 def test_leb128_struct_unsigned_zero(cs: cstruct):
@@ -63,6 +65,8 @@ def test_leb128_struct_unsigned_zero(cs: cstruct):
     assert obj.numbers[1] == 4747
     assert obj.numbers[2] == 13371337
 
+    assert obj.dumps() == buf
+
 
 def test_leb128_struct_signed_zero(cs: cstruct):
     cdef = """
@@ -80,19 +84,21 @@ def test_leb128_struct_signed_zero(cs: cstruct):
     assert obj.numbers[1] == -4747
     assert obj.numbers[2] == -7083170
 
+    assert obj.dumps() == buf
+
 
 def test_leb128_nested_struct_unsigned(cs: cstruct):
     cdef = """
     struct entry {
         uleb128 len;
-        char  data[len];
-        uint32 crc;
+        char    data[len];
+        uint32  crc;
     };
     struct nested {
-        uleb128  name_len;
-        char     name[name_len];
-        uleb128  n_entries;
-        entry    entries[n_entries];
+        uleb128 name_len;
+        char    name[name_len];
+        uleb128 n_entries;
+        entry   entries[n_entries];
     };
     """
     cs.load(cdef)
@@ -108,20 +114,22 @@ def test_leb128_nested_struct_unsigned(cs: cstruct):
     assert obj.name_len == 8
     assert obj.name == b"\x54\x65\x73\x74\x66\x69\x6c\x65"
     assert obj.n_entries == 300
+
+    assert obj.dumps() == buf
 
 
 def test_leb128_nested_struct_signed(cs: cstruct):
     cdef = """
     struct entry {
         ileb128 len;
-        char  data[len];
-        uint32 crc;
+        char    data[len];
+        uint32  crc;
     };
     struct nested {
-        ileb128  name_len;
-        char     name[name_len];
-        ileb128  n_entries;
-        entry    entries[n_entries];
+        ileb128 name_len;
+        char    name[name_len];
+        ileb128 n_entries;
+        entry   entries[n_entries];
     };
     """
     cs.load(cdef)
@@ -137,6 +145,8 @@ def test_leb128_nested_struct_signed(cs: cstruct):
     assert obj.name_len == 8
     assert obj.name == b"\x54\x65\x73\x74\x66\x69\x6c\x65"
     assert obj.n_entries == 300
+
+    assert obj.dumps() == buf
 
 
 def test_leb128_unsigned_write(cs: cstruct):
@@ -147,6 +157,8 @@ def test_leb128_unsigned_write(cs: cstruct):
     assert cs.uleb128(11637).dumps() == b"\xf5\x5a"
     assert cs.uleb128(261352286).dumps() == b"\xde\xd6\xcf\x7c"
 
+    assert cs.uleb128(b"\xde\xd6\xcf\x7c").dumps() == b"\xde\xd6\xcf\x7c"
+
 
 def test_leb128_signed_write(cs: cstruct):
     assert cs.ileb128(2).dumps() == b"\x02"
@@ -155,6 +167,8 @@ def test_leb128_signed_write(cs: cstruct):
     assert cs.ileb128(-2).dumps() == b"\x7e"
     assert cs.ileb128(-4747).dumps() == b"\xf5\x5a"
     assert cs.ileb128(-7083170).dumps() == b"\xde\xd6\xcf\x7c"
+
+    assert cs.ileb128(b"\xde\xd6\xcf\x7c").dumps() == b"\xde\xd6\xcf\x7c"
 
 
 def test_leb128_write_negatives(cs: cstruct):

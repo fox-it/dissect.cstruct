@@ -22,6 +22,7 @@ def test_packed_read(cs: cstruct):
 def test_packed_write(cs: cstruct):
     assert cs.uint32(0x41414141).dumps() == b"AAAA"
     assert cs.uint32(0xFFFFFFFF).dumps() == b"\xFF\xFF\xFF\xFF"
+    assert cs.uint32(b"AAAA").dumps() == b"AAAA"
 
     assert cs.int32(255).dumps() == b"\xFF\x00\x00\x00"
     assert cs.int32(-1).dumps() == b"\xFF\xFF\xFF\xFF"

@@ -37,6 +37,7 @@ def test_flag_read(TestFlag: type[Flag]):
 
 def test_flag_write(TestFlag: type[Flag]):
     assert TestFlag.A.dumps() == b"\x01"
+    assert TestFlag(b"\x02").dumps() == b"\x02"
 
 
 def test_flag_array_read(TestFlag: type[Flag]):

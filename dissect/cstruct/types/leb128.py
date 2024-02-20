@@ -32,7 +32,7 @@ class LEB128(int, BaseType):
             if b & 0x40 != 0:
                 result |= ~0 << shift
 
-        return result
+        return cls.__new__(cls, result)
 
     @classmethod
     def _read_0(cls, stream: BinaryIO, context: dict[str, Any] = None) -> LEB128:
