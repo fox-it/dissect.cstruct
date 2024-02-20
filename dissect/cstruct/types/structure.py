@@ -11,6 +11,7 @@ from typing import Any, BinaryIO, Callable, ContextManager, Optional
 from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.types.base import BaseType, MetaType
 from dissect.cstruct.types.enum import EnumMetaType
+from dissect.cstruct.types.pointer import Pointer
 
 
 class Field:
@@ -379,13 +380,11 @@ class Structure(BaseType, metaclass=StructureMetaType):
         return getattr(self, item)
 
     def __repr__(self) -> str:
-        values = " ".join(
-            [
-                f"{k}={hex(getattr(self, k)) if issubclass(f.type, int) else repr(getattr(self, k))}"
-                for k, f in self.__class__.fields.items()
-            ]
-        )
-        return f"<{self.__class__.__name__} {values}>"
+        values = [
+            f"{k}={hex(self[k]) if (issubclass(f.type, int) and not issubclass(f.type, Pointer)) else repr(self[k])}"
+            for k, f in self.__class__.fields.items()
+        ]
+        return f"<{self.__class__.__name__} {' '.join(values)}>"
 
 
 class UnionMetaType(StructureMetaType):

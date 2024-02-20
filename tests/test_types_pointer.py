@@ -118,6 +118,8 @@ def test_pointer_struct(cs: cstruct, compiled: bool):
     buf = b"\x04\x00\x08\x00\x01\x02\x03\x04\x05\x06\x07\x08"
     obj = cs.ptrtest(buf)
 
+    assert repr(obj) == "<ptrtest ptr1=<uint32* @ 0x4> ptr2=<uint32* @ 0x8>>"
+
     assert obj.ptr1 != 0
     assert obj.ptr2 != 0
     assert obj.ptr1 != obj.ptr2

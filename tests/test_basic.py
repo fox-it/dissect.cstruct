@@ -560,3 +560,22 @@ def test_dumps_write_overload(cs: cstruct):
     assert fh.getvalue() == b"\x01"
     cs.uint8(2).write(fh)
     assert fh.getvalue() == b"\x01\x02"
+
+
+def test_linked_list(cs: cstruct):
+    cdef = """
+    struct node {
+        uint16 data;
+        node* next;
+    };
+    """
+    cs.pointer = cs.uint16
+    cs.load(cdef)
+
+    assert cs.node.__fields__[1].type.type == cs.node
+
+    obj = cs.node(b"\x01\x00\x04\x00\x02\x00\x00\x00")
+    assert repr(obj) == "<node data=0x1 next=<node* @ 0x4>>"
+
+    assert obj.data == 1
+    assert obj.next.data == 2
