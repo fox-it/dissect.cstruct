@@ -117,7 +117,10 @@ def test_custom_array_type(cs: cstruct, compiled: bool):
         custom  b[lower];
     };
     """
-    cs.load(cdef)
+    cs.load(cdef, compiled=compiled)
+
+    # We just don't want to compiler to blow up with a custom type
+    assert not cs.test.__compiled__
 
     result = cs.test(b"\x04asdf\x04asdf")
     assert isinstance(result.a, CustomType)
