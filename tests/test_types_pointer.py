@@ -4,6 +4,7 @@ import pytest
 
 from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exceptions import NullPointerDereference
+from dissect.cstruct.types.pointer import Pointer
 
 from .utils import verify_compiled
 
@@ -215,3 +216,22 @@ def test_pointer_sys_size():
 
     cs = cstruct(pointer="uint16")
     assert cs.pointer is cs.uint16
+
+
+def test_pointer_of_pointer(cs: cstruct, compiled: bool):
+    cdef = """
+    struct test {
+        uint32  **ptr;
+    };
+    """
+    cs.pointer = cs.uint8
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    obj = cs.test(b"\x01\x02AAAA")
+    assert isinstance(obj.ptr, Pointer)
+    assert isinstance(obj.ptr.dereference(), Pointer)
+    assert obj.ptr == 1
+    assert obj.ptr.dereference() == 2
+    assert obj.ptr.dereference().dereference() == 0x41414141
