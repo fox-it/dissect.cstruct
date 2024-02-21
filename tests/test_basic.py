@@ -597,3 +597,6 @@ def test_typedef_types():
     obj = cs.test(b"\x01" * 16 + b"\x11AAAA")
     assert obj.uuid == b"\x01" * 16
     assert obj.ptr.dereference() == 0x41414141
+
+    with pytest.raises(ParserError, match="line 1: typedefs cannot have bitfields"):
+        cs.load("""typedef uint8 with_bits : 4;""")

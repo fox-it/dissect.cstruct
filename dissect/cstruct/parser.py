@@ -169,7 +169,7 @@ class TokenParser(Parser):
         for name in names:
             type_, name, bits = self._parse_field_type(type_, name)
             if bits is not None:
-                raise ParserError(f"line {self._lineno(tokens.next)}: typedefs cannot have bitfields")
+                raise ParserError(f"line {self._lineno(tokens.previous)}: typedefs cannot have bitfields")
             self.cstruct.addtype(name, type_)
 
     def _struct(self, tokens: TokenConsumer, register: bool = False) -> None:
@@ -581,6 +581,7 @@ class TokenConsumer:
     def __init__(self, tokens: List[Token]):
         self.tokens = tokens
         self.flags = []
+        self.previous = None
 
     def __contains__(self, token) -> bool:
         return token in self.tokens
@@ -599,7 +600,8 @@ class TokenConsumer:
             return None
 
     def consume(self) -> Token:
-        return self.tokens.pop(0)
+        self.previous = self.tokens.pop(0)
+        return self.previous
 
     def reset_flags(self) -> None:
         self.flags = []
