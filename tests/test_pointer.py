@@ -160,3 +160,17 @@ def test_pointer_sys_size():
 
     c = cstruct.cstruct(pointer="uint16")
     assert c.pointer is c.uint16
+
+
+def test_pointer_of_pointer():
+    cdef = """
+    typedef uint32 **ptr;
+    """
+    cs = cstruct.cstruct(pointer="uint8")
+    cs.load(cdef)
+
+    ptr = cs.ptr(b"\x01\x02AAAA")
+    assert ptr == 1
+    assert isinstance(ptr.dereference(), PointerInstance)
+    assert ptr.dereference() == 2
+    assert ptr.dereference().dereference() == 0x41414141
