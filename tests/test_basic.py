@@ -578,6 +578,11 @@ def test_typedef_types():
     cdef = """
     typedef char uuid_t[16];
     typedef uint32 *ptr;
+
+    struct test {
+        uuid_t uuid;
+        ptr ptr;
+    };
     """
     cs = cstruct.cstruct(pointer="uint8")
     cs.load(cdef)
@@ -588,3 +593,7 @@ def test_typedef_types():
     assert isinstance(cs.ptr, Pointer)
     assert cs.ptr(b"\x01AAAA") == 1
     assert cs.ptr(b"\x01AAAA").dereference() == 0x41414141
+
+    obj = cs.test(b"\x01" * 16 + b"\x11AAAA")
+    assert obj.uuid == b"\x01" * 16
+    assert obj.ptr.dereference() == 0x41414141
