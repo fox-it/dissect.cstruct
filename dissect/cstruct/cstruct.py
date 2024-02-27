@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import ctypes as _ctypes
+import io
 import struct
 import sys
 import types
+from textwrap import indent
 from typing import Any, BinaryIO, Iterator, Optional
 
 from dissect.cstruct.exceptions import ResolveError
@@ -406,6 +408,25 @@ class cstruct:
         self, name: str, fields: list[Field], *, align: bool = False, anonymous: bool = False
     ) -> type[Structure]:
         return self._make_struct(name, fields, align=align, anonymous=anonymous, base=Union)
+
+    def to_stub(self, name: str = ""):
+        buffer = io.StringIO()
+        indentation = ""
+        if name:
+            buffer.write(f"class {name}(cstruct):\n")
+            indentation = " " * 4
+
+        for const, value in self.consts.items():
+            buffer.write(indent(f"{const}: {type(value).__name__}=...\n", prefix=indentation))
+
+        for name, type_def in self.typedefs.items():
+            if isinstance(type_def, MetaType) and (text := type_def.to_stub(name)):
+                buffer.write(indent(text, prefix=indentation))
+                buffer.write("\n")
+
+        output_value = buffer.getvalue()
+        buffer.close()
+        return output_value
 
 
 def ctypes(structure: Structure) -> _ctypes.Structure:

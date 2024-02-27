@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Generic, TypeVar
 
 from dissect.cstruct.exceptions import NullPointerDereference
 from dissect.cstruct.types.base import BaseType, MetaType
 from dissect.cstruct.types.char import Char
 from dissect.cstruct.types.void import Void
 
+T = TypeVar("T", bound=MetaType)
 
-class Pointer(int, BaseType):
+
+class Pointer(int, BaseType, Generic[T]):
     """Pointer to some other type."""
 
-    type: MetaType
+    type: T
     _stream: BinaryIO
     _context: dict[str, Any]
     _value: BaseType
@@ -73,7 +75,7 @@ class Pointer(int, BaseType):
     def _write(cls, stream: BinaryIO, data: int) -> int:
         return cls.cs.pointer._write(stream, data)
 
-    def dereference(self) -> Any:
+    def dereference(self) -> T:
         if self == 0:
             raise NullPointerDereference()
 
@@ -93,3 +95,7 @@ class Pointer(int, BaseType):
             self._value = value
 
         return self._value
+
+    @classmethod
+    def _type_stub(cls, name: str = "") -> str:
+        return f"{name}: {cls.__base__.__name__}[{cls.type.__name__}]"
