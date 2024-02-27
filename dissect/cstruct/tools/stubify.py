@@ -3,9 +3,7 @@ import importlib
 import importlib.util
 import io
 import logging
-import sys
 from argparse import ArgumentParser
-from contextlib import contextmanager
 from pathlib import Path
 
 from dissect.cstruct import cstruct
