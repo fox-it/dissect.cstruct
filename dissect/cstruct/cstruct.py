@@ -411,7 +411,7 @@ class cstruct:
     ) -> type[Structure]:
         return self._make_struct(name, fields, align=align, anonymous=anonymous, base=Union)
 
-    def to_stub(self, name: str = "", packed: bool = True):
+    def to_stub(self, name: str = ""):
         buffer = io.StringIO()
         indentation = ""
         if name:
