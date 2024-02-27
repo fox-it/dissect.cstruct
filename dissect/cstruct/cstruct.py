@@ -423,7 +423,7 @@ class cstruct:
 
         for name, type_def in self.typedefs.items():
             if isinstance(type_def, MetaType) and (text := type_def.to_stub(name)):
-                buffer.write(indent(type_def.to_stub(name), prefix=indentation))
+                buffer.write(indent(text, prefix=indentation))
                 buffer.write("\n")
 
         output_value = buffer.getvalue()
