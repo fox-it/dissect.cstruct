@@ -31,6 +31,9 @@ homepage = "https://dissect.tools"
 documentation = "https://docs.dissect.tools/en/latest/projects/dissect.cstruct"
 repository = "https://github.com/fox-it/dissect.cstruct"
 
+[project.scripts]
+stubify = "dissect.cstruct.tools.stubify:main"
+
 [tool.black]
 line-length = 120
 
