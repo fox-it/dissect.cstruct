@@ -181,12 +181,14 @@ class MetaType(type):
         """
         return cls._write_array(stream, array + [cls()])
 
-    def to_stub(cls, name: str = "") -> str:
-        output_str = ""
-        if bases := getattr(cls, "__bases__", None):
-            output_str = bases[0].__name__
+    def _class_stub(cls) -> str:
+        return f"class {cls.__name__}({cls.__base__.__name__}):\n"
 
-        return f"{name}: {output_str}"
+    def _type_stub(cls, name: str = "") -> str:
+        return f"{name}: {cls.__name__}"
+
+    def to_stub(cls, name: str) -> str:
+        return ""
 
 
 class _overload:
@@ -255,6 +257,9 @@ class ArrayMetaType(MetaType):
             cls, [cls.type.default() for _ in range(0 if cls.dynamic or cls.null_terminated else cls.num_entries)]
         )
 
+    def _type_stub(cls, name: str = "") -> str:
+        return f"{name}: {cls.__base__.__name__}"
+
 
 class Array(list, BaseType, metaclass=ArrayMetaType):
     """Implements a fixed or dynamically sized array type.
@@ -280,6 +285,10 @@ class Array(list, BaseType, metaclass=ArrayMetaType):
             raise ArraySizeError(f"Expected static array size {cls.num_entries}, got {actual_size} instead.")
 
         return cls.type._write_array(stream, data)
+
+    @classmethod
+    def _type_stub(cls, name: str = ""):
+        return f"{name}: {cls.__base__.__name__}[{cls.type.__name__}]"
 
 
 # As mentioned in the BaseType class, we correctly set the type here
