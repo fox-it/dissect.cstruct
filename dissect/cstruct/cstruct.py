@@ -6,6 +6,7 @@ import struct
 import sys
 import types
 from pathlib import Path
+from textwrap import indent
 from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.exceptions import ResolveError
@@ -410,19 +411,23 @@ class cstruct:
     ) -> type[Structure]:
         return self._make_struct(name, fields, align=align, anonymous=anonymous, base=Union)
 
-    def to_stub(self, name: str = ""):
-        output_data = io.StringIO()
+    def to_stub(self, name: str = "", packed: bool = True):
+        buffer = io.StringIO()
+        indentation = ""
+        if name:
+            buffer.write(f"class {name}(cstruct):\n")
+            indentation = " " * 4
 
         for const, value in self.consts.items():
-            output_data.write(f"{const}: {type(value).__name__}=...\n")
+            buffer.write(indent(f"{const}: {type(value).__name__}=...\n", prefix=indentation))
 
         for name, type_def in self.typedefs.items():
-            if not isinstance(type_def, str):
-                output_data.write(type_def.to_stub(name))
-                output_data.write("\n")
+            if isinstance(type_def, MetaType) and (text := type_def.to_stub(name)):
+                buffer.write(indent(type_def.to_stub(name), prefix=indentation))
+                buffer.write("\n")
 
-        output_value = output_data.getvalue()
-        output_data.close()
+        output_value = buffer.getvalue()
+        buffer.close()
         return output_value
 
 

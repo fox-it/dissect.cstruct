@@ -39,6 +39,9 @@ class Field:
         bits_str = f" : {self.bits}" if self.bits else ""
         return f"<Field {self.name} {self.type.__name__}{bits_str}>"
 
+    def type_stub(self):
+        return self.type._type_stub(self.name)
+
 
 class StructureMetaType(MetaType):
     """Base metaclass for cstruct structure type classes."""
@@ -372,15 +375,20 @@ class StructureMetaType(MetaType):
 
     def to_stub(cls, name: str = ""):
         with io.StringIO() as data:
-            data.write(f"class {cls.__name__}:\n")
+            data.write(f"class {cls.__name__}({cls.__base__.__name__}):\n")
             call_args = ["self"]
-            for field in cls.__fields__:
-                if not getattr(field.type, "__anonymous__", False):
-                    type_info = f"{field.name}{field.type.to_stub()}"
-                    call_args.append(f"{type_info}=...")
-                    data.write(indent(f"{type_info}\n", prefix=" " * 4))
+            for key, field in cls.lookup.items():
+                if isinstance(field.type, StructureMetaType):
+                    class_info = field.type.to_stub()
+                    data.write(indent(class_info, prefix=" " * 4))
+                call_args.append(f"{field.type_stub()}=...")
+
+            for field in cls.fields.values():
+                type_info = field.type_stub()
+                data.write(indent(f"{type_info}\n", prefix=" " * 4))
+
             call = ", ".join(call_args)
-            data.write(indent(f"def __call__({call}): ...", prefix=" " * 4))
+            data.write(indent(f"def __init__({call}): ...\n", prefix=" " * 4))
             return data.getvalue()
 
 
