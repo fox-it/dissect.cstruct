@@ -63,3 +63,8 @@ class Packed(BaseType):
     @classmethod
     def _write_array(cls, stream: BinaryIO, data: list[Packed]) -> int:
         return stream.write(_struct(cls.cs.endian, f"{len(data)}{cls.packchar}").pack(*data))
+
+    @classmethod
+    def to_stub(cls, name: str):
+        types = ", ".join([x.__name__ for x in cls.__bases__])
+        return f"{name}= type[{types}]"

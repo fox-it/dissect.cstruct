@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import sys
 from enum import EnumMeta, IntEnum, IntFlag
 from typing import TYPE_CHECKING, Any, BinaryIO
@@ -83,6 +84,19 @@ class EnumMetaType(EnumMeta, MetaType):
     def _write_0(cls, stream: BinaryIO, array: list[BaseType]) -> int:
         data = [entry.value if isinstance(entry, Enum) else entry for entry in array]
         return cls._write_array(stream, [*data, cls.type.__default__()])
+
+    def _class_stub(cls) -> str:
+        return f"class {cls.__name__}({cls.__base__.__name__}, {cls.type.__name__}):\n"
+
+    def to_stub(cls, name: str = "") -> str:
+        output = ""
+        with io.StringIO() as buf:
+            buf.write(cls._class_stub())
+            for key in cls.__members__.keys():
+                buf.write(f"    {key} = ...\n")
+            output = buf.getvalue()
+
+        return output
 
 
 def _fix_alias_members(cls: type[Enum]) -> None:
