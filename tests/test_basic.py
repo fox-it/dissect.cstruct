@@ -4,6 +4,7 @@ import pytest
 from dissect import cstruct
 
 from dissect.cstruct.exceptions import ArraySizeError, ParserError, ResolveError
+from dissect.cstruct.types import Array, Pointer
 
 from .utils import verify_compiled
 
@@ -571,3 +572,31 @@ def test_reserved_keyword(compiled: bool):
         assert verify_compiled(cs.resolve(name), compiled)
 
         assert cs.resolve(name)(b"\x01").a == 1
+
+
+def test_typedef_types():
+    cdef = """
+    typedef char uuid_t[16];
+    typedef uint32 *ptr;
+
+    struct test {
+        uuid_t uuid;
+        ptr ptr;
+    };
+    """
+    cs = cstruct.cstruct(pointer="uint8")
+    cs.load(cdef)
+
+    assert isinstance(cs.uuid_t, Array)
+    assert cs.uuid_t(b"\x01" * 16) == b"\x01" * 16
+
+    assert isinstance(cs.ptr, Pointer)
+    assert cs.ptr(b"\x01AAAA") == 1
+    assert cs.ptr(b"\x01AAAA").dereference() == 0x41414141
+
+    obj = cs.test(b"\x01" * 16 + b"\x11AAAA")
+    assert obj.uuid == b"\x01" * 16
+    assert obj.ptr.dereference() == 0x41414141
+
+    with pytest.raises(ParserError, match="line 1: typedefs cannot have bitfields"):
+        cs.load("""typedef uint8 with_bits : 4;""")
