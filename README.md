@@ -199,7 +199,7 @@ assert a.dumps() == d
 The API to access enum members and their values is similar to that of the native Enum type in Python 3. Functionally, it's best comparable to the IntEnum type.
 
 ### Custom types
-You can implement your own types by subclassing `BaseType` or `RawType`, and adding them to your cstruct instance with `addtype(name, type)`
+You can implement your own types by subclassing `BaseType` or `RawType`, and adding them to your cstruct instance with `add_type(name, type)`
 
 ### Custom definition parsers
 Don't like the C-like definition syntax? Write your own syntax parser!
