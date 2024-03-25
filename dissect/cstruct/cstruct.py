@@ -60,8 +60,8 @@ class cstruct:
             "int128": BytesInteger(self, "int128", 16, True, alignment=16),
             "uint128": BytesInteger(self, "uint128", 16, False, alignment=16),
 
-            "uleb128": LEB128(self, 'uleb128', 0, False),
-            "ileb128": LEB128(self, 'ileb128', 0, True),
+            "uleb128": LEB128(self, 'uleb128', None, False, alignment=1),
+            "ileb128": LEB128(self, 'ileb128', None, True, alignment=1),
 
             "void": VoidType(),
 
