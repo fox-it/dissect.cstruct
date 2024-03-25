@@ -33,7 +33,7 @@ def test_leb128_signed_read():
     assert cs.ileb128(b"\xde\xd6\xcf\x7c") == -7083170
 
 
-def test_leb128_struct_unsigned():
+def test_leb128_struct_unsigned(compiled):
     cdef = """
     struct test {
         uleb128 len;
@@ -41,7 +41,7 @@ def test_leb128_struct_unsigned():
     };
     """
     cs = cstruct.cstruct()
-    cs.load(cdef)
+    cs.load(cdef, compiled=compiled)
 
     buf = b"\xaf\x18"
     buf += b"\x41" * 3119
@@ -55,14 +55,14 @@ def test_leb128_struct_unsigned():
     assert obj.dumps() == buf
 
 
-def test_leb128_struct_unsigned_zero():
+def test_leb128_struct_unsigned_zero(compiled):
     cdef = """
     struct test {
         uleb128 numbers[];
     };
     """
     cs = cstruct.cstruct()
-    cs.load(cdef)
+    cs.load(cdef, compiled=compiled)
 
     buf = b"\xaf\x18\x8b\x25\xc9\x8f\xb0\x06\x00"
     obj = cs.test(buf)
@@ -75,14 +75,14 @@ def test_leb128_struct_unsigned_zero():
     assert obj.dumps() == buf
 
 
-def test_leb128_struct_signed_zero():
+def test_leb128_struct_signed_zero(compiled):
     cdef = """
     struct test {
         ileb128 numbers[];
     };
     """
     cs = cstruct.cstruct()
-    cs.load(cdef)
+    cs.load(cdef, compiled=compiled)
 
     buf = b"\xaf\x18\xf5\x5a\xde\xd6\xcf\x7c\x00"
     obj = cs.test(buf)
@@ -95,7 +95,7 @@ def test_leb128_struct_signed_zero():
     assert obj.dumps() == buf
 
 
-def test_leb128_nested_struct_unsigned():
+def test_leb128_nested_struct_unsigned(compiled):
     cdef = """
     struct entry {
         uleb128 len;
@@ -110,7 +110,7 @@ def test_leb128_nested_struct_unsigned():
     };
     """
     cs = cstruct.cstruct()
-    cs.load(cdef)
+    cs.load(cdef, compiled=compiled)
 
     # Dummy file format specifying 300 entries
     buf = b"\x08\x54\x65\x73\x74\x66\x69\x6c\x65\xac\x02"
@@ -127,7 +127,7 @@ def test_leb128_nested_struct_unsigned():
     assert obj.dumps() == buf
 
 
-def test_leb128_nested_struct_signed():
+def test_leb128_nested_struct_signed(compiled):
     cdef = """
     struct entry {
         ileb128 len;
@@ -142,7 +142,7 @@ def test_leb128_nested_struct_signed():
     };
     """
     cs = cstruct.cstruct()
-    cs.load(cdef)
+    cs.load(cdef, compiled=compiled)
 
     # Dummy file format specifying 300 entries
     buf = b"\x08\x54\x65\x73\x74\x66\x69\x6c\x65\xac\x02"
