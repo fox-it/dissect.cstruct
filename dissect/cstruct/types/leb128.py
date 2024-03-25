@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, BinaryIO, List
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.types.base import RawType
 
@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 class LEB128(RawType):
     """Variable-length code compression to store an arbitrarily large integer in a small number of bytes.
+
     See https://en.wikipedia.org/wiki/LEB128 for more information and an explanation of the algorithm.
     """
 
@@ -75,11 +76,11 @@ class LEB128(RawType):
         stream.write(result)
         return len(result)
 
-    def _write_0(self, stream: BinaryIO, data: List[int]) -> int:
+    def _write_0(self, stream: BinaryIO, data: list[int]) -> int:
         return self._write_array(stream, data + [0])
 
     def default(self) -> int:
         return 0
 
-    def default_array(self, count: int) -> List[int]:
+    def default_array(self, count: int) -> list[int]:
         return [0] * count
