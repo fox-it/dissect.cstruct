@@ -33,6 +33,7 @@ def test_leb128_signed_read():
     assert cs.ileb128(b"\xde\xd6\xcf\x7c") == -7083170
 
 
+@pytest.mark.parametrize("compiled", [True, False])
 def test_leb128_struct_unsigned(compiled):
     cdef = """
     struct test {
@@ -55,6 +56,7 @@ def test_leb128_struct_unsigned(compiled):
     assert obj.dumps() == buf
 
 
+@pytest.mark.parametrize("compiled", [True, False])
 def test_leb128_struct_unsigned_zero(compiled):
     cdef = """
     struct test {
@@ -75,6 +77,7 @@ def test_leb128_struct_unsigned_zero(compiled):
     assert obj.dumps() == buf
 
 
+@pytest.mark.parametrize("compiled", [True, False])
 def test_leb128_struct_signed_zero(compiled):
     cdef = """
     struct test {
@@ -95,6 +98,7 @@ def test_leb128_struct_signed_zero(compiled):
     assert obj.dumps() == buf
 
 
+@pytest.mark.parametrize("compiled", [True, False])
 def test_leb128_nested_struct_unsigned(compiled):
     cdef = """
     struct entry {
@@ -127,6 +131,7 @@ def test_leb128_nested_struct_unsigned(compiled):
     assert obj.dumps() == buf
 
 
+@pytest.mark.parametrize("compiled", [True, False])
 def test_leb128_nested_struct_signed(compiled):
     cdef = """
     struct entry {
