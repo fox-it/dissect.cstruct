@@ -16,7 +16,7 @@ class LEB128(RawType):
 
     signed: bool
 
-    def __init__(self, cstruct: cstruct, name: str, size: int, signed: bool, alignment: int = None):
+    def __init__(self, cstruct: cstruct, name: str, size: int, signed: bool, alignment: int = 1):
         self.signed = signed
         super().__init__(cstruct, name, size, alignment)
 
