@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from dissect.cstruct.compiler import Compiler
 from dissect.cstruct.exceptions import ParserError
 from dissect.cstruct.expression import Expression
-from dissect.cstruct.types import Array, Enum, Field, Flag, Pointer, Structure, Union
+from dissect.cstruct.types import (
+    Array,
+    BaseType,
+    Enum,
+    Field,
+    Flag,
+    Pointer,
+    Structure,
+    Union,
+)
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
@@ -158,6 +167,9 @@ class TokenParser(Parser):
 
         names = self._names(tokens)
         for name in names:
+            type_, name, bits = self._parse_field_type(type_, name)
+            if bits is not None:
+                raise ParserError(f"line {self._lineno(tokens.previous)}: typedefs cannot have bitfields")
             self.cstruct.addtype(name, type_)
 
     def _struct(self, tokens: TokenConsumer, register: bool = False) -> None:
@@ -236,9 +248,15 @@ class TokenParser(Parser):
             raise ParserError(f"line {self._lineno(tokens.next)}: expected name")
         nametok = tokens.consume()
 
+        type_, name, bits = self._parse_field_type(type_, nametok.value)
+
+        tokens.eol()
+        return Field(name.strip(), type_, bits)
+
+    def _parse_field_type(self, type_: BaseType, name: str) -> tuple[BaseType, str, Optional[int]]:
         pattern = self.TOK.patterns[self.TOK.NAME]
         # Dirty trick because the regex expects a ; but we don't want it to be part of the value
-        d = pattern.match(nametok.value + ";").groupdict()
+        d = pattern.match(name + ";").groupdict()
 
         name = d["name"]
         count_expression = d["count"]
@@ -269,8 +287,7 @@ class TokenParser(Parser):
 
                 type_ = Array(self.cstruct, type_, count)
 
-        tokens.eol()
-        return Field(name, type_, int(d["bits"]) if d["bits"] else None)
+        return type_, name, int(d["bits"]) if d["bits"] else None
 
     def _names(self, tokens: TokenConsumer) -> List[str]:
         names = []
@@ -564,6 +581,7 @@ class TokenConsumer:
     def __init__(self, tokens: List[Token]):
         self.tokens = tokens
         self.flags = []
+        self.previous = None
 
     def __contains__(self, token) -> bool:
         return token in self.tokens
@@ -582,7 +600,8 @@ class TokenConsumer:
             return None
 
     def consume(self) -> Token:
-        return self.tokens.pop(0)
+        self.previous = self.tokens.pop(0)
+        return self.previous
 
     def reset_flags(self) -> None:
         self.flags = []
