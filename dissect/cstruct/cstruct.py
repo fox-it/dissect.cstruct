@@ -7,6 +7,7 @@ from typing import Any, BinaryIO, Optional
 from dissect.cstruct.exceptions import ResolveError
 from dissect.cstruct.parser import CStyleParser, TokenParser
 from dissect.cstruct.types import (
+    LEB128,
     Array,
     BaseType,
     BytesInteger,
@@ -58,6 +59,9 @@ class cstruct:
             "uint48": BytesInteger(self, "uint48", 6, False, alignment=8),
             "int128": BytesInteger(self, "int128", 16, True, alignment=16),
             "uint128": BytesInteger(self, "uint128", 16, False, alignment=16),
+
+            "uleb128": LEB128(self, 'uleb128', None, False),
+            "ileb128": LEB128(self, 'ileb128', None, True),
 
             "void": VoidType(),
 
