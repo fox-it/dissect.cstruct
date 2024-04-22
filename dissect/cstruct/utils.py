@@ -55,6 +55,8 @@ def _hexdump(data: bytes, palette: Palette = None, offset: int = 0, prefix: str 
         for j in range(16):
             if not active and palette:
                 remaining, active = palette.pop()
+                while remaining == 0:
+                    remaining, active = palette.pop()
                 values += active
             elif active and j == 0:
                 values += active
