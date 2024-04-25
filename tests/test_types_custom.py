@@ -39,12 +39,12 @@ def test_adding_custom_type() -> None:
 
     cs.EtwPointer.as_64bit()
     assert cs.EtwPointer.type is cs.uint64
-    assert cs.EtwPointer.size == 8
+    assert len(cs.EtwPointer) == 8
     assert cs.EtwPointer(b"\xDE\xAD\xBE\xEF" * 2).dumps() == b"\xDE\xAD\xBE\xEF" * 2
 
     cs.EtwPointer.as_32bit()
     assert cs.EtwPointer.type is cs.uint32
-    assert cs.EtwPointer.size == 4
+    assert len(cs.EtwPointer) == 4
     assert cs.EtwPointer(b"\xDE\xAD\xBE\xEF" * 2).dumps() == b"\xDE\xAD\xBE\xEF"
 
 
@@ -62,6 +62,7 @@ def test_using_type_in_struct() -> None:
     cs.load(struct_definition)
 
     cs.EtwPointer.as_64bit()
+    # Doesn't work as __len__ only functions on type level, it doesn't have it in the instance
     assert len(cs.test().data) == 8
 
     cs.EtwPointer.as_32bit()
