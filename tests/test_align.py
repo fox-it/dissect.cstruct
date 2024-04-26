@@ -46,7 +46,7 @@ def test_align_struct(cs: cstruct, compiled: bool) -> None:
     assert obj.dumps() == buf
 
 
-def test_align_union(cs: cstruct):
+def test_align_union(cs: cstruct) -> None:
     cdef = """
     union test {
         uint32  a;
