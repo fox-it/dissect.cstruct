@@ -4,7 +4,7 @@ from dissect.cstruct import cstruct
 from tests.utils import verify_compiled
 
 
-def test_align_struct(cs: cstruct, compiled: bool):
+def test_align_struct(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint32  a;  // 0x00
