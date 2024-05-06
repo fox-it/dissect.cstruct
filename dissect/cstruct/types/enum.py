@@ -10,6 +10,9 @@ if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
 
 
+PY_311 = sys.version_info >= (3, 11, 0)
+
+
 class EnumMetaType(EnumMeta, MetaType):
     type: MetaType
 
@@ -116,15 +119,21 @@ class Enum(BaseType, IntEnum, metaclass=EnumMetaType):
             };
     """
 
-    if sys.version_info >= (3, 11):
+    if PY_311:
 
         def __repr__(self) -> str:
+            # Use the IntFlag repr as a base since it handles unknown values the way we want it
+            # I.e. <Color: 255> instead of <Color.None: 255>
             result = IntFlag.__repr__(self)
             if not self.__class__.__name__:
+                # Deal with anonymous enums by stripping off the first bit
+                # I.e. <.RED: 1> -> <RED: 1>
                 result = f"<{result[2:]}"
             return result
 
         def __str__(self) -> str:
+            # Use the IntFlag str as a base since it handles unknown values the way we want it
+            # I.e. <Color: 255> instead of <Color.None: 255>
             result = IntFlag.__str__(self)
             if not self.__class__.__name__:
                 result = f"<{result[1:]}"

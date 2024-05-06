@@ -1,14 +1,12 @@
-import sys
 from enum import Flag as StdFlag
 
 import pytest
 
 from dissect.cstruct.cstruct import cstruct
+from dissect.cstruct.types.enum import PY_311
 from dissect.cstruct.types.flag import Flag
 
 from .utils import verify_compiled
-
-PY_311 = sys.version_info >= (3, 11, 0)
 
 
 @pytest.fixture
