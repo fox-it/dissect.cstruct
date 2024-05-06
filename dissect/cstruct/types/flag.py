@@ -31,12 +31,16 @@ class Flag(BaseType, IntFlag, metaclass=EnumMetaType):
     def __repr__(self) -> str:
         result = super().__repr__()
         if not self.__class__.__name__:
+            # Deal with anonymous enums by stripping off the first bit
+            # I.e. <.RED: 1> -> <RED: 1>
             result = f"<{result[2:]}"
         return result
 
     def __str__(self) -> str:
         result = super().__str__()
         if not self.__class__.__name__:
+            # Deal with anonymous enums by stripping off the first bit
+            # I.e. <.RED: 1> -> <RED: 1>
             result = f"<{result[1:]}"
         return result
 

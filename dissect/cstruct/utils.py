@@ -3,7 +3,7 @@ from __future__ import annotations
 import pprint
 import string
 import sys
-from typing import Iterator
+from typing import Iterator, Optional
 
 from dissect.cstruct.types.structure import Structure
 
@@ -38,7 +38,7 @@ ENDIANNESS_MAP = {
 Palette = list[tuple[str, str]]
 
 
-def _hexdump(data: bytes, palette: Palette = None, offset: int = 0, prefix: str = "") -> Iterator[str]:
+def _hexdump(data: bytes, palette: Optional[Palette] = None, offset: int = 0, prefix: str = "") -> Iterator[str]:
     """Hexdump some data.
 
     Args:
@@ -99,8 +99,8 @@ def _hexdump(data: bytes, palette: Palette = None, offset: int = 0, prefix: str 
 
 
 def hexdump(
-    data: bytes, palette=None, offset: int = 0, prefix: str = "", output: str = "print"
-) -> Iterator[str] | str | None:
+    data: bytes, palette: Optional[Palette] = None, offset: int = 0, prefix: str = "", output: str = "print"
+) -> Optional[Iterator[str] | str]:
     """Hexdump some data.
 
     Args:
@@ -127,7 +127,7 @@ def _dumpstruct(
     offset: int,
     color: bool,
     output: str,
-) -> str | None:
+) -> Optional[str]:
     palette = []
     colors = [
         (COLOR_RED, COLOR_BG_RED),
@@ -178,11 +178,11 @@ def _dumpstruct(
 
 def dumpstruct(
     obj: Structure | type[Structure],
-    data: bytes = None,
+    data: Optional[bytes] = None,
     offset: int = 0,
     color: bool = True,
     output: str = "print",
-) -> str | None:
+) -> Optional[str]:
     """Dump a structure or parsed structure instance.
 
     Prints a colorized hexdump and parsed structure output.

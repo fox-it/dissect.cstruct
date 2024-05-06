@@ -17,7 +17,7 @@ class CharArray(bytes, BaseType, metaclass=ArrayMetaType):
         if isinstance(data, list) and data and isinstance(data[0], int):
             data = bytes(data)
 
-        if isinstance(data, str):
+        elif isinstance(data, str):
             data = data.encode("latin-1")
 
         if cls.null_terminated:

@@ -350,7 +350,6 @@ class cstruct:
             "type": type_,
             "num_entries": num_entries,
             "null_terminated": null_terminated,
-            "dynamic": dynamic,
         }
 
         return self._make_type(name, bases, size, alignment=type_.alignment, attrs=attrs)

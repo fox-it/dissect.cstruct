@@ -5,7 +5,11 @@ import re
 from typing import TYPE_CHECKING, Optional
 
 from dissect.cstruct import compiler
-from dissect.cstruct.exceptions import ParserError
+from dissect.cstruct.exceptions import (
+    ExpressionParserError,
+    ExpressionTokenizerError,
+    ParserError,
+)
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.types import ArrayMetaType, Field, MetaType
 
@@ -89,7 +93,7 @@ class TokenParser(Parser):
         if isinstance(value, str):
             try:
                 value = Expression(self.cstruct, value).evaluate()
-            except Exception:
+            except (ExpressionParserError, ExpressionTokenizerError):
                 pass
 
         self.cstruct.consts[match["name"]] = value
@@ -131,9 +135,7 @@ class TokenParser(Parser):
         if not d["type"]:
             d["type"] = "uint32"
 
-        factory = self.cstruct._make_enum
-        if enumtype == "flag":
-            factory = self.cstruct._make_flag
+        factory = self.cstruct._make_flag if enumtype == "flag" else self.cstruct._make_enum
 
         enum = factory(d["name"] or "", self.cstruct.resolve(d["type"]), values)
         if not enum.__name__:
@@ -165,10 +167,7 @@ class TokenParser(Parser):
     def _struct(self, tokens: TokenConsumer, register: bool = False) -> None:
         stype = tokens.consume()
 
-        if stype.value.startswith("union"):
-            factory = self.cstruct._make_union
-        else:
-            factory = self.cstruct._make_struct
+        factory = self.cstruct._make_union if stype.value.startswith("union") else self.cstruct._make_struct
 
         st = None
         names = []
