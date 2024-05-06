@@ -18,7 +18,7 @@ class ExpressionTokenizer:
         self.pos = 0
         self.tokens = []
 
-    def equal(self, token: str, expected: Union[str, str[str]]) -> bool:
+    def equal(self, token: str, expected: Union[str, set[str]]) -> bool:
         if isinstance(expected, set):
             return token in expected
         else:
@@ -42,7 +42,7 @@ class ExpressionTokenizer:
     def match(
         self,
         func: Optional[Callable[[str], bool]] = None,
-        expected: Optional[str] = None,
+        expected: Optional[str | set[str]] = None,
         consume: bool = True,
         append: bool = True,
     ) -> bool:
@@ -142,7 +142,7 @@ class ExpressionTokenizer:
                 self.tokens.append(">>")
             elif self.match(expected="<", append=False) and self.match(expected="<", append=False):
                 self.tokens.append("<<")
-            elif self.match(expected=" ", append=False):
+            elif self.match(expected={" ", "\t"}, append=False):
                 continue
             else:
                 raise ExpressionTokenizerError(
