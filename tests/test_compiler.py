@@ -76,21 +76,18 @@ def test_generate_struct_info_offsets(cs: cstruct) -> None:
     assert fmt == [(1, "B")]
 
 
-def test_optimize_struct_fmt() -> None:
-    fields = [(None, 1, "B"), (None, 3, "B")]
-    assert compiler._optimize_struct_fmt(fields) == "4B"
-
-    fields = [(None, 1, "B"), (None, 3, "B"), (None, 2, "H")]
-    assert compiler._optimize_struct_fmt(fields) == "4B2H"
-
-    fields = [(None, 1, "B"), (None, 0, "x")]
-    assert compiler._optimize_struct_fmt(fields) == "B"
-
-    fields = [(None, 1, "B"), (None, 0, "x"), (None, 2, "H")]
-    assert compiler._optimize_struct_fmt(fields) == "B2H"
-
-    fields = [(None, 1, "B"), (None, 0, "x"), (None, 2, "x"), (None, 1, "H")]
-    assert compiler._optimize_struct_fmt(fields) == "B2xH"
+@pytest.mark.parametrize(
+    "fields, fmt",
+    [
+        ([(None, 1, "B"), (None, 3, "B")], "4B"),
+        ([(None, 1, "B"), (None, 3, "B"), (None, 2, "H")], "4B2H"),
+        ([(None, 1, "B"), (None, 0, "x")], "B"),
+        ([(None, 1, "B"), (None, 0, "x"), (None, 2, "H")], "B2H"),
+        ([(None, 1, "B"), (None, 0, "x"), (None, 2, "x"), (None, 1, "H")], "B2xH"),
+    ],
+)
+def test_optimize_struct_fmt(fields: list[tuple], fmt: str) -> None:
+    assert compiler._optimize_struct_fmt(fields) == fmt
 
 
 def test_generate_packed_read(cs: cstruct) -> None:
