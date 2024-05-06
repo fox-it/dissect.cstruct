@@ -74,10 +74,10 @@ class Compiler:
         return structure
 
     def compile_read(self, fields: list[Field], name: Optional[str] = None, align: bool = False) -> MethodType:
-        return ReadSourceGenerator(self.cs, fields, name, align).generate()
+        return _ReadSourceGenerator(self.cs, fields, name, align).generate()
 
 
-class ReadSourceGenerator:
+class _ReadSourceGenerator:
     def __init__(self, cs: cstruct, fields: list[Field], name: Optional[str] = None, align: bool = False):
         self.cs = cs
         self.fields = fields
@@ -203,7 +203,6 @@ class ReadSourceGenerator:
 
             # Everything else - basic and composite types (and arrays of them)
             else:
-                # Add to the current block
                 current_block.append(field)
 
             if current_offset is not None and size is not None:

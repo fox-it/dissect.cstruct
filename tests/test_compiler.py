@@ -97,7 +97,7 @@ def test_generate_packed_read(cs: cstruct) -> None:
         f(cs.uint32, name="c"),
         f(cs.int64, name="d"),
     ]
-    code = next(compiler.ReadSourceGenerator(cs, fields)._generate_packed(fields))
+    code = next(compiler._ReadSourceGenerator(cs, fields)._generate_packed(fields))
 
     expected = """
     buf = stream.read(15)
@@ -127,7 +127,7 @@ def test_generate_packed_read_array(cs: cstruct) -> None:
         f(cs.uint32[4], name="c"),
         f(cs.int64[5], name="d"),
     ]
-    code = next(compiler.ReadSourceGenerator(cs, fields)._generate_packed(fields))
+    code = next(compiler._ReadSourceGenerator(cs, fields)._generate_packed(fields))
 
     expected = """
     buf = stream.read(64)
@@ -167,7 +167,7 @@ def test_generate_packed_read_byte_types(cs: cstruct) -> None:
         f(cs.int24, name="e"),
         f(cs.int24[2], name="f"),
     ]
-    code = next(compiler.ReadSourceGenerator(cs, fields)._generate_packed(fields))
+    code = next(compiler._ReadSourceGenerator(cs, fields)._generate_packed(fields))
 
     expected = """
     buf = stream.read(18)
@@ -209,7 +209,7 @@ def test_generate_packed_read_composite_types(cs: cstruct, TestEnum: type[Enum])
         f(cs.void),
         f(TestEnum[2], name="c"),
     ]
-    code = next(compiler.ReadSourceGenerator(cs, fields)._generate_packed(fields))
+    code = next(compiler._ReadSourceGenerator(cs, fields)._generate_packed(fields))
 
     expected = """
     buf = stream.read(11)
@@ -237,7 +237,7 @@ def test_generate_packed_read_offsets(cs: cstruct) -> None:
         f(cs.uint8, name="a"),
         f(cs.uint8, 8, name="b"),
     ]
-    code = next(compiler.ReadSourceGenerator(cs, fields)._generate_packed(fields))
+    code = next(compiler._ReadSourceGenerator(cs, fields)._generate_packed(fields))
 
     expected = """
     buf = stream.read(9)
@@ -259,7 +259,7 @@ def test_generate_structure_read(cs: cstruct) -> None:
     mock_type.__anonymous__ = False
 
     field = Field("a", mock_type)
-    code = next(compiler.ReadSourceGenerator(cs, [field])._generate_structure(field))
+    code = next(compiler._ReadSourceGenerator(cs, [field])._generate_structure(field))
 
     expected = """
     _s = stream.tell()
@@ -275,7 +275,7 @@ def test_generate_structure_read_anonymous(cs: cstruct) -> None:
     mock_type.__anonymous__ = True
 
     field = Field("a", mock_type)
-    code = next(compiler.ReadSourceGenerator(cs, [field])._generate_structure(field))
+    code = next(compiler._ReadSourceGenerator(cs, [field])._generate_structure(field))
 
     expected = """
     _s = stream.tell()
@@ -288,7 +288,7 @@ def test_generate_structure_read_anonymous(cs: cstruct) -> None:
 
 def test_generate_array_read(cs: cstruct) -> None:
     field = Field("a", Mock())
-    code = next(compiler.ReadSourceGenerator(cs, [field])._generate_array(field))
+    code = next(compiler._ReadSourceGenerator(cs, [field])._generate_array(field))
 
     expected = """
     _s = stream.tell()
@@ -301,7 +301,7 @@ def test_generate_array_read(cs: cstruct) -> None:
 
 def test_generate_bits_read(cs: cstruct, TestEnum: type[Enum]) -> None:
     field = Field("a", cs.int8, 2)
-    code = next(compiler.ReadSourceGenerator(cs, [field])._generate_bits(field))
+    code = next(compiler._ReadSourceGenerator(cs, [field])._generate_bits(field))
 
     expected = """
     _t = _0
@@ -311,7 +311,7 @@ def test_generate_bits_read(cs: cstruct, TestEnum: type[Enum]) -> None:
     assert code == dedent(expected)
 
     field = Field("b", TestEnum, 2)
-    code = next(compiler.ReadSourceGenerator(cs, [field])._generate_bits(field))
+    code = next(compiler._ReadSourceGenerator(cs, [field])._generate_bits(field))
 
     expected = """
     _t = _0
