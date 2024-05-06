@@ -54,6 +54,9 @@ class MetaType(type):
 
     def __len__(cls) -> int:
         """Return the byte size of the type."""
+        import ipdb
+
+        ipdb.set_trace()
         if cls.size is None:
             raise TypeError("Dynamic size")
 
@@ -209,6 +212,13 @@ class BaseType(metaclass=MetaType):
 
     dumps = _overload(MetaType.dumps)
     write = _overload(MetaType.write)
+
+    def __len__(self) -> int:
+        """Return the byte size of the type."""
+        if self.__class__.size is None:
+            raise TypeError("Dynamic size")
+
+        return self.__class__.size
 
 
 class ArrayMetaType(MetaType):

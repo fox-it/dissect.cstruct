@@ -33,8 +33,7 @@ class EtwPointer(BaseType):
         cls.size = 8
 
 
-def test_adding_custom_type() -> None:
-    cs = cstruct()
+def test_adding_custom_type(cs: cstruct) -> None:
     cs.add_custom_type("EtwPointer", EtwPointer)
 
     cs.EtwPointer.as_64bit()
@@ -48,8 +47,7 @@ def test_adding_custom_type() -> None:
     assert cs.EtwPointer(b"\xDE\xAD\xBE\xEF" * 2).dumps() == b"\xDE\xAD\xBE\xEF"
 
 
-def test_using_type_in_struct() -> None:
-    cs = cstruct()
+def test_using_type_in_struct(cs: cstruct) -> None:
     cs.add_custom_type("EtwPointer", EtwPointer)
 
     struct_definition = """
