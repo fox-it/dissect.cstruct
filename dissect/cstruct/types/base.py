@@ -5,10 +5,10 @@ from io import BytesIO
 from typing import TYPE_CHECKING, Any, BinaryIO, Callable
 
 from dissect.cstruct.exceptions import ArraySizeError
+from dissect.cstruct.expression import Expression
 
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
-    from dissect.cstruct.expression import Expression
 
 
 EOF = -0xE0F  # Negative counts are illegal anyway, so abuse that for our EOF sentinel
@@ -54,9 +54,6 @@ class MetaType(type):
 
     def __len__(cls) -> int:
         """Return the byte size of the type."""
-        import ipdb
-
-        ipdb.set_trace()
         if cls.size is None:
             raise TypeError("Dynamic size")
 
@@ -232,15 +229,17 @@ class ArrayMetaType(MetaType):
         if cls.null_terminated:
             return cls.type._read_0(stream, context)
 
-        if cls.dynamic:
+        if isinstance(cls.num_entries, int):
+            num = max(0, cls.num_entries)
+        elif cls.num_entries is None:
+            num = EOF
+        elif isinstance(cls.num_entries, Expression):
             try:
                 num = max(0, cls.num_entries.evaluate(context))
             except Exception:
                 if cls.num_entries.expression != "EOF":
                     raise
                 num = EOF
-        else:
-            num = max(0, cls.num_entries)
 
         return cls.type._read_array(stream, num, context)
 

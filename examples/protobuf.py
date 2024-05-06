@@ -16,6 +16,7 @@ class ProtobufVarint(BaseType):
         - https://protobuf.dev/programming-guides/encoding/
         - https://github.com/protocolbuffers/protobuf/blob/main/python/google/protobuf/internal/decoder.py
     """
+
     @classmethod
     def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> int:
         return decode_varint(stream)
@@ -56,17 +57,19 @@ def encode_varint(number: int) -> bytes:
             break
     return bytes(buf)
 
+
 if __name__ == "__main__":
-    struct_def = """
+    cdef = """
     struct foo {
         uint32 foo;
         varint size;
         char   bar[size];
     };
     """
+
     cs = cstruct(endian=">")
     cs.add_custom_type("varint", ProtobufVarint)
-    cs.load(struct_def, compiled=False)
+    cs.load(cdef, compiled=False)
 
     aaa = b"a" * 123456
     buf = b"\x00\x00\x00\x01\xc0\xc4\x07" + aaa
