@@ -5,17 +5,17 @@ import pytest
 from dissect.cstruct.cstruct import cstruct
 
 
-def test_char_read(cs: cstruct):
+def test_char_read(cs: cstruct) -> None:
     assert cs.char(b"A") == b"A"
     assert cs.char(b"AAAA\x00") == b"A"
     assert cs.char(io.BytesIO(b"AAAA\x00")) == b"A"
 
 
-def test_char_write(cs: cstruct):
+def test_char_write(cs: cstruct) -> None:
     assert cs.char(b"A").dumps() == b"A"
 
 
-def test_char_array(cs: cstruct):
+def test_char_array(cs: cstruct) -> None:
     buf = b"AAAA\x00"
 
     assert cs.char[4](buf) == b"AAAA"
@@ -25,14 +25,14 @@ def test_char_array(cs: cstruct):
     assert cs.char[None](io.BytesIO(buf)) == b"AAAA"
 
 
-def test_char_array_write(cs: cstruct):
+def test_char_array_write(cs: cstruct) -> None:
     buf = b"AAAA\x00"
 
     assert cs.char[4](buf).dumps() == b"AAAA"
     assert cs.char[None](buf).dumps() == b"AAAA\x00"
 
 
-def test_char_eof(cs: cstruct):
+def test_char_eof(cs: cstruct) -> None:
     with pytest.raises(EOFError):
         cs.char(b"")
 

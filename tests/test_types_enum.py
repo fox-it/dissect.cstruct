@@ -13,7 +13,7 @@ def TestEnum(cs: cstruct) -> type[Enum]:
     return cs._make_enum("Test", cs.uint8, {"A": 1, "B": 2, "C": 3})
 
 
-def test_enum(cs: cstruct, TestEnum: type[Enum]):
+def test_enum(cs: cstruct, TestEnum: type[Enum]) -> None:
     assert issubclass(TestEnum, StdEnum)
     assert TestEnum.cs is cs
     assert TestEnum.type is cs.uint8
@@ -35,26 +35,26 @@ def test_enum(cs: cstruct, TestEnum: type[Enum]):
     assert TestEnum(0).value == 0
 
 
-def test_enum_read(TestEnum: type[Enum]):
+def test_enum_read(TestEnum: type[Enum]) -> None:
     assert TestEnum(b"\x02") == TestEnum.B
 
 
-def test_enum_write(TestEnum: type[Enum]):
+def test_enum_write(TestEnum: type[Enum]) -> None:
     assert TestEnum.B.dumps() == b"\x02"
     assert TestEnum(b"\x02").dumps() == b"\x02"
 
 
-def test_enum_array_read(TestEnum: type[Enum]):
+def test_enum_array_read(TestEnum: type[Enum]) -> None:
     assert TestEnum[2](b"\x02\x03") == [TestEnum.B, TestEnum.C]
     assert TestEnum[None](b"\x02\x03\x00") == [TestEnum.B, TestEnum.C]
 
 
-def test_enum_array_write(TestEnum: type[Enum]):
+def test_enum_array_write(TestEnum: type[Enum]) -> None:
     assert TestEnum[2]([TestEnum.B, TestEnum.C]).dumps() == b"\x02\x03"
     assert TestEnum[None]([TestEnum.B, TestEnum.C]).dumps() == b"\x02\x03\x00"
 
 
-def test_enum_alias(cs: cstruct):
+def test_enum_alias(cs: cstruct) -> None:
     AliasEnum = cs._make_enum("Test", cs.uint8, {"A": 1, "B": 2, "C": 2})
 
     assert AliasEnum.A == 1
@@ -70,12 +70,12 @@ def test_enum_alias(cs: cstruct):
     assert AliasEnum.B.dumps() == AliasEnum.C.dumps()
 
 
-def test_enum_bad_type(cs: cstruct):
+def test_enum_bad_type(cs: cstruct) -> None:
     with pytest.raises(TypeError):
         cs._make_enum("Test", cs.char, {"A": 1, "B": 2, "C": 3})
 
 
-def test_enum_eof(TestEnum: type[Enum]):
+def test_enum_eof(TestEnum: type[Enum]) -> None:
     with pytest.raises(EOFError):
         TestEnum(b"")
 
@@ -86,7 +86,7 @@ def test_enum_eof(TestEnum: type[Enum]):
         TestEnum[None](b"\x01")
 
 
-def test_enum_struct(cs: cstruct, compiled: bool):
+def test_enum_struct(cs: cstruct, compiled: bool) -> None:
     cdef = """
     enum Test16 : uint16 {
         A = 0x1,
@@ -178,7 +178,7 @@ def test_enum_struct(cs: cstruct, compiled: bool):
         obj[cs.Test32.A]
 
 
-def test_enum_comments(cs: cstruct):
+def test_enum_comments(cs: cstruct) -> None:
     cdef = """
     enum Inline { hello=7, world, foo, bar }; // inline enum
 
@@ -220,7 +220,7 @@ def test_enum_comments(cs: cstruct):
     assert cs.Test.a != cs.Test.b
 
 
-def test_enum_name(cs: cstruct, compiled: bool):
+def test_enum_name(cs: cstruct, compiled: bool) -> None:
     cdef = """
     enum Color: uint16 {
           RED = 1,
@@ -256,7 +256,7 @@ def test_enum_name(cs: cstruct, compiled: bool):
     assert repr(pixel.color) == "<Color: 255>"
 
 
-def test_enum_struct_write(cs: cstruct, compiled: bool):
+def test_enum_struct_write(cs: cstruct, compiled: bool) -> None:
     cdef = """
     enum Test16 : uint16 {
         A = 0x1,
@@ -299,7 +299,7 @@ def test_enum_struct_write(cs: cstruct, compiled: bool):
     assert obj.dumps() == b"\x01\x00\x02\x00\x01\x00\x00\x02\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x01\x00\x02\x00"
 
 
-def test_enum_anonymous(cs: cstruct, compiled: bool):
+def test_enum_anonymous(cs: cstruct, compiled: bool) -> None:
     cdef = """
     enum : uint16 {
           RED = 1,
@@ -318,7 +318,7 @@ def test_enum_anonymous(cs: cstruct, compiled: bool):
     assert repr(cs.RED) == "<RED: 1>"
 
 
-def test_enum_anonymous_struct(cs: cstruct, compiled: bool):
+def test_enum_anonymous_struct(cs: cstruct, compiled: bool) -> None:
     cdef = """
     enum : uint32 {
           nElements = 4
@@ -336,7 +336,7 @@ def test_enum_anonymous_struct(cs: cstruct, compiled: bool):
     assert t.arr == [255, 0, 0, 10]
 
 
-def test_enum_reference_own_member(cs: cstruct, compiled: bool):
+def test_enum_reference_own_member(cs: cstruct, compiled: bool) -> None:
     cdef = """
     enum test {
         A,

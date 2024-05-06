@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import os
 from io import BytesIO
+from typing import BinaryIO, Optional
 
 import pytest
 
@@ -10,7 +13,7 @@ from dissect.cstruct.types import BaseType
 from .utils import verify_compiled
 
 
-def test_duplicate_type(cs: cstruct, compiled: bool):
+def test_duplicate_type(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint32  a;
@@ -22,18 +25,18 @@ def test_duplicate_type(cs: cstruct, compiled: bool):
         cs.load(cdef)
 
 
-def test_load_file(cs: cstruct, compiled: bool):
+def test_load_file(cs: cstruct, compiled: bool) -> None:
     path = os.path.join(os.path.dirname(__file__), "data/testdef.txt")
 
     cs.loadfile(path, compiled=compiled)
     assert "test" in cs.typedefs
 
 
-def test_read_type_name(cs: cstruct):
+def test_read_type_name(cs: cstruct) -> None:
     cs.read("uint32", b"\x01\x00\x00\x00") == 1
 
 
-def test_type_resolve(cs: cstruct):
+def test_type_resolve(cs: cstruct) -> None:
     assert cs.resolve("BYTE") == cs.uint8
 
     with pytest.raises(ResolveError) as excinfo:
@@ -49,7 +52,7 @@ def test_type_resolve(cs: cstruct):
     assert "Recursion limit exceeded" in str(excinfo.value)
 
 
-def test_constants(cs: cstruct):
+def test_constants(cs: cstruct) -> None:
     cdef = """
     #define a 1
     #define b 0x2
@@ -64,7 +67,7 @@ def test_constants(cs: cstruct):
     assert cs.d == 2
 
 
-def test_duplicate_types(cs: cstruct):
+def test_duplicate_types(cs: cstruct) -> None:
     cdef = """
     struct A {
         uint32 a;
@@ -88,7 +91,7 @@ def test_duplicate_types(cs: cstruct):
     assert "Duplicate type" in str(excinfo.value)
 
 
-def test_typedef(cs: cstruct):
+def test_typedef(cs: cstruct) -> None:
     cdef = """
     typedef uint32 test;
     """
@@ -98,7 +101,7 @@ def test_typedef(cs: cstruct):
     assert cs.resolve("test") == cs.uint32
 
 
-def test_lookups(cs: cstruct, compiled: bool):
+def test_lookups(cs: cstruct, compiled: bool) -> None:
     cdef = """
     #define test_1 1
     #define test_2 2
@@ -108,7 +111,7 @@ def test_lookups(cs: cstruct, compiled: bool):
     assert cs.lookups["a"] == {1: 3, 2: 4}
 
 
-def test_default_constructors(cs: cstruct, compiled: bool):
+def test_default_constructors(cs: cstruct, compiled: bool) -> None:
     cdef = """
     enum Enum {
         a = 0,
@@ -159,7 +162,7 @@ def test_default_constructors(cs: cstruct, compiled: bool):
         assert isinstance(getattr(obj, name), BaseType)
 
 
-def test_default_constructors_dynamic(cs: cstruct, compiled: bool):
+def test_default_constructors_dynamic(cs: cstruct, compiled: bool) -> None:
     cdef = """
     enum Enum {
         a = 0,
@@ -203,7 +206,7 @@ def test_default_constructors_dynamic(cs: cstruct, compiled: bool):
         assert isinstance(getattr(obj, name), BaseType)
 
 
-def test_config_flag_nocompile(cs: cstruct, compiled: bool):
+def test_config_flag_nocompile(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct compiled_global
     {
@@ -222,7 +225,7 @@ def test_config_flag_nocompile(cs: cstruct, compiled: bool):
     assert verify_compiled(cs.never_compiled, False)
 
 
-def test_compiler_slicing_multiple(cs: cstruct, compiled: bool):
+def test_compiler_slicing_multiple(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct compile_slicing {
         char single;
@@ -238,7 +241,7 @@ def test_compiler_slicing_multiple(cs: cstruct, compiled: bool):
     assert obj.multiple == b"\x02\x03"
 
 
-def test_underscores_attribute(cs: cstruct, compiled: bool):
+def test_underscores_attribute(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct __test {
         uint32 test_val;
@@ -253,16 +256,16 @@ def test_underscores_attribute(cs: cstruct, compiled: bool):
     assert obj.test_val == 1337
 
 
-def test_half_compiled_struct(cs: cstruct):
+def test_half_compiled_struct(cs: cstruct) -> None:
     class OffByOne(int, BaseType):
         type: BaseType
 
         @classmethod
-        def _read(cls, stream, context=None):
+        def _read(cls, stream: BinaryIO, context: Optional[dict] = None) -> OffByOne:
             return cls(cls.type._read(stream, context) + 1)
 
         @classmethod
-        def _write(cls, stream, data):
+        def _write(cls, stream: BinaryIO, data: int) -> OffByOne:
             return cls(cls.type._write(stream, data - 1))
 
     # Add an unsupported type for the cstruct compiler
@@ -300,7 +303,7 @@ def test_half_compiled_struct(cs: cstruct):
     assert obj.dumps() == buf
 
 
-def test_cstruct_bytearray(cs: cstruct):
+def test_cstruct_bytearray(cs: cstruct) -> None:
     cdef = """
     struct test {
         uint8 a;
@@ -312,7 +315,7 @@ def test_cstruct_bytearray(cs: cstruct):
     assert obj.a == 10
 
 
-def test_multipart_type_name(cs: cstruct):
+def test_multipart_type_name(cs: cstruct) -> None:
     cdef = """
     enum TestEnum : unsigned int {
         A = 0,
@@ -350,7 +353,7 @@ def test_multipart_type_name(cs: cstruct):
     assert str(exc.value) == "Unknown type unsigned int and more"
 
 
-def test_dunder_bytes(cs: cstruct):
+def test_dunder_bytes(cs: cstruct) -> None:
     cdef = """
     struct test {
         DWORD   a;
@@ -366,7 +369,7 @@ def test_dunder_bytes(cs: cstruct):
     assert bytes(a) == b"\x0b\xad\xc0\xde\x00\x00\x00\x00\xac\xce\x55\xed"
 
 
-def test_array_of_null_terminated_strings(cs: cstruct, compiled: bool):
+def test_array_of_null_terminated_strings(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct args {
         uint32 argc;
@@ -396,7 +399,7 @@ def test_array_of_null_terminated_strings(cs: cstruct, compiled: bool):
     assert str(exc.value) == "Depth required for multi-dimensional array"
 
 
-def test_array_of_size_limited_strings(cs: cstruct, compiled: bool):
+def test_array_of_size_limited_strings(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct args {
         uint32 argc;
@@ -417,7 +420,7 @@ def test_array_of_size_limited_strings(cs: cstruct, compiled: bool):
     assert obj.argv[3] == b"sit amet"
 
 
-def test_array_three_dimensional(cs: cstruct, compiled: bool):
+def test_array_three_dimensional(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint8   a[2][2][2];
@@ -442,7 +445,7 @@ def test_array_three_dimensional(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_nested_array_of_variable_size(cs: cstruct, compiled: bool):
+def test_nested_array_of_variable_size(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint8   outer;
@@ -471,7 +474,7 @@ def test_nested_array_of_variable_size(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_report_array_size_mismatch(cs: cstruct):
+def test_report_array_size_mismatch(cs: cstruct) -> None:
     cdef = """
     struct test {
         uint8   a[2];
@@ -485,7 +488,7 @@ def test_report_array_size_mismatch(cs: cstruct):
         a.dumps()
 
 
-def test_reserved_keyword(cs: cstruct, compiled: bool):
+def test_reserved_keyword(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct in {
         uint8 a;
@@ -508,7 +511,7 @@ def test_reserved_keyword(cs: cstruct, compiled: bool):
         assert cs.resolve(name)(b"\x01").a == 1
 
 
-def test_array_class_name(cs: cstruct):
+def test_array_class_name(cs: cstruct) -> None:
     cdef = """
     struct test {
         uint8   a[2];
@@ -525,7 +528,7 @@ def test_array_class_name(cs: cstruct):
     assert cs.test2.__fields__[1].type.__name__ == "uint8[a + 1]"
 
 
-def test_size_and_aligment(cs: cstruct):
+def test_size_and_aligment(cs: cstruct) -> None:
     test = cs._make_int_type("test", 1, False, alignment=8)
     assert test.size == 1
     assert test.alignment == 8
@@ -535,7 +538,7 @@ def test_size_and_aligment(cs: cstruct):
     assert test.alignment == 8
 
 
-def test_dynamic_substruct_size(cs: cstruct):
+def test_dynamic_substruct_size(cs: cstruct) -> None:
     cdef = """
     struct {
         int32 len;
@@ -552,7 +555,7 @@ def test_dynamic_substruct_size(cs: cstruct):
     assert cs.test.dynamic
 
 
-def test_dumps_write_overload(cs: cstruct):
+def test_dumps_write_overload(cs: cstruct) -> None:
     assert cs.uint8.dumps(1) == cs.uint8(1).dumps() == b"\x01"
 
     fh = BytesIO()
@@ -562,7 +565,7 @@ def test_dumps_write_overload(cs: cstruct):
     assert fh.getvalue() == b"\x01\x02"
 
 
-def test_linked_list(cs: cstruct):
+def test_linked_list(cs: cstruct) -> None:
     cdef = """
     struct node {
         uint16 data;

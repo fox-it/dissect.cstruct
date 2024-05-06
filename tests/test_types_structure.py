@@ -22,7 +22,7 @@ def TestStruct(cs: cstruct) -> type[Structure]:
     )
 
 
-def test_structure(TestStruct: type[Structure]):
+def test_structure(TestStruct: type[Structure]) -> None:
     assert issubclass(TestStruct, Structure)
     assert len(TestStruct.fields) == 2
     assert TestStruct.fields["a"].name == "a"
@@ -47,7 +47,7 @@ def test_structure(TestStruct: type[Structure]):
     assert len(obj) == 8
 
 
-def test_structure_read(TestStruct: type[Structure]):
+def test_structure_read(TestStruct: type[Structure]) -> None:
     obj = TestStruct(b"\x01\x00\x00\x00\x02\x00\x00\x00")
 
     assert isinstance(obj, TestStruct)
@@ -55,7 +55,7 @@ def test_structure_read(TestStruct: type[Structure]):
     assert obj.b == 2
 
 
-def test_structure_write(TestStruct: type[Structure]):
+def test_structure_write(TestStruct: type[Structure]) -> None:
     buf = b"\x01\x00\x00\x00\x02\x00\x00\x00"
     obj = TestStruct(buf)
 
@@ -72,7 +72,7 @@ def test_structure_write(TestStruct: type[Structure]):
     assert obj.dumps() == b"\x00\x00\x00\x00\x00\x00\x00\x00"
 
 
-def test_structure_array_read(TestStruct: type[Structure]):
+def test_structure_array_read(TestStruct: type[Structure]) -> None:
     TestStructArray = TestStruct[2]
 
     assert issubclass(TestStructArray, Array)
@@ -96,7 +96,7 @@ def test_structure_array_read(TestStruct: type[Structure]):
     assert obj == [TestStruct(1, 2)]
 
 
-def test_structure_array_write(TestStruct: type[Structure]):
+def test_structure_array_write(TestStruct: type[Structure]) -> None:
     TestStructArray = TestStruct[2]
 
     obj = TestStructArray([TestStruct(1, 2), TestStruct(3, 4)])
@@ -108,7 +108,7 @@ def test_structure_array_write(TestStruct: type[Structure]):
     assert obj.dumps() == b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 
 
-def test_structure_modify(cs: cstruct):
+def test_structure_modify(cs: cstruct) -> None:
     TestStruct = cs._make_struct("Test", [Field("a", cs.char)])
 
     assert len(TestStruct.fields) == len(TestStruct.lookup) == 1
@@ -142,7 +142,7 @@ def test_structure_modify(cs: cstruct):
     assert obj.d == b"d"
 
 
-def test_structure_single_byte_field(cs: cstruct):
+def test_structure_single_byte_field(cs: cstruct) -> None:
     TestStruct = cs._make_struct("TestStruct", [Field("a", cs.char)])
 
     obj = TestStruct(b"aaaa")
@@ -155,7 +155,7 @@ def test_structure_single_byte_field(cs: cstruct):
     cs.char._read.assert_not_called()
 
 
-def test_structure_same_name_method(cs: cstruct):
+def test_structure_same_name_method(cs: cstruct) -> None:
     TestStruct = cs._make_struct("TestStruct", [Field("add_field", cs.char)])
 
     assert isinstance(TestStruct.add_field, MethodType)
@@ -164,23 +164,23 @@ def test_structure_same_name_method(cs: cstruct):
     assert obj.add_field == b"a"
 
 
-def test_structure_bool(TestStruct: type[Structure]):
+def test_structure_bool(TestStruct: type[Structure]) -> None:
     assert bool(TestStruct(1, 2)) is True
     assert bool(TestStruct()) is False
     assert bool(TestStruct(0, 0)) is False
 
 
-def test_structure_cmp(TestStruct: type[Structure]):
+def test_structure_cmp(TestStruct: type[Structure]) -> None:
     assert TestStruct(1, 2) == TestStruct(1, 2)
     assert TestStruct(1, 2) != TestStruct(2, 3)
 
 
-def test_structure_repr(TestStruct: type[Structure]):
+def test_structure_repr(TestStruct: type[Structure]) -> None:
     obj = TestStruct(1, 2)
     assert repr(obj) == f"<{TestStruct.__name__} a=0x1 b=0x2>"
 
 
-def test_structure_eof(TestStruct: type[Structure]):
+def test_structure_eof(TestStruct: type[Structure]) -> None:
     with pytest.raises(EOFError):
         TestStruct(b"")
 
@@ -191,7 +191,7 @@ def test_structure_eof(TestStruct: type[Structure]):
         TestStruct[None](b"\x01\x00\x00\x00\x02\x00\x00\x00")
 
 
-def test_structure_definitions(cs: cstruct, compiled: bool):
+def test_structure_definitions(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct _test {
         uint32  a;
@@ -219,7 +219,7 @@ def test_structure_definitions(cs: cstruct, compiled: bool):
         cs.load(cdef)
 
 
-def test_structure_definition_simple(cs: cstruct, compiled: bool):
+def test_structure_definition_simple(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         char    magic[4];
@@ -261,7 +261,7 @@ def test_structure_definition_simple(cs: cstruct, compiled: bool):
     assert fh.getvalue() == buf
 
 
-def test_structure_definition_simple_be(cs: cstruct, compiled: bool):
+def test_structure_definition_simple_be(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         char    magic[4];
@@ -294,7 +294,7 @@ def test_structure_definition_simple_be(cs: cstruct, compiled: bool):
         assert isinstance(getattr(obj, name), BaseType)
 
 
-def test_structure_definition_expressions(cs: cstruct, compiled: bool):
+def test_structure_definition_expressions(cs: cstruct, compiled: bool) -> None:
     cdef = """
     #define const 1
     struct test {
@@ -321,7 +321,7 @@ def test_structure_definition_expressions(cs: cstruct, compiled: bool):
     assert obj.data_3 == [255]
 
 
-def test_structure_definition_sizes(cs: cstruct, compiled: bool):
+def test_structure_definition_sizes(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct static {
         uint32  test;
@@ -353,7 +353,7 @@ def test_structure_definition_sizes(cs: cstruct, compiled: bool):
     assert str(excinfo.value) == "Dynamic size"
 
 
-def test_structure_definition_nested(cs: cstruct, compiled: bool):
+def test_structure_definition_nested(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test_named {
         char magic[4];
@@ -400,7 +400,7 @@ def test_structure_definition_nested(cs: cstruct, compiled: bool):
     assert obj.dumps() == data
 
 
-def test_structure_definition_write(cs: cstruct, compiled: bool):
+def test_structure_definition_write(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         char    magic[4];
@@ -444,7 +444,7 @@ def test_structure_definition_write(cs: cstruct, compiled: bool):
     assert inst.dumps() == buf
 
 
-def test_structure_definition_write_be(cs: cstruct, compiled: bool):
+def test_structure_definition_write_be(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         char    magic[4];
@@ -475,7 +475,7 @@ def test_structure_definition_write_be(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_structure_definition_write_anonymous(cs: cstruct):
+def test_structure_definition_write_anonymous(cs: cstruct) -> None:
     cdef = """
     struct test {
         uint32 a;
@@ -495,7 +495,7 @@ def test_structure_definition_write_anonymous(cs: cstruct):
     assert obj.dumps() == b"\x01\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00"
 
 
-def test_structure_field_discard(cs: cstruct, compiled: bool):
+def test_structure_field_discard(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint8 a;
@@ -518,7 +518,7 @@ def test_structure_field_discard(cs: cstruct, compiled: bool):
         mock_char_new.assert_has_calls([call(cs.char, b"a"), call(cs.char, b"b")])
 
 
-def test_structure_definition_self(cs: cstruct):
+def test_structure_definition_self(cs: cstruct) -> None:
     cdef = """
     struct test {
         uint32 a;

@@ -5,7 +5,7 @@ from dissect.cstruct.cstruct import cstruct
 from .utils import verify_compiled
 
 
-def test_bitfield(cs: cstruct, compiled: bool):
+def test_bitfield(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint16  a:4;
@@ -37,7 +37,7 @@ def test_bitfield(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_bitfield_consecutive(cs: cstruct, compiled: bool):
+def test_bitfield_consecutive(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint16  a:4;
@@ -71,7 +71,7 @@ def test_bitfield_consecutive(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_struct_after_bitfield(cs: cstruct, compiled: bool):
+def test_struct_after_bitfield(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint16  a:4;
@@ -107,7 +107,7 @@ def test_struct_after_bitfield(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_bitfield_be(cs: cstruct, compiled: bool):
+def test_bitfield_be(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint16  a:4;
@@ -142,7 +142,7 @@ def test_bitfield_be(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_bitfield_straddle(cs: cstruct, compiled: bool):
+def test_bitfield_straddle(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint16  a:12;
@@ -161,7 +161,7 @@ def test_bitfield_straddle(cs: cstruct, compiled: bool):
     assert str(exc.value) == "Straddled bit fields are unsupported"
 
 
-def test_bitfield_write(cs: cstruct, compiled: bool):
+def test_bitfield_write(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint16  a:1;
@@ -183,7 +183,7 @@ def test_bitfield_write(cs: cstruct, compiled: bool):
     assert obj.dumps() == b"\x03\x00\xff\x00\x00\x00\x1f\x00"
 
 
-def test_bitfield_write_be(cs: cstruct, compiled: bool):
+def test_bitfield_write_be(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint16  a:1;
@@ -208,7 +208,7 @@ def test_bitfield_write_be(cs: cstruct, compiled: bool):
     assert obj.dumps() == b"\xc0\x00\x00\x00\x00\xff\xf8\x00"
 
 
-def test_bitfield_with_enum_or_flag(cs: cstruct, compiled: bool):
+def test_bitfield_with_enum_or_flag(cs: cstruct, compiled: bool) -> None:
     cdef = """
     flag Flag8 : uint8 {
         A = 1,
@@ -243,7 +243,7 @@ def test_bitfield_with_enum_or_flag(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_bitfield_char(cs: cstruct, compiled: bool):
+def test_bitfield_char(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint16  a : 4;

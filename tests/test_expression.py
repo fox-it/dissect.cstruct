@@ -105,7 +105,7 @@ def test_expression_failure(expression: str, exception: type, message: str) -> N
         parser.evaluate()
 
 
-def test_sizeof(cs: cstruct):
+def test_sizeof(cs: cstruct) -> None:
     d = """
     struct test {
         char    a[sizeof(uint32)];

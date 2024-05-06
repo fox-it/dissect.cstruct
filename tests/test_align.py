@@ -73,7 +73,7 @@ def test_align_union(cs: cstruct) -> None:
     assert obj.dumps() == buf
 
 
-def test_align_union_tail(cs: cstruct):
+def test_align_union_tail(cs: cstruct) -> None:
     cdef = """
     union test {
         uint64 a;
@@ -87,7 +87,7 @@ def test_align_union_tail(cs: cstruct):
     assert cs.test.size == 16
 
 
-def test_align_array(cs: cstruct, compiled: bool):
+def test_align_array(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint32  a;      // 0x00
@@ -130,7 +130,7 @@ def test_align_array(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_align_struct_array(cs: cstruct, compiled: bool):
+def test_align_struct_array(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint32  a;      // 0x00
@@ -175,7 +175,7 @@ def test_align_struct_array(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_align_dynamic(cs: cstruct, compiled: bool):
+def test_align_dynamic(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint8   a;      // 0x00 (value is 6 in test case)
@@ -220,7 +220,7 @@ def test_align_dynamic(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_align_nested_struct(cs: cstruct, compiled: bool):
+def test_align_nested_struct(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint32  a;      // 0x00
@@ -255,7 +255,7 @@ def test_align_nested_struct(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_align_bitfield(cs: cstruct, compiled: bool):
+def test_align_bitfield(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint16  a:4;    // 0x00
@@ -298,7 +298,7 @@ def test_align_bitfield(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_align_pointer(cs: cstruct, compiled: bool):
+def test_align_pointer(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint32  a;

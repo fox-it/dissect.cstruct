@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import BinaryIO, Optional
+
 import pytest
 
 from dissect.cstruct.cstruct import cstruct
@@ -7,14 +11,14 @@ from dissect.cstruct.types.base import ArrayMetaType, BaseType
 from .utils import verify_compiled
 
 
-def test_array_size_mismatch(cs: cstruct):
+def test_array_size_mismatch(cs: cstruct) -> None:
     with pytest.raises(ArraySizeError):
         cs.uint8[2]([1, 2, 3]).dumps()
 
     assert cs.uint8[2]([1, 2]).dumps()
 
 
-def test_eof(cs: cstruct, compiled: bool):
+def test_eof(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test_char {
         char data[EOF];
@@ -81,20 +85,20 @@ def test_eof(cs: cstruct, compiled: bool):
     assert test_eof_field.dumps() == b"\x01a\x02"
 
 
-def test_custom_array_type(cs: cstruct, compiled: bool):
+def test_custom_array_type(cs: cstruct, compiled: bool) -> None:
     class CustomType(BaseType):
         def __init__(self, value):
             self.value = value.upper()
 
         @classmethod
-        def _read(cls, stream, context=None):
+        def _read(cls, stream: BinaryIO, context: Optional[dict] = None) -> CustomType:
             length = stream.read(1)[0]
             value = stream.read(length)
             return type.__call__(cls, value)
 
         class ArrayType(BaseType, metaclass=ArrayMetaType):
             @classmethod
-            def _read(cls, stream, context=None):
+            def _read(cls, stream: BinaryIO, context: Optional[dict] = None) -> CustomType.ArrayType:
                 value = cls.type._read(stream, context)
                 if str(cls.num_entries) == "lower":
                     value.value = value.value.lower()

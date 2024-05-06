@@ -6,7 +6,7 @@ from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.cstruct import cstruct
 
 
-def test_bitbuffer_read(cs: cstruct):
+def test_bitbuffer_read(cs: cstruct) -> None:
     bb = BitBuffer(BytesIO(b"\xff"), "<")
     assert bb.read(cs.uint8, 8) == 0b11111111
 

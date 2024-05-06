@@ -9,7 +9,7 @@ from dissect.cstruct.types.pointer import Pointer
 from .utils import verify_compiled
 
 
-def test_pointer(cs: cstruct):
+def test_pointer(cs: cstruct) -> None:
     cs.pointer = cs.uint8
 
     ptr = cs._make_pointer(cs.uint8)
@@ -27,7 +27,7 @@ def test_pointer(cs: cstruct):
         ptr(0, None).dereference()
 
 
-def test_pointer_char(cs: cstruct):
+def test_pointer_char(cs: cstruct) -> None:
     cs.pointer = cs.uint8
 
     ptr = cs._make_pointer(cs.char)
@@ -41,7 +41,7 @@ def test_pointer_char(cs: cstruct):
     assert str(obj) == "b'asdf'"
 
 
-def test_pointer_operator(cs: cstruct):
+def test_pointer_operator(cs: cstruct) -> None:
     cs.pointer = cs.uint8
 
     ptr = cs._make_pointer(cs.uint8)
@@ -93,7 +93,7 @@ def test_pointer_operator(cs: cstruct):
     assert obj == 12
 
 
-def test_pointer_eof(cs: cstruct):
+def test_pointer_eof(cs: cstruct) -> None:
     cs.pointer = cs.uint8
 
     ptr = cs._make_pointer(cs.uint8)
@@ -103,7 +103,7 @@ def test_pointer_eof(cs: cstruct):
         obj.dereference()
 
 
-def test_pointer_struct(cs: cstruct, compiled: bool):
+def test_pointer_struct(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct ptrtest {
         uint32  *ptr1;
@@ -140,7 +140,7 @@ def test_pointer_struct(cs: cstruct, compiled: bool):
         cs.ptrtest(b"\x00\x00\x00\x00").ptr1.dereference()
 
 
-def test_pointer_struct_pointer(cs: cstruct, compiled: bool):
+def test_pointer_struct_pointer(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         char    magic[4];
@@ -182,7 +182,7 @@ def test_pointer_struct_pointer(cs: cstruct, compiled: bool):
         cs.ptrtest(b"\x00\x00\x00\x00").ptr.magic
 
 
-def test_pointer_array(cs: cstruct, compiled: bool):
+def test_pointer_array(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct mainargs {
         uint8_t argc;
@@ -205,7 +205,7 @@ def test_pointer_array(cs: cstruct, compiled: bool):
     assert obj.args[1].dereference() == b"argument two"
 
 
-def test_pointer_sys_size():
+def test_pointer_sys_size() -> None:
     with patch("sys.maxsize", 2**64):
         cs = cstruct()
         assert cs.pointer is cs.uint64
@@ -218,7 +218,7 @@ def test_pointer_sys_size():
     assert cs.pointer is cs.uint16
 
 
-def test_pointer_of_pointer(cs: cstruct, compiled: bool):
+def test_pointer_of_pointer(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint32  **ptr;

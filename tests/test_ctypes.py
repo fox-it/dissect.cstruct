@@ -1,16 +1,18 @@
 import ctypes as _ctypes
+from typing import Any
 
 import pytest
-from dissect import cstruct
 
-DUMMY_CSTRUCT = cstruct.cstruct()
+from dissect.cstruct import MetaType, cstruct, ctypes_type
+
+DUMMY_CSTRUCT = cstruct()
 
 
 # TODO: test structure/union
 
 
 @pytest.mark.parametrize(
-    "cstruct_type, ctypes_type",
+    "input, expected",
     [
         (DUMMY_CSTRUCT.int8, _ctypes.c_int8),
         (DUMMY_CSTRUCT.char, _ctypes.c_char),
@@ -19,10 +21,10 @@ DUMMY_CSTRUCT = cstruct.cstruct()
         (DUMMY_CSTRUCT._make_pointer(DUMMY_CSTRUCT.int8), _ctypes.POINTER(_ctypes.c_int8)),
     ],
 )
-def test_ctypes_type(cstruct_type, ctypes_type):
-    assert ctypes_type == cstruct.ctypes_type(cstruct_type)
+def test_ctypes_type(input: MetaType, expected: Any) -> None:
+    assert expected == ctypes_type(input)
 
 
-def test_ctypes_type_exception():
+def test_ctypes_type_exception() -> None:
     with pytest.raises(NotImplementedError):
-        cstruct.ctypes_type(DUMMY_CSTRUCT.float16)
+        ctypes_type(DUMMY_CSTRUCT.float16)

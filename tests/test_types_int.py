@@ -5,7 +5,7 @@ from dissect.cstruct.cstruct import cstruct
 from .utils import verify_compiled
 
 
-def test_int_unsigned_read(cs: cstruct):
+def test_int_unsigned_read(cs: cstruct) -> None:
     assert cs.uint24(b"AAA") == 0x414141
     assert cs.uint24(b"\xff\xff\xff") == 0xFFFFFF
 
@@ -20,7 +20,7 @@ def test_int_unsigned_read(cs: cstruct):
     assert uint40(b"\xff\xff\xff\xff\xff") == 0xFFFFFFFFFF
 
 
-def test_int_unsigned_write(cs: cstruct):
+def test_int_unsigned_write(cs: cstruct) -> None:
     assert cs.uint24(0x414141).dumps() == b"AAA"
     assert cs.uint24(0xFFFFFF).dumps() == b"\xff\xff\xff"
 
@@ -37,7 +37,7 @@ def test_int_unsigned_write(cs: cstruct):
     assert uint40(0xFFFFFFFFFF).dumps() == b"\xff\xff\xff\xff\xff"
 
 
-def test_int_unsigned_array_read(cs: cstruct):
+def test_int_unsigned_array_read(cs: cstruct) -> None:
     assert cs.uint24[4](b"AAABBBCCCDDD") == [0x414141, 0x424242, 0x434343, 0x444444]
 
     assert cs.uint48[4](b"AAAAAABBBBBBCCCCCCDDDDDD") == [0x414141414141, 0x424242424242, 0x434343434343, 0x444444444444]
@@ -53,7 +53,7 @@ def test_int_unsigned_array_read(cs: cstruct):
     assert uint40[None](b"AAAAA" + (b"\x00" * 5)) == [0x4141414141]
 
 
-def test_int_unsigned_array_write(cs: cstruct):
+def test_int_unsigned_array_write(cs: cstruct) -> None:
     assert cs.uint24[4]([0x414141, 0x424242, 0x434343, 0x444444]).dumps() == b"AAABBBCCCDDD"
 
     assert (
@@ -77,7 +77,7 @@ def test_int_unsigned_array_write(cs: cstruct):
     assert uint40[None]([0x4141414141]).dumps() == b"AAAAA" + (b"\x00" * 5)
 
 
-def test_int_signed_read(cs: cstruct):
+def test_int_signed_read(cs: cstruct) -> None:
     assert cs.int24(b"\xff\x00\x00") == 255
     assert cs.int24(b"\xff\xff\xff") == -1
 
@@ -86,7 +86,7 @@ def test_int_signed_read(cs: cstruct):
     assert int40(b"\xff\xff\xff\xff\xff") == -1
 
 
-def test_int_signed_write(cs: cstruct):
+def test_int_signed_write(cs: cstruct) -> None:
     assert cs.int24(255).dumps() == b"\xff\x00\x00"
     assert cs.int24(-1).dumps() == b"\xff\xff\xff"
 
@@ -100,7 +100,7 @@ def test_int_signed_write(cs: cstruct):
     assert int40(-1).dumps() == b"\xff\xff\xff\xff\xff"
 
 
-def test_int_signed_array_read(cs: cstruct):
+def test_int_signed_array_read(cs: cstruct) -> None:
     assert cs.int24[4](b"\xff\xff\xff\xfe\xff\xff\xfd\xff\xff\xfc\xff\xff") == [-1, -2, -3, -4]
 
     assert cs.int128[2](b"\xff" * 16 + b"\xfe" + b"\xff" * 15) == [-1, -2]
@@ -109,7 +109,7 @@ def test_int_signed_array_read(cs: cstruct):
     assert int40[2](b"\xff\xff\xff\xff\xff\xfe\xff\xff\xff\xff") == [-1, -2]
 
 
-def test_int_signed_array_write(cs: cstruct):
+def test_int_signed_array_write(cs: cstruct) -> None:
     assert cs.int24[4]([-1, -2, -3, -4]).dumps() == b"\xff\xff\xff\xfe\xff\xff\xfd\xff\xff\xfc\xff\xff"
     assert cs.int24[None]([-1]).dumps() == b"\xff\xff\xff\x00\x00\x00"
 
@@ -119,7 +119,7 @@ def test_int_signed_array_write(cs: cstruct):
     assert int40[2]([-1, -2]).dumps() == b"\xff\xff\xff\xff\xff\xfe\xff\xff\xff\xff"
 
 
-def test_int_unsigned_be_read(cs: cstruct):
+def test_int_unsigned_be_read(cs: cstruct) -> None:
     cs.endian = ">"
 
     assert cs.uint24(b"\x00\x00\xff") == 255
@@ -133,7 +133,7 @@ def test_int_unsigned_be_read(cs: cstruct):
     assert uint40(b"\xff\xff\xff\xff\xff") == 0xFFFFFFFFFF
 
 
-def test_int_unsigned_be_write(cs: cstruct):
+def test_int_unsigned_be_write(cs: cstruct) -> None:
     cs.endian = ">"
 
     assert cs.uint24(255).dumps() == b"\x00\x00\xff"
@@ -147,7 +147,7 @@ def test_int_unsigned_be_write(cs: cstruct):
     assert uint40(0xFFFFFFFFFF).dumps() == b"\xff\xff\xff\xff\xff"
 
 
-def test_int_unsigned_be_array_read(cs: cstruct):
+def test_int_unsigned_be_array_read(cs: cstruct) -> None:
     cs.endian = ">"
 
     assert cs.uint24[3](b"\x00\x00\xff\x00\x00\xfe\x00\x00\xfd") == [255, 254, 253]
@@ -160,7 +160,7 @@ def test_int_unsigned_be_array_read(cs: cstruct):
     assert uint40[2](b"\x00\x00\x00\x00A\x00\x00\x00\x00B") == [0x41, 0x42]
 
 
-def test_int_unsigned_be_array_write(cs: cstruct):
+def test_int_unsigned_be_array_write(cs: cstruct) -> None:
     cs.endian = ">"
 
     assert cs.uint24[3]([255, 254, 253]).dumps() == b"\x00\x00\xff\x00\x00\xfe\x00\x00\xfd"
@@ -172,7 +172,7 @@ def test_int_unsigned_be_array_write(cs: cstruct):
     assert uint40[2]([0x41, 0x42]).dumps() == b"\x00\x00\x00\x00A\x00\x00\x00\x00B"
 
 
-def test_int_signed_be_read(cs: cstruct):
+def test_int_signed_be_read(cs: cstruct) -> None:
     cs.endian = ">"
 
     assert cs.int24(b"\x00\x00\xff") == 255
@@ -184,7 +184,7 @@ def test_int_signed_be_read(cs: cstruct):
     assert int40(b"\xff\xff\xff\xff\x01") == -255
 
 
-def test_int_signed_be_write(cs: cstruct):
+def test_int_signed_be_write(cs: cstruct) -> None:
     cs.endian = ">"
 
     assert cs.int24(255).dumps() == b"\x00\x00\xff"
@@ -200,7 +200,7 @@ def test_int_signed_be_write(cs: cstruct):
     assert int40(-255).dumps() == b"\xff\xff\xff\xff\x01"
 
 
-def test_int_signed_be_array_read(cs: cstruct):
+def test_int_signed_be_array_read(cs: cstruct) -> None:
     cs.endian = ">"
 
     assert cs.int24[3](b"\xff\xff\x01\xff\xff\x02\xff\xff\x03") == [-255, -254, -253]
@@ -211,7 +211,7 @@ def test_int_signed_be_array_read(cs: cstruct):
     assert int40[2](b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xfe") == [-1, -2]
 
 
-def test_int_signed_be_array_write(cs: cstruct):
+def test_int_signed_be_array_write(cs: cstruct) -> None:
     cs.endian = ">"
 
     assert cs.int24[3]([-255, -254, -253]).dumps() == b"\xff\xff\x01\xff\xff\x02\xff\xff\x03"
@@ -222,7 +222,7 @@ def test_int_signed_be_array_write(cs: cstruct):
     assert int40[2]([-1, -2]).dumps() == b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xfe"
 
 
-def test_int_eof(cs: cstruct):
+def test_int_eof(cs: cstruct) -> None:
     with pytest.raises(EOFError):
         cs.int24(b"\x00")
 
@@ -233,7 +233,7 @@ def test_int_eof(cs: cstruct):
         cs.int24[None](b"\x01\x00\x00")
 
 
-def test_bytesinteger_range(cs: cstruct):
+def test_bytesinteger_range(cs: cstruct) -> None:
     int8 = cs._make_int_type("int8", 1, True)
     uint8 = cs._make_int_type("uint9", 1, False)
     int16 = cs._make_int_type("int16", 2, True)
@@ -272,7 +272,7 @@ def test_bytesinteger_range(cs: cstruct):
         int128(2**127).dumps()
 
 
-def test_int_struct_signed(cs: cstruct, compiled: bool):
+def test_int_struct_signed(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         int24   a;
@@ -305,7 +305,7 @@ def test_int_struct_signed(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_int_struct_unsigned(cs: cstruct, compiled: bool):
+def test_int_struct_unsigned(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint24  a;
@@ -336,7 +336,7 @@ def test_int_struct_unsigned(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_bytesinteger_struct_signed_be(cs: cstruct, compiled: bool):
+def test_bytesinteger_struct_signed_be(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         int24   a;
@@ -370,7 +370,7 @@ def test_bytesinteger_struct_signed_be(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_bytesinteger_struct_unsigned_be(cs: cstruct, compiled: bool):
+def test_bytesinteger_struct_unsigned_be(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint24  a;

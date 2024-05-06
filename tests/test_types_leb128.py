@@ -5,12 +5,12 @@ import pytest
 from dissect.cstruct.cstruct import cstruct
 
 
-def test_leb128_unsigned_read_EOF(cs: cstruct):
+def test_leb128_unsigned_read_EOF(cs: cstruct) -> None:
     with pytest.raises(EOFError, match="EOF reached, while final LEB128 byte was not yet read"):
         cs.uleb128(b"\x8b")
 
 
-def test_leb128_unsigned_read(cs: cstruct):
+def test_leb128_unsigned_read(cs: cstruct) -> None:
     assert cs.uleb128(b"\x02") == 2
     assert cs.uleb128(b"\x8b\x25") == 4747
     assert cs.uleb128(b"\xc9\x8f\xb0\x06") == 13371337
@@ -19,7 +19,7 @@ def test_leb128_unsigned_read(cs: cstruct):
     assert cs.uleb128(b"\xde\xd6\xcf\x7c") == 261352286
 
 
-def test_leb128_signed_read(cs: cstruct):
+def test_leb128_signed_read(cs: cstruct) -> None:
     assert cs.ileb128(b"\x02") == 2
     assert cs.ileb128(b"\x8b\x25") == 4747
     assert cs.ileb128(b"\xc9\x8f\xb0\x06") == 13371337
@@ -28,7 +28,7 @@ def test_leb128_signed_read(cs: cstruct):
     assert cs.ileb128(b"\xde\xd6\xcf\x7c") == -7083170
 
 
-def test_leb128_struct_unsigned(cs: cstruct):
+def test_leb128_struct_unsigned(cs: cstruct) -> None:
     cdef = """
     struct test {
         uleb128 len;
@@ -49,7 +49,7 @@ def test_leb128_struct_unsigned(cs: cstruct):
     assert obj.dumps() == buf
 
 
-def test_leb128_struct_unsigned_zero(cs: cstruct):
+def test_leb128_struct_unsigned_zero(cs: cstruct) -> None:
     cdef = """
     struct test {
         uleb128 numbers[];
@@ -68,7 +68,7 @@ def test_leb128_struct_unsigned_zero(cs: cstruct):
     assert obj.dumps() == buf
 
 
-def test_leb128_struct_signed_zero(cs: cstruct):
+def test_leb128_struct_signed_zero(cs: cstruct) -> None:
     cdef = """
     struct test {
         ileb128 numbers[];
@@ -87,7 +87,7 @@ def test_leb128_struct_signed_zero(cs: cstruct):
     assert obj.dumps() == buf
 
 
-def test_leb128_nested_struct_unsigned(cs: cstruct):
+def test_leb128_nested_struct_unsigned(cs: cstruct) -> None:
     cdef = """
     struct entry {
         uleb128 len;
@@ -118,7 +118,7 @@ def test_leb128_nested_struct_unsigned(cs: cstruct):
     assert obj.dumps() == buf
 
 
-def test_leb128_nested_struct_signed(cs: cstruct):
+def test_leb128_nested_struct_signed(cs: cstruct) -> None:
     cdef = """
     struct entry {
         ileb128 len;
@@ -149,7 +149,7 @@ def test_leb128_nested_struct_signed(cs: cstruct):
     assert obj.dumps() == buf
 
 
-def test_leb128_unsigned_write(cs: cstruct):
+def test_leb128_unsigned_write(cs: cstruct) -> None:
     assert cs.uleb128(2).dumps() == b"\x02"
     assert cs.uleb128(4747).dumps() == b"\x8b\x25"
     assert cs.uleb128(13371337).dumps() == b"\xc9\x8f\xb0\x06"
@@ -160,7 +160,7 @@ def test_leb128_unsigned_write(cs: cstruct):
     assert cs.uleb128(b"\xde\xd6\xcf\x7c").dumps() == b"\xde\xd6\xcf\x7c"
 
 
-def test_leb128_signed_write(cs: cstruct):
+def test_leb128_signed_write(cs: cstruct) -> None:
     assert cs.ileb128(2).dumps() == b"\x02"
     assert cs.ileb128(4747).dumps() == b"\x8b\x25"
     assert cs.ileb128(13371337).dumps() == b"\xc9\x8f\xb0\x06"
@@ -171,13 +171,13 @@ def test_leb128_signed_write(cs: cstruct):
     assert cs.ileb128(b"\xde\xd6\xcf\x7c").dumps() == b"\xde\xd6\xcf\x7c"
 
 
-def test_leb128_write_negatives(cs: cstruct):
+def test_leb128_write_negatives(cs: cstruct) -> None:
     with pytest.raises(ValueError, match="Attempt to encode a negative integer using unsigned LEB128 encoding"):
         cs.uleb128(-2).dumps()
     assert cs.ileb128(-2).dumps() == b"\x7e"
 
 
-def test_leb128_unsigned_write_amount_written(cs: cstruct):
+def test_leb128_unsigned_write_amount_written(cs: cstruct) -> None:
     out1 = io.BytesIO()
     bytes_written1 = cs.uleb128(2).write(out1)
     assert bytes_written1 == out1.tell()

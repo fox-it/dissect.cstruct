@@ -8,13 +8,15 @@ from dissect.cstruct.types.flag import Flag
 
 from .utils import verify_compiled
 
+PY_311 = sys.version_info >= (3, 11, 0)
+
 
 @pytest.fixture
 def TestFlag(cs: cstruct) -> type[Flag]:
     return cs._make_flag("Test", cs.uint8, {"A": 1, "B": 2})
 
 
-def test_flag(cs: cstruct, TestFlag: type[Flag]):
+def test_flag(cs: cstruct, TestFlag: type[Flag]) -> None:
     assert issubclass(TestFlag, StdFlag)
     assert TestFlag.cs is cs
     assert TestFlag.type is cs.uint8
@@ -31,26 +33,26 @@ def test_flag(cs: cstruct, TestFlag: type[Flag]):
     assert TestFlag(0).value == 0
 
 
-def test_flag_read(TestFlag: type[Flag]):
+def test_flag_read(TestFlag: type[Flag]) -> None:
     assert TestFlag(b"\x02") == TestFlag.B
 
 
-def test_flag_write(TestFlag: type[Flag]):
+def test_flag_write(TestFlag: type[Flag]) -> None:
     assert TestFlag.A.dumps() == b"\x01"
     assert TestFlag(b"\x02").dumps() == b"\x02"
 
 
-def test_flag_array_read(TestFlag: type[Flag]):
+def test_flag_array_read(TestFlag: type[Flag]) -> None:
     assert TestFlag[2](b"\x02\x01") == [TestFlag.B, TestFlag.A]
     assert TestFlag[None](b"\x02\x01\x00") == [TestFlag.B, TestFlag.A]
 
 
-def test_flag_array_write(TestFlag: type[Flag]):
+def test_flag_array_write(TestFlag: type[Flag]) -> None:
     assert TestFlag[2]([TestFlag.B, TestFlag.A]).dumps() == b"\x02\x01"
     assert TestFlag[None]([TestFlag.B, TestFlag.A]).dumps() == b"\x02\x01\x00"
 
 
-def test_flag_operator(TestFlag: type[Flag]):
+def test_flag_operator(TestFlag: type[Flag]) -> None:
     assert TestFlag.A | TestFlag.B == 3
     assert TestFlag(3) == TestFlag.A | TestFlag.B
     assert isinstance(TestFlag.A | TestFlag.B, TestFlag)
@@ -62,7 +64,7 @@ def test_flag_operator(TestFlag: type[Flag]):
     assert TestFlag[2]([TestFlag.B, (TestFlag.A | TestFlag.B)]).dumps() == b"\x02\x03"
 
 
-def test_flag_struct(cs: cstruct):
+def test_flag_struct(cs: cstruct) -> None:
     cdef = """
     flag Test {
         a,
@@ -101,7 +103,7 @@ def test_flag_struct(cs: cstruct):
     assert bool(cs.Test(1)) is True
 
     assert cs.Test.a | cs.Test.b == 3
-    if sys.version_info >= (3, 11):
+    if PY_311:
         assert repr(cs.Test.c | cs.Test.d) == "<Test.c|d: 12>"
         assert repr(cs.Test.a | cs.Test.b) == "<Test.a|b: 3>"
     else:
@@ -114,7 +116,7 @@ def test_flag_struct(cs: cstruct):
     assert cs.Test.b ^ cs.Test.a == cs.Test.a | cs.Test.b
 
     # TODO: determine if we want to stay true to Python stdlib or a consistent behaviour
-    if sys.version_info >= (3, 11):
+    if PY_311:
         assert ~cs.Test.a == 14
         assert repr(~cs.Test.a) == "<Test.b|c|d: 14>"
     else:
@@ -122,7 +124,7 @@ def test_flag_struct(cs: cstruct):
         assert repr(~cs.Test.a) == "<Test.d|c|b: -2>"
 
 
-def test_flag_struct_read(cs: cstruct, compiled: bool):
+def test_flag_struct_read(cs: cstruct, compiled: bool) -> None:
     cdef = """
     flag Test16 : uint16 {
         A = 0x1,
@@ -170,7 +172,7 @@ def test_flag_struct_read(cs: cstruct, compiled: bool):
 
     assert obj.c16 == cs.Test16.A | cs.Test16.B
     assert obj.c16 & cs.Test16.A
-    if sys.version_info >= (3, 11):
+    if PY_311:
         assert repr(obj.c16) == "<Test16.A|B: 3>"
     else:
         assert repr(obj.c16) == "<Test16.B|A: 3>"
@@ -178,7 +180,7 @@ def test_flag_struct_read(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_flag_anonymous(cs: cstruct, compiled: bool):
+def test_flag_anonymous(cs: cstruct, compiled: bool) -> None:
     cdef = """
     flag : uint16 {
           A,
@@ -196,13 +198,13 @@ def test_flag_anonymous(cs: cstruct, compiled: bool):
     assert cs.A.value == 1
     assert repr(cs.A) == "<A: 1>"
 
-    if sys.version_info >= (3, 11):
+    if PY_311:
         assert repr(cs.A | cs.B) == "<A|B: 3>"
     else:
         assert repr(cs.A | cs.B) == "<B|A: 3>"
 
 
-def test_flag_anonymous_struct(cs: cstruct, compiled: bool):
+def test_flag_anonymous_struct(cs: cstruct, compiled: bool) -> None:
     cdef = """
     flag : uint32 {
           nElements = 4

@@ -12,7 +12,7 @@ from dissect.cstruct.types.enum import Enum
 from dissect.cstruct.types.structure import Field
 
 
-def f(field_type: MetaType, offset: Optional[int] = 0, name: str = ""):
+def f(field_type: MetaType, offset: Optional[int] = 0, name: str = "") -> Field:
     return Field(name, field_type, offset=offset)
 
 
@@ -25,11 +25,11 @@ def mkfmt(info: Iterator[tuple[Field, int, str]]) -> str:
 
 
 @pytest.fixture
-def TestEnum(cs: cstruct):
+def TestEnum(cs: cstruct) -> type[Enum]:
     return cs._make_enum("Test", cs.uint8, {"a": 1})
 
 
-def test_generate_struct_info(cs: cstruct, TestEnum: type[Enum]):
+def test_generate_struct_info(cs: cstruct, TestEnum: type[Enum]) -> None:
     fields = [f(cs.uint8), f(cs.int16), f(cs.uint32), f(cs.int64)]
     fmt = strip_fields(compiler._generate_struct_info(cs, fields))
     assert fmt == [(1, "B"), (1, "h"), (1, "I"), (1, "q")]
@@ -65,7 +65,7 @@ def test_generate_struct_info(cs: cstruct, TestEnum: type[Enum]):
     assert fmt == [(1, "B"), (1, "Q")]
 
 
-def test_generate_struct_info_offsets(cs: cstruct):
+def test_generate_struct_info_offsets(cs: cstruct) -> None:
     fields = [f(cs.uint8, 0), f(cs.uint8, 4), f(cs.uint8[2], 5), f(cs.uint8, 8)]
     fmt = strip_fields(compiler._generate_struct_info(cs, fields))
     assert fmt == [(1, "B"), (3, "x"), (1, "B"), (2, "B"), (1, "x"), (1, "B")]
@@ -76,7 +76,7 @@ def test_generate_struct_info_offsets(cs: cstruct):
     assert fmt == [(1, "B")]
 
 
-def test_optimize_struct_fmt():
+def test_optimize_struct_fmt() -> None:
     fields = [(None, 1, "B"), (None, 3, "B")]
     assert compiler._optimize_struct_fmt(fields) == "4B"
 
@@ -93,7 +93,7 @@ def test_optimize_struct_fmt():
     assert compiler._optimize_struct_fmt(fields) == "B2xH"
 
 
-def test_generate_packed_read(cs: cstruct):
+def test_generate_packed_read(cs: cstruct) -> None:
     fields = [
         f(cs.uint8, name="a"),
         f(cs.int16, name="b"),
@@ -123,7 +123,7 @@ def test_generate_packed_read(cs: cstruct):
     assert code == dedent(expected)
 
 
-def test_generate_packed_read_array(cs: cstruct):
+def test_generate_packed_read_array(cs: cstruct) -> None:
     fields = [
         f(cs.uint8[2], name="a"),
         f(cs.int16[3], name="b"),
@@ -161,7 +161,7 @@ def test_generate_packed_read_array(cs: cstruct):
     assert code == dedent(expected)
 
 
-def test_generate_packed_read_byte_types(cs: cstruct):
+def test_generate_packed_read_byte_types(cs: cstruct) -> None:
     fields = [
         f(cs.char, name="a"),
         f(cs.char[2], name="b"),
@@ -202,7 +202,7 @@ def test_generate_packed_read_byte_types(cs: cstruct):
     assert code == dedent(expected)
 
 
-def test_generate_packed_read_composite_types(cs: cstruct, TestEnum: type[Enum]):
+def test_generate_packed_read_composite_types(cs: cstruct, TestEnum: type[Enum]) -> None:
     cs.pointer = cs.uint64
     TestPointer = cs._make_pointer(TestEnum)
 
@@ -235,7 +235,7 @@ def test_generate_packed_read_composite_types(cs: cstruct, TestEnum: type[Enum])
     assert code == dedent(expected)
 
 
-def test_generate_packed_read_offsets(cs: cstruct):
+def test_generate_packed_read_offsets(cs: cstruct) -> None:
     fields = [
         f(cs.uint8, name="a"),
         f(cs.uint8, 8, name="b"),
@@ -257,7 +257,7 @@ def test_generate_packed_read_offsets(cs: cstruct):
     assert code == dedent(expected)
 
 
-def test_generate_structure_read(cs: cstruct):
+def test_generate_structure_read(cs: cstruct) -> None:
     mock_type = Mock()
     mock_type.__anonymous__ = False
 
@@ -273,7 +273,7 @@ def test_generate_structure_read(cs: cstruct):
     assert code == dedent(expected)
 
 
-def test_generate_structure_read_anonymous(cs: cstruct):
+def test_generate_structure_read_anonymous(cs: cstruct) -> None:
     mock_type = Mock()
     mock_type.__anonymous__ = True
 
@@ -289,7 +289,7 @@ def test_generate_structure_read_anonymous(cs: cstruct):
     assert code == dedent(expected)
 
 
-def test_generate_array_read(cs: cstruct):
+def test_generate_array_read(cs: cstruct) -> None:
     field = Field("a", Mock())
     code = next(compiler.ReadSourceGenerator(cs, [field])._generate_array(field))
 
@@ -302,7 +302,7 @@ def test_generate_array_read(cs: cstruct):
     assert code == dedent(expected)
 
 
-def test_generate_bits_read(cs: cstruct, TestEnum: type[Enum]):
+def test_generate_bits_read(cs: cstruct, TestEnum: type[Enum]) -> None:
     field = Field("a", cs.int8, 2)
     code = next(compiler.ReadSourceGenerator(cs, [field])._generate_bits(field))
 

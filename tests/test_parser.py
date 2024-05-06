@@ -8,7 +8,7 @@ from dissect.cstruct.parser import TokenParser
 from dissect.cstruct.types import ArrayMetaType, Pointer
 
 
-def test_preserve_comment_newlines():
+def test_preserve_comment_newlines() -> None:
     cdef = """
     // normal comment
     #define normal_anchor
@@ -30,7 +30,7 @@ def test_preserve_comment_newlines():
     assert TokenParser._lineno(mock_token) == 9
 
 
-def test_typedef_types(cs: cstruct):
+def test_typedef_types(cs: cstruct) -> None:
     cdef = """
     typedef char uuid_t[16];
     typedef uint32 *ptr;
@@ -58,7 +58,7 @@ def test_typedef_types(cs: cstruct):
         cs.load("""typedef uint8 with_bits : 4;""")
 
 
-def test_dynamic_substruct_size(cs: cstruct):
+def test_dynamic_substruct_size(cs: cstruct) -> None:
     cdef = """
     struct {
         int32 len;

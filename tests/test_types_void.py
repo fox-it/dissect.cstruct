@@ -3,7 +3,7 @@ import io
 from dissect.cstruct.cstruct import cstruct
 
 
-def test_void(cs: cstruct):
+def test_void(cs: cstruct) -> None:
     assert not cs.void
 
     stream = io.BytesIO(b"AAAA")

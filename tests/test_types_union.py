@@ -17,7 +17,7 @@ def TestUnion(cs: cstruct) -> type[Union]:
     )
 
 
-def test_union(TestUnion: type[Union]):
+def test_union(TestUnion: type[Union]) -> None:
     assert issubclass(TestUnion, Union)
     assert len(TestUnion.fields) == 2
     assert TestUnion.fields["a"].name == "a"
@@ -42,7 +42,7 @@ def test_union(TestUnion: type[Union]):
     assert len(obj) == 4
 
 
-def test_union_read(TestUnion: type[Union]):
+def test_union_read(TestUnion: type[Union]) -> None:
     obj = TestUnion(b"\x01\x00\x00\x00")
 
     assert isinstance(obj, TestUnion)
@@ -50,7 +50,7 @@ def test_union_read(TestUnion: type[Union]):
     assert obj.b == 1
 
 
-def test_union_write(TestUnion: type[Union]):
+def test_union_write(TestUnion: type[Union]) -> None:
     buf = b"\x01\x00\x00\x00"
     obj = TestUnion(buf)
 
@@ -67,7 +67,7 @@ def test_union_write(TestUnion: type[Union]):
     assert obj.dumps() == b"\x00\x00\x00\x00"
 
 
-def test_union_array_read(TestUnion: type[Union]):
+def test_union_array_read(TestUnion: type[Union]) -> None:
     TestUnionArray = TestUnion[2]
 
     assert issubclass(TestUnionArray, Array)
@@ -91,7 +91,7 @@ def test_union_array_read(TestUnion: type[Union]):
     assert obj == [TestUnion(1), TestUnion(2)]
 
 
-def test_union_array_write(TestUnion: type[Union]):
+def test_union_array_write(TestUnion: type[Union]) -> None:
     TestUnionArray = TestUnion[2]
 
     obj = TestUnionArray([TestUnion(1), TestUnion(2)])
@@ -103,7 +103,7 @@ def test_union_array_write(TestUnion: type[Union]):
     assert obj.dumps() == b"\x01\x00\x00\x00\x00\x00\x00\x00"
 
 
-def test_union_modify(cs: cstruct):
+def test_union_modify(cs: cstruct) -> None:
     TestUnion = cs._make_union("Test", [Field("a", cs.char)])
 
     assert len(TestUnion.fields) == len(TestUnion.lookup) == 1
@@ -137,26 +137,26 @@ def test_union_modify(cs: cstruct):
     assert obj.d == 0x01
 
 
-def test_union_bool(TestUnion: type[Union]):
+def test_union_bool(TestUnion: type[Union]) -> None:
     assert bool(TestUnion(1, 2)) is True
     assert bool(TestUnion(1, 1)) is True
     assert bool(TestUnion()) is False
     assert bool(TestUnion(0, 0)) is False
 
 
-def test_union_cmp(TestUnion: type[Union]):
+def test_union_cmp(TestUnion: type[Union]) -> None:
     assert TestUnion(1) == TestUnion(1)
     assert TestUnion(1, 2) == TestUnion(1, 2)
     assert TestUnion(1, 2) != TestUnion(2, 3)
     assert TestUnion(b=2) == TestUnion(a=2)
 
 
-def test_union_repr(TestUnion: type[Union]):
+def test_union_repr(TestUnion: type[Union]) -> None:
     obj = TestUnion(1, 2)
     assert repr(obj) == f"<{TestUnion.__name__} a=0x1 b=0x2>"
 
 
-def test_union_eof(TestUnion: type[Union]):
+def test_union_eof(TestUnion: type[Union]) -> None:
     with pytest.raises(EOFError):
         TestUnion(b"")
 
@@ -167,7 +167,7 @@ def test_union_eof(TestUnion: type[Union]):
         TestUnion[None](b"\x01\x00\x00\x00\x02\x00\x00\x00")
 
 
-def test_union_definition(cs: cstruct):
+def test_union_definition(cs: cstruct) -> None:
     cdef = """
     union test {
         uint32 a;
@@ -188,7 +188,7 @@ def test_union_definition(cs: cstruct):
     assert cs.test().dumps() == b"\x00\x00\x00\x00\x00\x00\x00\x00"
 
 
-def test_union_definition_nested(cs: cstruct, compiled: bool):
+def test_union_definition_nested(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         char magic[4];
@@ -220,7 +220,7 @@ def test_union_definition_nested(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_union_definition_anonymous(cs: cstruct, compiled: bool):
+def test_union_definition_anonymous(cs: cstruct, compiled: bool) -> None:
     cdef = """
     typedef struct test
     {
@@ -250,7 +250,7 @@ def test_union_definition_anonymous(cs: cstruct, compiled: bool):
     assert obj.dumps() == buf
 
 
-def test_union_definition_dynamic(cs: cstruct):
+def test_union_definition_dynamic(cs: cstruct) -> None:
     cdef = """
     struct dynamic {
         uint8   size;
@@ -272,7 +272,7 @@ def test_union_definition_dynamic(cs: cstruct):
     assert obj.b == 0x6161616161616109
 
 
-def test_union_update(cs: cstruct):
+def test_union_update(cs: cstruct) -> None:
     cdef = """
     union test {
         uint8   a;
@@ -291,7 +291,7 @@ def test_union_update(cs: cstruct):
     assert obj.dumps() == b"\xFF\xFF"
 
 
-def test_union_nested_update(cs: cstruct):
+def test_union_nested_update(cs: cstruct) -> None:
     cdef = """
     struct test {
         char magic[4];
@@ -316,7 +316,7 @@ def test_union_nested_update(cs: cstruct):
     assert obj.dumps() == b"1337ABCDEFGH"
 
 
-def test_union_anonymous_update(cs: cstruct):
+def test_union_anonymous_update(cs: cstruct) -> None:
     cdef = """
     typedef struct test
     {
