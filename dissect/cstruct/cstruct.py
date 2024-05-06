@@ -4,7 +4,7 @@ import ctypes as _ctypes
 import struct
 import sys
 import types
-from typing import Any, BinaryIO, Iterator, Optional
+from typing import Any, BinaryIO, Iterator
 
 from dissect.cstruct.exceptions import ResolveError
 from dissect.cstruct.expression import Expression
@@ -39,7 +39,7 @@ class cstruct:
     DEF_CSTYLE = 1
     DEF_LEGACY = 2
 
-    def __init__(self, endian: str = "<", pointer: Optional[str] = None):
+    def __init__(self, endian: str = "<", pointer: str | None = None):
         self.endian = endian
 
         self.consts = {}
@@ -217,7 +217,7 @@ class cstruct:
     addtype = add_type
 
     def add_custom_type(
-        self, name: str, type_: MetaType, size: Optional[int] = None, alignment: Optional[int] = None, **kwargs
+        self, name: str, type_: MetaType, size: int | None = None, alignment: int | None = None, **kwargs
     ) -> None:
         """Add a custom type.
 
@@ -318,9 +318,9 @@ class cstruct:
         self,
         name: str,
         bases: Iterator[object],
-        size: Optional[int],
+        size: int | None,
         *,
-        alignment: Optional[int] = None,
+        alignment: int | None = None,
         attrs: dict[str, Any] = None,
     ) -> type[BaseType]:
         """Create a new type class bound to this cstruct instance.
@@ -338,7 +338,7 @@ class cstruct:
         )
         return types.new_class(name, bases, {}, lambda ns: ns.update(attrs))
 
-    def _make_array(self, type_: MetaType, num_entries: Optional[int | Expression]) -> ArrayMetaType:
+    def _make_array(self, type_: MetaType, num_entries: int | Expression | None) -> ArrayMetaType:
         null_terminated = num_entries is None
         dynamic = isinstance(num_entries, Expression) or type_.dynamic
         size = None if (null_terminated or dynamic) else (num_entries * type_.size)

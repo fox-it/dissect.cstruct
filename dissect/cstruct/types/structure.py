@@ -6,7 +6,7 @@ from functools import lru_cache
 from operator import attrgetter
 from textwrap import dedent
 from types import FunctionType
-from typing import Any, BinaryIO, Callable, ContextManager, Optional
+from typing import Any, BinaryIO, Callable, ContextManager
 
 from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.types.base import BaseType, MetaType
@@ -71,9 +71,7 @@ class StructureMetaType(MetaType):
 
         return super().__call__(*args, **kwargs)
 
-    def _update_fields(
-        cls, fields: list[Field], align: bool = False, classdict: Optional[dict[str, Any]] = None
-    ) -> None:
+    def _update_fields(cls, fields: list[Field], align: bool = False, classdict: dict[str, Any] | None = None) -> None:
         classdict = classdict or {}
 
         lookup = {}
@@ -140,7 +138,7 @@ class StructureMetaType(MetaType):
 
         return classdict
 
-    def _calculate_size_and_offsets(cls, fields: list[Field], align: bool = False) -> tuple[Optional[int], int]:
+    def _calculate_size_and_offsets(cls, fields: list[Field], align: bool = False) -> tuple[int | None, int]:
         """Iterate all fields in this structure to calculate the field offsets and total structure size.
 
         If a structure has a dynamic field, further field offsets will be set to None and self.dynamic
@@ -341,7 +339,7 @@ class StructureMetaType(MetaType):
 
         return num
 
-    def add_field(cls, name: str, type_: BaseType, bits: Optional[int] = None, offset: Optional[int] = None) -> None:
+    def add_field(cls, name: str, type_: BaseType, bits: int | None = None, offset: int | None = None) -> None:
         field = Field(name, type_, bits=bits, offset=offset)
         cls.__fields__.append(field)
 
@@ -398,7 +396,7 @@ class UnionMetaType(StructureMetaType):
             obj._proxify()
         return obj
 
-    def _calculate_size_and_offsets(cls, fields: list[Field], align: bool = False) -> tuple[Optional[int], int]:
+    def _calculate_size_and_offsets(cls, fields: list[Field], align: bool = False) -> tuple[int | None, int]:
         size = 0
         alignment = 0
 

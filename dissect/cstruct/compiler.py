@@ -7,7 +7,7 @@ import logging
 from enum import Enum
 from textwrap import dedent, indent
 from types import MethodType
-from typing import TYPE_CHECKING, Iterator, Optional
+from typing import TYPE_CHECKING, Iterator
 
 from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.types import (
@@ -73,12 +73,12 @@ class Compiler:
 
         return structure
 
-    def compile_read(self, fields: list[Field], name: Optional[str] = None, align: bool = False) -> MethodType:
+    def compile_read(self, fields: list[Field], name: str | None = None, align: bool = False) -> MethodType:
         return _ReadSourceGenerator(self.cs, fields, name, align).generate()
 
 
 class _ReadSourceGenerator:
-    def __init__(self, cs: cstruct, fields: list[Field], name: Optional[str] = None, align: bool = False):
+    def __init__(self, cs: cstruct, fields: list[Field], name: str | None = None, align: bool = False):
         self.cs = cs
         self.fields = fields
         self.name = name

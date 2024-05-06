@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import string
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable
 
 from dissect.cstruct.exceptions import ExpressionParserError, ExpressionTokenizerError
 
@@ -41,8 +41,8 @@ class ExpressionTokenizer:
 
     def match(
         self,
-        func: Optional[Callable[[str], bool]] = None,
-        expected: Optional[str] = None,
+        func: Callable[[str], bool] | None = None,
+        expected: str | None = None,
         consume: bool = True,
         append: bool = True,
     ) -> bool:
@@ -223,7 +223,7 @@ class Expression:
     def is_number(self, token: str) -> bool:
         return token.isnumeric() or (len(token) > 2 and token[0] == "0" and token[1] in ("x", "X", "b", "B", "o", "O"))
 
-    def evaluate(self, context: Optional[dict[str, int]] = None) -> int:
+    def evaluate(self, context: dict[str, int] | None = None) -> int:
         """Evaluates an expression using a Shunting-Yard implementation."""
 
         self.stack = []

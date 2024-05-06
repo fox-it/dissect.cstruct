@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from io import BytesIO
-from typing import BinaryIO, Optional
+from typing import BinaryIO
 
 import pytest
 
@@ -261,7 +261,7 @@ def test_half_compiled_struct(cs: cstruct) -> None:
         type: BaseType
 
         @classmethod
-        def _read(cls, stream: BinaryIO, context: Optional[dict] = None) -> OffByOne:
+        def _read(cls, stream: BinaryIO, context: dict | None = None) -> OffByOne:
             return cls(cls.type._read(stream, context) + 1)
 
         @classmethod

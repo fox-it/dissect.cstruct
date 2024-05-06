@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from dissect.cstruct import compiler
 from dissect.cstruct.exceptions import (
@@ -263,7 +263,7 @@ class TokenParser(Parser):
         tokens.eol()
         return Field(name.strip(), type_, bits)
 
-    def _parse_field_type(self, type_: MetaType, name: str) -> tuple[MetaType, str, Optional[int]]:
+    def _parse_field_type(self, type_: MetaType, name: str) -> tuple[MetaType, str, int | None]:
         pattern = self.TOK.patterns[self.TOK.NAME]
         # Dirty trick because the regex expects a ; but we don't want it to be part of the value
         d = pattern.match(name + ";").groupdict()

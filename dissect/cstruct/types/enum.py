@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from enum import EnumMeta, IntEnum, IntFlag
-from typing import TYPE_CHECKING, Any, BinaryIO, Optional
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.types.base import Array, BaseType, MetaType
 
@@ -19,8 +19,8 @@ class EnumMetaType(EnumMeta, MetaType):
     def __call__(
         cls,
         value: cstruct | int | BinaryIO | bytes = None,
-        name: Optional[str] = None,
-        type_: Optional[MetaType] = None,
+        name: str | None = None,
+        type_: MetaType | None = None,
         *args,
         **kwargs,
     ) -> EnumMetaType:

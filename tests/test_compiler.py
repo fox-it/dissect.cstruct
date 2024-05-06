@@ -1,6 +1,6 @@
 from operator import itemgetter
 from textwrap import dedent
-from typing import Iterator, Optional
+from typing import Iterator
 from unittest.mock import Mock
 
 import pytest
@@ -12,7 +12,7 @@ from dissect.cstruct.types.enum import Enum
 from dissect.cstruct.types.structure import Field
 
 
-def f(field_type: MetaType, offset: Optional[int] = 0, name: str = "") -> Field:
+def f(field_type: MetaType, offset: int | None = 0, name: str = "") -> Field:
     return Field(name, field_type, offset=offset)
 
 

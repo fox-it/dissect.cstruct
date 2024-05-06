@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import functools
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Optional
+from typing import TYPE_CHECKING, Any, BinaryIO, Callable
 
 from dissect.cstruct.exceptions import ArraySizeError
 
@@ -19,11 +19,11 @@ class MetaType(type):
 
     cs: cstruct
     """The cstruct instance this type class belongs to."""
-    size: Optional[int]
+    size: int | None
     """The size of the type in bytes. Can be ``None`` for dynamic sized types."""
     dynamic: bool
     """Whether or not the type is dynamically sized."""
-    alignment: Optional[int]
+    alignment: int | None
     """The alignment of the type in bytes. A value of ``None`` will be treated as 1-byte aligned."""
 
     # This must be the actual type, but since Array is a subclass of BaseType, we correct this at the bottom of the file
@@ -48,7 +48,7 @@ class MetaType(type):
 
         return type.__call__(cls, *args, **kwargs)
 
-    def __getitem__(cls, num_entries: Optional[int | Expression]) -> ArrayMetaType:
+    def __getitem__(cls, num_entries: int | Expression | None) -> ArrayMetaType:
         """Create a new array with the given number of entries."""
         return cls.cs._make_array(cls, num_entries)
 
@@ -197,7 +197,7 @@ class _overload:
     def __init__(self, func: Callable[[Any], Any]) -> None:
         self.func = func
 
-    def __get__(self, instance: Optional[BaseType], owner: MetaType) -> Callable[[Any], bytes]:
+    def __get__(self, instance: BaseType | None, owner: MetaType) -> Callable[[Any], bytes]:
         if instance is None:
             return functools.partial(self.func, owner)
         else:
@@ -215,7 +215,7 @@ class ArrayMetaType(MetaType):
     """Base metaclass for array-like types."""
 
     type: MetaType
-    num_entries: Optional[int | Expression]
+    num_entries: int | Expression | None
     null_terminated: bool
 
     def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Array:

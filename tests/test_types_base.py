@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import BinaryIO, Optional
+from typing import BinaryIO
 
 import pytest
 
@@ -91,14 +91,14 @@ def test_custom_array_type(cs: cstruct, compiled: bool) -> None:
             self.value = value.upper()
 
         @classmethod
-        def _read(cls, stream: BinaryIO, context: Optional[dict] = None) -> CustomType:
+        def _read(cls, stream: BinaryIO, context: dict | None = None) -> CustomType:
             length = stream.read(1)[0]
             value = stream.read(length)
             return type.__call__(cls, value)
 
         class ArrayType(BaseType, metaclass=ArrayMetaType):
             @classmethod
-            def _read(cls, stream: BinaryIO, context: Optional[dict] = None) -> CustomType.ArrayType:
+            def _read(cls, stream: BinaryIO, context: dict | None = None) -> CustomType.ArrayType:
                 value = cls.type._read(stream, context)
                 if str(cls.num_entries) == "lower":
                     value.value = value.value.lower()
