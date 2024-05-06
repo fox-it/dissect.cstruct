@@ -47,11 +47,11 @@ class StructureMetaType(MetaType):
     __updating__ = False
     __compiled__ = False
 
-    def __new__(metacls, cls, bases, classdict: dict[str, Any]) -> MetaType:
+    def __new__(metacls, name: str, bases: tuple[type, ...], classdict: dict[str, Any]) -> MetaType:
         if (fields := classdict.pop("fields", None)) is not None:
             metacls._update_fields(metacls, fields, align=classdict.get("align", False), classdict=classdict)
 
-        return super().__new__(metacls, cls, bases, classdict)
+        return super().__new__(metacls, name, bases, classdict)
 
     def __call__(cls, *args, **kwargs) -> Structure:
         if (
