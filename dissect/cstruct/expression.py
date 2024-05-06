@@ -18,7 +18,7 @@ class ExpressionTokenizer:
         self.pos = 0
         self.tokens = []
 
-    def equal(self, token: str, expected: Union[str, set[str]]) -> bool:
+    def equal(self, token: str, expected: str | set[str]) -> bool:
         if isinstance(expected, set):
             return token in expected
         else:
