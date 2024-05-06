@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import string
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import TYPE_CHECKING, Callable, Optional
 
 from dissect.cstruct.exceptions import ExpressionParserError, ExpressionTokenizerError
 
