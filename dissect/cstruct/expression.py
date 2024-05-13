@@ -142,7 +142,7 @@ class ExpressionTokenizer:
                 self.tokens.append(">>")
             elif self.match(expected="<", append=False) and self.match(expected="<", append=False):
                 self.tokens.append("<<")
-            elif self.match(expected=" ", append=False):
+            elif self.match(expected={" ", "\t"}, append=False):
                 continue
             else:
                 raise ExpressionTokenizerError(

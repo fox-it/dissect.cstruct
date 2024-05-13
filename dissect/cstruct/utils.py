@@ -60,6 +60,13 @@ def _hexdump(data: bytes, palette: Palette | None = None, offset: int = 0, prefi
         for j in range(16):
             if not active and palette:
                 remaining, active = palette.pop()
+                while remaining == 0:
+                    if len(palette) == 0:
+                        # Last palette tuple is empty: print remaining whitespaces
+                        active = ""
+                        break
+                    else:
+                        remaining, active = palette.pop()
                 values += active
             elif active and j == 0:
                 values += active
