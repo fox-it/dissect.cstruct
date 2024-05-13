@@ -132,12 +132,13 @@ class Enum(BaseType, IntEnum, metaclass=EnumMetaType):
             return result
 
         def __str__(self) -> str:
-            # Use the IntFlag str as a base since it handles unknown values the way we want it
-            # I.e. <Color: 255> instead of <Color.None: 255>
-            result = IntFlag.__str__(self)
-            if not self.__class__.__name__:
-                result = f"<{result[1:]}"
-            return result
+            # We differentiate with standard Python enums in that we use a more descriptive str representation
+            # Standard Python enums just use the integer value as str, we use EnumName.ValueName
+            # In case of anonymous enums, we just use the ValueName
+            # In case of unknown members, we use the integer value (in combination with the EnumName if there is one)
+            base = f"{self.__class__.__name__}." if self.__class__.__name__ else ""
+            value = self.name if self.name is not None else str(self.value)
+            return f"{base}{value}"
 
     else:
 
@@ -150,15 +151,9 @@ class Enum(BaseType, IntEnum, metaclass=EnumMetaType):
             return f"<{name}: {self._value_!r}>"
 
         def __str__(self) -> str:
-            name = self.__class__.__name__
-            if name:
-                name += "."
-
-            if self._name_ is not None:
-                name += f"{self._name_}"
-            else:
-                name += repr(self._value_)
-            return name
+            base = f"{self.__class__.__name__}." if self.__class__.__name__ else ""
+            value = self._name_ if self._name_ is not None else str(self._value_)
+            return f"{base}{value}"
 
     def __eq__(self, other: int | Enum) -> bool:
         if isinstance(other, Enum) and other.__class__ is not self.__class__:

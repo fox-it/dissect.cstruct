@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import IntFlag
 
 from dissect.cstruct.types.base import BaseType
-from dissect.cstruct.types.enum import EnumMetaType
+from dissect.cstruct.types.enum import PY_311, EnumMetaType
 
 
 class Flag(BaseType, IntFlag, metaclass=EnumMetaType):
@@ -31,18 +31,29 @@ class Flag(BaseType, IntFlag, metaclass=EnumMetaType):
     def __repr__(self) -> str:
         result = super().__repr__()
         if not self.__class__.__name__:
-            # Deal with anonymous enums by stripping off the first bit
+            # Deal with anonymous flags by stripping off the first bit
             # I.e. <.RED: 1> -> <RED: 1>
             result = f"<{result[2:]}"
         return result
 
-    def __str__(self) -> str:
-        result = super().__str__()
-        if not self.__class__.__name__:
-            # Deal with anonymous enums by stripping off the first bit
-            # I.e. <.RED: 1> -> <RED: 1>
-            result = f"<{result[1:]}"
-        return result
+    if PY_311:
+
+        def __str__(self) -> str:
+            # We differentiate with standard Python flags in that we use a more descriptive str representation
+            # Standard Python flags just use the integer value as str, we use FlagName.ValueName
+            # In case of anonymous flags, we just use the ValueName
+            base = f"{self.__class__.__name__}." if self.__class__.__name__ else ""
+            return f"{base}{self.name}"
+
+    else:
+
+        def __str__(self) -> str:
+            result = IntFlag.__str__(self)
+            if not self.__class__.__name__:
+                # Deal with anonymous flags
+                # I.e. .RED -> RED
+                result = result[1:]
+            return result
 
     def __eq__(self, other: int | Flag) -> bool:
         if isinstance(other, Flag) and other.__class__ is not self.__class__:

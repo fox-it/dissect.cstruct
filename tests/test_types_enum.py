@@ -177,6 +177,11 @@ def test_enum_struct(cs: cstruct, compiled: bool) -> None:
     with pytest.raises(KeyError):
         obj[cs.Test32.A]
 
+    assert repr(cs.Test16.A) == "<Test16.A: 1>"
+    assert str(cs.Test16.A) == "Test16.A"
+    assert repr(cs.Test16(69)) == "<Test16: 69>"
+    assert str(cs.Test16(69)) == "Test16.69"
+
 
 def test_enum_comments(cs: cstruct) -> None:
     cdef = """
@@ -316,6 +321,7 @@ def test_enum_anonymous(cs: cstruct, compiled: bool) -> None:
     assert cs.RED.name == "RED"
     assert cs.RED.value == 1
     assert repr(cs.RED) == "<RED: 1>"
+    assert str(cs.RED) == "RED"
 
 
 def test_enum_anonymous_struct(cs: cstruct, compiled: bool) -> None:

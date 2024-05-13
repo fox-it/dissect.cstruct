@@ -103,10 +103,18 @@ def test_flag_struct(cs: cstruct) -> None:
     assert cs.Test.a | cs.Test.b == 3
     if PY_311:
         assert repr(cs.Test.c | cs.Test.d) == "<Test.c|d: 12>"
+        assert str(cs.Test.c | cs.Test.d) == "Test.c|d"
         assert repr(cs.Test.a | cs.Test.b) == "<Test.a|b: 3>"
+        assert str(cs.Test.a | cs.Test.b) == "Test.a|b"
+        assert repr(cs.Test(69)) == "<Test.a|c|64: 69>"
+        assert str(cs.Test(69)) == "Test.a|c|64"
     else:
         assert repr(cs.Test.c | cs.Test.d) == "<Test.d|c: 12>"
+        assert str(cs.Test.c | cs.Test.d) == "Test.d|c"
         assert repr(cs.Test.a | cs.Test.b) == "<Test.b|a: 3>"
+        assert str(cs.Test.a | cs.Test.b) == "Test.b|a"
+        assert repr(cs.Test(69)) == "<Test.64|c|a: 69>"
+        assert str(cs.Test(69)) == "Test.64|c|a"
     assert cs.Test(2) == cs.Test.b
     assert cs.Test(3) == cs.Test.a | cs.Test.b
     assert cs.Test.c & 12 == cs.Test.c
@@ -195,11 +203,18 @@ def test_flag_anonymous(cs: cstruct, compiled: bool) -> None:
     assert cs.A.name == "A"
     assert cs.A.value == 1
     assert repr(cs.A) == "<A: 1>"
+    assert str(cs.A) == "A"
 
     if PY_311:
         assert repr(cs.A | cs.B) == "<A|B: 3>"
+        assert str(cs.A | cs.B) == "A|B"
+        assert repr(cs.A.__class__(69)) == "<A|C|64: 69>"
+        assert str(cs.A.__class__(69)) == "A|C|64"
     else:
         assert repr(cs.A | cs.B) == "<B|A: 3>"
+        assert str(cs.A | cs.B) == "B|A"
+        assert repr(cs.A.__class__(69)) == "<64|C|A: 69>"
+        assert str(cs.A.__class__(69)) == "64|C|A"
 
 
 def test_flag_anonymous_struct(cs: cstruct, compiled: bool) -> None:

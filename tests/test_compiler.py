@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from operator import itemgetter
 from textwrap import dedent
 from typing import Iterator
