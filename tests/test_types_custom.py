@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, BinaryIO
 
+import pytest
+
 from dissect.cstruct import cstruct
 from dissect.cstruct.types import BaseType, MetaType
 
@@ -60,8 +62,13 @@ def test_using_type_in_struct(cs: cstruct) -> None:
     cs.load(struct_definition)
 
     cs.EtwPointer.as_64bit()
-    # Doesn't work as __len__ only functions on type level, it doesn't have it in the instance
     assert len(cs.test().data) == 8
+
+    with pytest.raises(EOFError):
+        # Input too small
+        cs.test(b"\xDE\xAD\xBE\xEF" * 3)
 
     cs.EtwPointer.as_32bit()
     assert len(cs.test().data) == 4
+
+    assert cs.test(b"\xDE\xAD\xBE\xEF" * 3).data.dumps() == b"\xDE\xAD\xBE\xEF"
