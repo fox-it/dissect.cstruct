@@ -52,8 +52,8 @@ struct ACCESS_ALLOWED_ACE {
 struct ACCESS_ALLOWED_OBJECT_ACE {
     uint32  Mask;
     uint32  Flags;
-    char    ObjectType[Flags & 1 * 16];
-    char    InheritedObjectType[Flags & 2 * 8];
+    char    ObjectType[(Flags & 1) * 16];
+    char    InheritedObjectType[(Flags & 2) * 8];
     LDAP_SID Sid;
 };
 """
@@ -97,12 +97,9 @@ class LdapSid:
             self.ldap_sid = in_obj
 
     def __repr__(self):
-        return "S-{}-{}-{}".format(
-            self.ldap_sid.Revision,
-            bytearray(self.ldap_sid.IdentifierAuthority.Value)[5],
-            "-".join(["{}".format(v) for v in self.ldap_sid.SubAuthority]),
-        )
-
+        authority = bytearray(self.ldap_sid.IdentifierAuthority.Value)[5]
+        sub_authority = "-".join(f"{v}" for v in self.ldap_sid.SubAuthority)
+        return f"S-{self.ldap_sid.Revision}-{authority}-{sub_authority}"
 
 class ACL:
     def __init__(self, fh):
