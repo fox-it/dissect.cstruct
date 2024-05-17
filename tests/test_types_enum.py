@@ -1,10 +1,92 @@
+from enum import Enum as StdEnum
+
 import pytest
-from dissect import cstruct
+
+from dissect.cstruct.cstruct import cstruct
+from dissect.cstruct.types.enum import Enum
 
 from .utils import verify_compiled
 
 
-def test_enum(compiled):
+@pytest.fixture
+def TestEnum(cs: cstruct) -> type[Enum]:
+    return cs._make_enum("Test", cs.uint8, {"A": 1, "B": 2, "C": 3})
+
+
+def test_enum(cs: cstruct, TestEnum: type[Enum]) -> None:
+    assert issubclass(TestEnum, StdEnum)
+    assert TestEnum.cs is cs
+    assert TestEnum.type is cs.uint8
+    assert TestEnum.size == 1
+    assert TestEnum.alignment == 1
+
+    assert TestEnum.A == 1
+    assert TestEnum.B == 2
+    assert TestEnum.C == 3
+    assert TestEnum(1) == TestEnum.A
+    assert TestEnum(2) == TestEnum.B
+    assert TestEnum(3) == TestEnum.C
+    assert TestEnum["A"] == TestEnum.A
+    assert TestEnum["B"] == TestEnum.B
+    assert TestEnum["C"] == TestEnum.C
+
+    assert TestEnum(0) == 0
+    assert TestEnum(0).name is None
+    assert TestEnum(0).value == 0
+
+
+def test_enum_read(TestEnum: type[Enum]) -> None:
+    assert TestEnum(b"\x02") == TestEnum.B
+
+
+def test_enum_write(TestEnum: type[Enum]) -> None:
+    assert TestEnum.B.dumps() == b"\x02"
+    assert TestEnum(b"\x02").dumps() == b"\x02"
+
+
+def test_enum_array_read(TestEnum: type[Enum]) -> None:
+    assert TestEnum[2](b"\x02\x03") == [TestEnum.B, TestEnum.C]
+    assert TestEnum[None](b"\x02\x03\x00") == [TestEnum.B, TestEnum.C]
+
+
+def test_enum_array_write(TestEnum: type[Enum]) -> None:
+    assert TestEnum[2]([TestEnum.B, TestEnum.C]).dumps() == b"\x02\x03"
+    assert TestEnum[None]([TestEnum.B, TestEnum.C]).dumps() == b"\x02\x03\x00"
+
+
+def test_enum_alias(cs: cstruct) -> None:
+    AliasEnum = cs._make_enum("Test", cs.uint8, {"A": 1, "B": 2, "C": 2})
+
+    assert AliasEnum.A == 1
+    assert AliasEnum.B == 2
+    assert AliasEnum.C == 2
+
+    assert AliasEnum.A.name == "A"
+    assert AliasEnum.B.name == "B"
+    assert AliasEnum.C.name == "C"
+
+    assert AliasEnum.B == AliasEnum.C
+
+    assert AliasEnum.B.dumps() == AliasEnum.C.dumps()
+
+
+def test_enum_bad_type(cs: cstruct) -> None:
+    with pytest.raises(TypeError):
+        cs._make_enum("Test", cs.char, {"A": 1, "B": 2, "C": 3})
+
+
+def test_enum_eof(TestEnum: type[Enum]) -> None:
+    with pytest.raises(EOFError):
+        TestEnum(b"")
+
+    with pytest.raises(EOFError):
+        TestEnum[2](b"\x01")
+
+    with pytest.raises(EOFError):
+        TestEnum[None](b"\x01")
+
+
+def test_enum_struct(cs: cstruct, compiled: bool) -> None:
     cdef = """
     enum Test16 : uint16 {
         A = 0x1,
@@ -40,7 +122,6 @@ def test_enum(compiled):
         Test16  expr[size * 2];
     };
     """
-    cs = cstruct.cstruct()
     cs.load(cdef, compiled=compiled)
 
     assert verify_compiled(cs.test, compiled)
@@ -50,19 +131,17 @@ def test_enum(compiled):
     buf = b"\x01\x00\x02\x00\x01\x00\x00\x02\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x01\x00\x02\x00"
     obj = cs.test(buf)
 
-    assert obj.a16.enum == cs.Test16 and obj.a16 == cs.Test16.A
-    assert obj.b16.enum == cs.Test16 and obj.b16 == cs.Test16.B
-    assert obj.a24.enum == cs.Test24 and obj.a24 == cs.Test24.A
-    assert obj.b24.enum == cs.Test24 and obj.b24 == cs.Test24.B
-    assert obj.a32.enum == cs.Test32 and obj.a32 == cs.Test32.A
-    assert obj.b32.enum == cs.Test32 and obj.b32 == cs.Test32.B
+    assert isinstance(obj.a16, cs.Test16) and obj.a16 == cs.Test16.A
+    assert isinstance(obj.b16, cs.Test16) and obj.b16 == cs.Test16.B
+    assert isinstance(obj.a24, cs.Test24) and obj.a24 == cs.Test24.A
+    assert isinstance(obj.b24, cs.Test24) and obj.b24 == cs.Test24.B
+    assert isinstance(obj.a32, cs.Test32) and obj.a32 == cs.Test32.A
+    assert isinstance(obj.b32, cs.Test32) and obj.b32 == cs.Test32.B
 
     assert len(obj.l) == 2
-    assert obj.l[0].enum == cs.Test16 and obj.l[0] == cs.Test16.A
-    assert obj.l[1].enum == cs.Test16 and obj.l[1] == cs.Test16.B
+    assert isinstance(obj.l[0], cs.Test16) and obj.l[0] == cs.Test16.A
+    assert isinstance(obj.l[1], cs.Test16) and obj.l[1] == cs.Test16.B
 
-    assert "A" in cs.Test16
-    assert "Foo" not in cs.Test16
     assert cs.Test16(1) == cs.Test16["A"]
     assert cs.Test24(2) == cs.Test24.B
     assert cs.Test16.A != cs.Test24.A
@@ -98,8 +177,13 @@ def test_enum(compiled):
     with pytest.raises(KeyError):
         obj[cs.Test32.A]
 
+    assert repr(cs.Test16.A) == "<Test16.A: 1>"
+    assert str(cs.Test16.A) == "Test16.A"
+    assert repr(cs.Test16(69)) == "<Test16: 69>"
+    assert str(cs.Test16(69)) == "Test16.69"
 
-def test_enum_comments():
+
+def test_enum_comments(cs: cstruct) -> None:
     cdef = """
     enum Inline { hello=7, world, foo, bar }; // inline enum
 
@@ -117,7 +201,6 @@ def test_enum_comments():
         g               // next
     };
     """
-    cs = cstruct.cstruct()
     cs.load(cdef)
 
     assert cs.Inline.hello == 7
@@ -142,7 +225,7 @@ def test_enum_comments():
     assert cs.Test.a != cs.Test.b
 
 
-def test_enum_name(compiled):
+def test_enum_name(cs: cstruct, compiled: bool) -> None:
     cdef = """
     enum Color: uint16 {
           RED = 1,
@@ -157,7 +240,6 @@ def test_enum_name(compiled):
         uint32 hue;
     };
     """
-    cs = cstruct.cstruct()
     cs.load(cdef, compiled=compiled)
 
     assert verify_compiled(cs.Pixel, compiled)
@@ -173,13 +255,13 @@ def test_enum_name(compiled):
     assert pixel.color.value == 1
     assert pixel.hue == 0xDDCCBBAA
 
-    # unknown enum values default to <enum name>_<value>
     pixel = Pixel(b"\x00\x00\xFF\x00\xAA\xBB\xCC\xDD")
-    assert pixel.color.name == "Color_255"
+    assert pixel.color.name is None
     assert pixel.color.value == 0xFF
+    assert repr(pixel.color) == "<Color: 255>"
 
 
-def test_enum_write(compiled):
+def test_enum_struct_write(cs: cstruct, compiled: bool) -> None:
     cdef = """
     enum Test16 : uint16 {
         A = 0x1,
@@ -206,7 +288,6 @@ def test_enum_write(compiled):
         Test16  list[2];
     };
     """
-    cs = cstruct.cstruct()
     cs.load(cdef, compiled=compiled)
 
     assert verify_compiled(cs.test, compiled)
@@ -223,7 +304,7 @@ def test_enum_write(compiled):
     assert obj.dumps() == b"\x01\x00\x02\x00\x01\x00\x00\x02\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x01\x00\x02\x00"
 
 
-def test_enum_anonymous(compiled):
+def test_enum_anonymous(cs: cstruct, compiled: bool) -> None:
     cdef = """
     enum : uint16 {
           RED = 1,
@@ -231,7 +312,6 @@ def test_enum_anonymous(compiled):
           BLUE = 3,
     };
     """
-    cs = cstruct.cstruct()
     cs.load(cdef, compiled=compiled)
 
     assert cs.RED == 1
@@ -241,9 +321,10 @@ def test_enum_anonymous(compiled):
     assert cs.RED.name == "RED"
     assert cs.RED.value == 1
     assert repr(cs.RED) == "<RED: 1>"
+    assert str(cs.RED) == "RED"
 
 
-def test_enum_anonymous_struct(compiled):
+def test_enum_anonymous_struct(cs: cstruct, compiled: bool) -> None:
     cdef = """
     enum : uint32 {
           nElements = 4
@@ -253,7 +334,6 @@ def test_enum_anonymous_struct(compiled):
         uint32  arr[nElements];
     };
     """
-    cs = cstruct.cstruct()
     cs.load(cdef, compiled=compiled)
 
     test = cs.test
@@ -262,7 +342,7 @@ def test_enum_anonymous_struct(compiled):
     assert t.arr == [255, 0, 0, 10]
 
 
-def test_enum_reference_own_member(compiled):
+def test_enum_reference_own_member(cs: cstruct, compiled: bool) -> None:
     cdef = """
     enum test {
         A,
@@ -270,7 +350,6 @@ def test_enum_reference_own_member(compiled):
         C
     };
     """
-    cs = cstruct.cstruct()
     cs.load(cdef, compiled=compiled)
 
     assert cs.test.A == 0

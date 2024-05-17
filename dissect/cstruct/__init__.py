@@ -1,5 +1,4 @@
 from dissect.cstruct.bitbuffer import BitBuffer
-from dissect.cstruct.compiler import Compiler
 from dissect.cstruct.cstruct import cstruct, ctypes, ctypes_type
 from dissect.cstruct.exceptions import (
     Error,
@@ -8,18 +7,25 @@ from dissect.cstruct.exceptions import (
     ResolveError,
 )
 from dissect.cstruct.expression import Expression
-from dissect.cstruct.types.base import Array, BaseType, RawType
-from dissect.cstruct.types.bytesinteger import BytesInteger
-from dissect.cstruct.types.chartype import CharType
-from dissect.cstruct.types.enum import Enum, EnumInstance
-from dissect.cstruct.types.flag import Flag, FlagInstance
-from dissect.cstruct.types.instance import Instance
-from dissect.cstruct.types.leb128 import LEB128
-from dissect.cstruct.types.packedtype import PackedType
-from dissect.cstruct.types.pointer import Pointer, PointerInstance
-from dissect.cstruct.types.structure import Field, Structure, Union
-from dissect.cstruct.types.voidtype import VoidType
-from dissect.cstruct.types.wchartype import WcharType
+from dissect.cstruct.types import (
+    LEB128,
+    Array,
+    BaseType,
+    Char,
+    CharArray,
+    Enum,
+    Field,
+    Flag,
+    Int,
+    MetaType,
+    Packed,
+    Pointer,
+    Structure,
+    Union,
+    Void,
+    Wchar,
+    WcharArray,
+)
 from dissect.cstruct.utils import (
     dumpstruct,
     hexdump,
@@ -40,31 +46,28 @@ from dissect.cstruct.utils import (
 )
 
 __all__ = [
-    "Compiler",
-    "Array",
-    "Union",
-    "Field",
-    "Instance",
-    "LEB128",
-    "Structure",
-    "Expression",
-    "PackedType",
-    "Pointer",
-    "PointerInstance",
-    "VoidType",
-    "WcharType",
-    "RawType",
-    "BaseType",
-    "CharType",
-    "Enum",
-    "EnumInstance",
-    "Flag",
-    "FlagInstance",
-    "BytesInteger",
-    "BitBuffer",
     "cstruct",
     "ctypes",
     "ctypes_type",
+    "LEB128",
+    "Array",
+    "BaseType",
+    "Char",
+    "CharArray",
+    "Enum",
+    "Expression",
+    "Field",
+    "Flag",
+    "Int",
+    "MetaType",
+    "Packed",
+    "Pointer",
+    "Structure",
+    "Union",
+    "Void",
+    "Wchar",
+    "WcharArray",
+    "BitBuffer",
     "dumpstruct",
     "hexdump",
     "pack",

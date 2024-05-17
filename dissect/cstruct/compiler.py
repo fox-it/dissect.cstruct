@@ -1,413 +1,418 @@
+# Made in Japan
+
 from __future__ import annotations
 
-import keyword
-import struct
-from collections import OrderedDict
-from textwrap import dedent
-from typing import TYPE_CHECKING, List
+import io
+import logging
+from enum import Enum
+from textwrap import dedent, indent
+from types import MethodType
+from typing import TYPE_CHECKING, Iterator
 
 from dissect.cstruct.bitbuffer import BitBuffer
-from dissect.cstruct.expression import Expression
 from dissect.cstruct.types import (
     Array,
-    BytesInteger,
-    CharType,
-    Enum,
-    EnumInstance,
-    Field,
+    ArrayMetaType,
+    Char,
+    CharArray,
     Flag,
-    FlagInstance,
-    Instance,
-    PackedType,
+    Int,
+    MetaType,
+    Packed,
     Pointer,
-    PointerInstance,
     Structure,
     Union,
-    WcharType,
+    Void,
+    Wchar,
+    WcharArray,
 )
+from dissect.cstruct.types.packed import _struct
 
 if TYPE_CHECKING:
-    from dissect.cstruct import cstruct
+    from dissect.cstruct.cstruct import cstruct
+    from dissect.cstruct.types.structure import Field
+
+SUPPORTED_TYPES = (
+    Array,
+    Char,
+    CharArray,
+    Enum,
+    Flag,
+    Int,
+    Packed,
+    Pointer,
+    Structure,
+    Void,
+    Wchar,
+    WcharArray,
+)
+
+log = logging.getLogger(__name__)
+
+python_compile = compile
+
+
+def compile(structure: type[Structure]) -> type[Structure]:
+    return Compiler(structure.cs).compile(structure)
 
 
 class Compiler:
-    """Compiler for cstruct structures. Creates somewhat optimized parsing code."""
+    def __init__(self, cs: cstruct):
+        self.cs = cs
 
-    TYPES = (
-        Structure,
-        Pointer,
-        Enum,
-        Flag,
-        Array,
-        PackedType,
-        CharType,
-        WcharType,
-        BytesInteger,
-    )
-
-    COMPILE_TEMPLATE = """
-class {name}(Structure):
-    def __init__(self, cstruct, structure, source=None):
-        self.structure = structure
-        self.source = source
-        super().__init__(cstruct, structure.name, structure.fields, anonymous=structure.anonymous)
-
-    def _read(self, stream, context=None):
-        r = OrderedDict()
-        sizes = {{}}
-        bitreader = BitBuffer(stream, self.cstruct.endian)
-
-{read_code}
-
-        return Instance(self, r, sizes)
-
-    def add_field(self, name, type_, offset=None):
-        raise NotImplementedError("Can't add fields to a compiled structure")
-
-    def __repr__(self):
-        return '<Structure {name} +compiled>'
-"""
-
-    def __init__(self, cstruct: cstruct):
-        self.cstruct = cstruct
-
-    def compile(self, structure: Structure) -> Structure:
-        if isinstance(structure, Union) or structure.align:
+    def compile(self, structure: type[Structure]) -> type[Structure]:
+        if issubclass(structure, Union):
             return structure
-
-        structure_name = structure.name
-        if keyword.iskeyword(structure_name):
-            structure_name += "_"
 
         try:
-            # Generate struct class based on provided structure type
-            source = self.gen_struct_class(structure_name, structure)
-        except TypeError:
-            return structure
+            structure._read = self.compile_read(structure.__fields__, structure.__name__, structure.__align__)
+            structure.__compiled__ = True
+        except Exception as e:
+            # Silently ignore, we didn't compile unfortunately
+            log.debug("Failed to compile %s", structure, exc_info=e)
 
-        # Create code object that can be executed later on
-        code_object = compile(
-            source,
-            f"<compiled {structure_name}>",
-            "exec",
-        )
+        return structure
 
-        env = {
-            "OrderedDict": OrderedDict,
-            "Structure": Structure,
-            "Instance": Instance,
-            "Expression": Expression,
-            "EnumInstance": EnumInstance,
-            "FlagInstance": FlagInstance,
-            "PointerInstance": PointerInstance,
-            "BytesInteger": BytesInteger,
-            "BitBuffer": BitBuffer,
-            "struct": struct,
-            "range": range,
-        }
+    def compile_read(self, fields: list[Field], name: str | None = None, align: bool = False) -> MethodType:
+        return _ReadSourceGenerator(self.cs, fields, name, align).generate()
 
-        exec(code_object, env)
-        klass = env[structure_name]
-        klass.__name__ = structure.name
-        return klass(self.cstruct, structure, source)
 
-    def gen_struct_class(self, name: str, structure: Structure) -> str:
-        blocks = []
-        classes = []
-        cur_block = []
-        read_size = 0
+class _ReadSourceGenerator:
+    def __init__(self, cs: cstruct, fields: list[Field], name: str | None = None, align: bool = False):
+        self.cs = cs
+        self.fields = fields
+        self.name = name
+        self.align = align
+
+        self.field_map: dict[str, Field] = {}
+        self._token_id = 0
+
+    def _map_field(self, field: Field) -> str:
+        token = f"_{self._token_id}"
+        self.field_map[token] = field
+        self._token_id += 1
+        return token
+
+    def generate(self) -> MethodType:
+        source = self.generate_source()
+        symbols = {token: field.type for token, field in self.field_map.items()}
+
+        code = python_compile(source, f"<compiled {self.name or 'anonymous'}._read>", "exec")
+        exec(code, {"BitBuffer": BitBuffer, "_struct": _struct, **symbols}, d := {})
+        obj = d.popitem()[1]
+        obj.__source__ = source
+
+        return classmethod(obj)
+
+    def generate_source(self) -> str:
+        preamble = """
+        r = {}
+        s = {}
+        """
+
+        if any(field.bits for field in self.fields):
+            preamble += "bit_reader = BitBuffer(stream, cls.cs.endian)\n"
+
+        read_code = "\n".join(self._generate_fields())
+
+        outro = """
+        obj = type.__call__(cls, **r)
+        obj._sizes = s
+        obj._values = r
+
+        return obj
+        """
+
+        code = indent(dedent(preamble).lstrip() + read_code + dedent(outro), "    ")
+
+        template = f"def _read(cls, stream, context=None):\n{code}"
+        return template
+
+    def _generate_fields(self) -> Iterator[str]:
+        current_offset = 0
+        current_block: list[Field] = []
         prev_was_bits = False
+        prev_bits_type = None
+        bits_remaining = 0
+        bits_rollover = False
 
-        for field in structure.fields:
-            field_type = self.cstruct.resolve(field.type)
+        def flush() -> Iterator[str]:
+            if current_block:
+                if self.align and current_block[0].offset is None:
+                    yield f"stream.seek(-stream.tell() & ({current_block[0].alignment} - 1), {io.SEEK_CUR})"
 
-            if not isinstance(field_type, self.TYPES):
+                yield from self._generate_packed(current_block)
+                current_block[:] = []
+
+        def align_to_field(field: Field) -> Iterator[str]:
+            nonlocal current_offset
+
+            if field.offset is not None and field.offset != current_offset:
+                # If a field has a set offset and it's not the same as the current tracked offset, seek to it
+                yield f"stream.seek({field.offset})"
+                current_offset = field.offset
+
+            if self.align and field.offset is None:
+                yield f"stream.seek(-stream.tell() & ({field.alignment} - 1), {io.SEEK_CUR})"
+
+        for field in self.fields:
+            field_type = self.cs.resolve(field.type)
+
+            if not issubclass(field_type, SUPPORTED_TYPES):
                 raise TypeError(f"Unsupported type for compiler: {field_type}")
 
-            if isinstance(field_type, Structure) or (
-                isinstance(field_type, Array) and isinstance(field_type.type, (Structure, Array))
-            ):
-                blocks.append(self.gen_read_block(read_size, cur_block))
-
-                struct_read = "s = stream.tell()\n"
-                if isinstance(field_type, Array):
-                    num = field_type.count
-
-                    if isinstance(num, Expression):
-                        num = f"max(0, Expression(self.cstruct, '{num.expression}').evaluate(r))"
-
-                    struct_read += dedent(
-                        f"""
-                        r['{field.name}'] = []
-                        for _ in range({num}):
-                            r['{field.name}'].append(self.lookup['{field.name}'].type.type._read(stream, context=r))
-                        sizes['{field.name}'] = stream.tell() - s
-                        """
-                    )
-                elif isinstance(field_type, Structure) and field_type.anonymous:
-                    struct_read += dedent(
-                        f"""
-                        v = self.lookup["{field.name}"].type._read(stream, context=r)
-                        r.update(v._values)
-                        sizes.update(v._sizes)
-                        """
-                    )
-                else:
-                    struct_read += dedent(
-                        f"""
-                        r['{field.name}'] = self.lookup['{field.name}'].type._read(stream, context=r)
-                        sizes['{field.name}'] = stream.tell() - s
-                        """
-                    )
-
-                blocks.append(struct_read)
-                read_size = 0
-                cur_block = []
-                continue
-
-            if field.bits:
-                blocks.append(self.gen_read_block(read_size, cur_block))
-                if isinstance(field_type, Enum):
-                    bitfield_read = dedent(
-                        f"""
-                        r['{field.name}'] = self.cstruct.{field.type.name}(
-                            bitreader.read(self.cstruct.{field.type.type.name}, {field.bits})
-                        )
-                        """
-                    )
-                else:
-                    bitfield_read = f"r['{field.name}'] = bitreader.read(self.cstruct.{field.type.name}, {field.bits})"
-                blocks.append(bitfield_read)
-
-                read_size = 0
-                cur_block = []
-                prev_was_bits = True
-                continue
-
-            if prev_was_bits:
-                blocks.append("bitreader.reset()")
+            if prev_was_bits and not field.bits:
+                yield "bit_reader.reset()"
                 prev_was_bits = False
+                bits_remaining = 0
 
             try:
-                count = len(field_type)
-                read_size += count
-                cur_block.append(field)
+                size = len(field_type)
+                is_dynamic = False
             except TypeError:
-                if cur_block:
-                    blocks.append(self.gen_read_block(read_size, cur_block))
+                size = None
+                is_dynamic = True
 
-                blocks.append(self.gen_dynamic_block(field))
-                read_size = 0
-                cur_block = []
+            # Sub structure
+            if issubclass(field_type, Structure):
+                yield from flush()
+                yield from align_to_field(field)
+                yield from self._generate_structure(field)
 
-        if len(cur_block):
-            blocks.append(self.gen_read_block(read_size, cur_block))
+            # Array of structures and multi-dimensional arrays
+            elif issubclass(field_type, (Array, CharArray, WcharArray)) and (
+                issubclass(field_type.type, Structure) or isinstance(field_type.type, ArrayMetaType) or is_dynamic
+            ):
+                yield from flush()
+                yield from align_to_field(field)
+                yield from self._generate_array(field)
 
-        read_code = "\n\n".join(blocks)
-        read_code = "\n".join(["    " * 2 + line for line in read_code.split("\n")])
+            # Bit fields
+            elif field.bits:
+                if not prev_was_bits:
+                    prev_bits_type = field.type
+                    prev_was_bits = True
 
-        classes.append(self.COMPILE_TEMPLATE.format(name=name, read_code=read_code))
-        return "\n\n".join(classes)
+                if bits_remaining == 0 or prev_bits_type != field.type:
+                    bits_remaining = (size * 8) - field.bits
+                    bits_rollover = True
 
-    def gen_read_block(self, size: int, block: List[str]) -> str:
-        template = dedent(
-            f"""
-            buf = stream.read({size})
-            if len(buf) != {size}: raise EOFError()
-            data = struct.unpack(self.cstruct.endian + '{{}}', buf)
-            {{}}
-            """
-        )
+                yield from flush()
+                yield from align_to_field(field)
+                yield from self._generate_bits(field)
 
-        read_code = []
-        fmt = []
-
-        cur_type = None
-        cur_count = 0
-
-        buf_offset = 0
-        data_offset = 0
-
-        for field in block:
-            field_type = self.cstruct.resolve(field.type)
-            read_type = field_type
-
-            count = 1
-            data_count = 1
-
-            if isinstance(read_type, (Enum, Flag)):
-                read_type = read_type.type
-            elif isinstance(read_type, Pointer):
-                read_type = self.cstruct.pointer
-
-            if isinstance(field_type, Array):
-                count = read_type.count
-                data_count = count
-                read_type = read_type.type
-
-                if isinstance(read_type, (Enum, Flag)):
-                    read_type = read_type.type
-                elif isinstance(read_type, Pointer):
-                    read_type = self.cstruct.pointer
-
-                if isinstance(read_type, (CharType, WcharType, BytesInteger)):
-                    read_slice = f"{buf_offset}:{buf_offset + + (count * read_type.size)}"
-                else:
-                    read_slice = f"{data_offset}:{data_offset + count}"
-            elif isinstance(read_type, CharType):
-                read_slice = f"{buf_offset}:{buf_offset + 1}"
-            elif isinstance(read_type, (WcharType, BytesInteger)):
-                read_slice = f"{buf_offset}:{buf_offset + read_type.size}"
+            # Everything else - basic and composite types (and arrays of them)
             else:
-                read_slice = str(data_offset)
+                current_block.append(field)
 
-            if not cur_type:
-                if isinstance(read_type, PackedType):
-                    cur_type = read_type.packchar
-                else:
-                    cur_type = "x"
+            if current_offset is not None and size is not None:
+                if not field.bits or (field.bits and bits_rollover):
+                    current_offset += size
+                    bits_rollover = False
 
-            if isinstance(read_type, (PackedType, CharType, WcharType, BytesInteger, Enum, Flag)):
-                char_count = count
+        yield from flush()
 
-                if isinstance(read_type, (CharType, WcharType, BytesInteger)):
-                    data_count = 0
-                    pack_char = "x"
-                    char_count *= read_type.size
-                else:
-                    pack_char = read_type.packchar
+        if self.align:
+            yield f"stream.seek(-stream.tell() & (cls.alignment - 1), {io.SEEK_CUR})"
 
-                if cur_type != pack_char:
-                    fmt.append(f"{cur_count}{cur_type}")
-                    cur_count = 0
+    def _generate_structure(self, field: Field) -> Iterator[str]:
+        template = f"""
+        _s = stream.tell()
+        r["{field.name}"] = {self._map_field(field)}._read(stream, context=r)
+        s["{field.name}"] = stream.tell() - _s
+        """
 
-                cur_count += char_count
-                cur_type = pack_char
+        yield dedent(template)
 
-            if isinstance(read_type, BytesInteger):
-                getter = "BytesInteger.parse(buf[{slice}], {size}, {count}, {signed}, self.cstruct.endian){data_slice}"
+    def _generate_array(self, field: Field) -> Iterator[str]:
+        template = f"""
+        _s = stream.tell()
+        r["{field.name}"] = {self._map_field(field)}._read(stream, context=r)
+        s["{field.name}"] = stream.tell() - _s
+        """
 
-                getter = getter.format(
-                    slice=read_slice,
-                    size=read_type.size,
-                    count=count,
-                    signed=read_type.signed,
-                    data_slice="[0]" if count == 1 else "",
-                )
-            elif isinstance(read_type, (CharType, WcharType)):
-                getter = f"buf[{read_slice}]"
+        yield dedent(template)
 
-                if isinstance(read_type, WcharType):
-                    getter += ".decode('utf-16-le' if self.cstruct.endian == '<' else 'utf-16-be')"
-            else:
-                getter = f"data[{read_slice}]"
-
-            if isinstance(field_type, (Enum, Flag)):
-                enum_type = field_type.__class__.__name__
-                getter = f"{enum_type}Instance(self.cstruct.{field_type.name}, {getter})"
-            elif isinstance(field_type, Array) and isinstance(field_type.type, (Enum, Flag)):
-                enum_type = field_type.type.__class__.__name__
-                getter = f"[{enum_type}Instance(self.cstruct.{field_type.type.name}, d) for d in {getter}]"
-            elif isinstance(field_type, Pointer):
-                getter = f"PointerInstance(self.cstruct.{field_type.type.name}, stream, {getter}, r)"
-            elif isinstance(field_type, Array) and isinstance(field_type.type, Pointer):
-                getter = f"[PointerInstance(self.cstruct.{field_type.type.type.name}, stream, d, r) for d in {getter}]"
-            elif isinstance(field_type, Array) and isinstance(read_type, PackedType):
-                getter = f"list({getter})"
-
-            read_code.append(f"r['{field.name}'] = {getter}")
-            read_code.append(f"sizes['{field.name}'] = {count * read_type.size}")
-
-            data_offset += data_count
-            buf_offset += count * read_type.size
-
-        if cur_count:
-            fmt.append(f"{cur_count}{cur_type}")
-
-        return template.format("".join(fmt), "\n".join(read_code))
-
-    def gen_dynamic_block(self, field: Field) -> str:
-        if not isinstance(field.type, Array):
-            raise TypeError(f"Only Array can be dynamic, got {field.type!r}")
-
-        field_type = self.cstruct.resolve(field.type.type)
-        reader = None
-
-        if isinstance(field_type, (Enum, Flag)):
+    def _generate_bits(self, field: Field) -> Iterator[str]:
+        lookup = self._map_field(field)
+        read_type = "_t"
+        field_type = field.type
+        if issubclass(field_type, (Enum, Flag)):
+            read_type += ".type"
             field_type = field_type.type
 
-        if not field.type.count:  # Null terminated
-            if isinstance(field_type, PackedType):
-                reader = dedent(
-                    f"""
-                    t = []
-                    while True:
-                        d = stream.read({field_type.size})
-                        if len(d) != {field_type.size}: raise EOFError()
-                        v = struct.unpack(self.cstruct.endian + '{field_type.packchar}', d)[0]
-                        if v == 0: break
-                        t.append(v)
-                    """
-                )
+        if issubclass(field_type, Char):
+            field_type = field_type.cs.uint8
+            lookup = "cls.cs.uint8"
 
-            elif isinstance(field_type, (CharType, WcharType)):
-                null = "\\x00" * field_type.size
-                reader = dedent(
-                    f"""
-                    t = []
-                    while True:
-                        c = stream.read({field_type.size})
-                        if len(c) != {field_type.size}: raise EOFError()
-                        if c == b'{null}': break
-                        t.append(c)
-                    t = b''.join(t)"""  # It's important there's no newline here because of the optional decode
-                )
+        template = f"""
+        _t = {lookup}
+        r["{field.name}"] = type.__call__(_t, bit_reader.read({read_type}, {field.bits}))
+        """
 
-                if isinstance(field_type, WcharType):
-                    reader += ".decode('utf-16-le' if self.cstruct.endian == '<' else 'utf-16-be')"
-            elif isinstance(field_type, BytesInteger):
-                reader = dedent(
-                    f"""
-                    t = []
-                    while True:
-                        d = stream.read({field_type.size})
-                        if len(d) != {field_type.size}: raise EOFError()
-                        v = BytesInteger.parse(d, {field_type.size}, 1, {field_type.signed}, self.cstruct.endian)
-                        if v == 0: break
-                        t.append(v)
-                    """
-                )
+        yield dedent(template)
 
-            if isinstance(field_type, (Enum, Flag)):
-                enum_type = field_type.__class__.__name__
-                reader += f"\nt = [{enum_type}Instance(self.cstruct.{field_type.name}, d) for d in t]"
+    def _generate_packed(self, fields: list[Field]) -> Iterator[str]:
+        info = list(_generate_struct_info(self.cs, fields, self.align))
+        reads = []
 
-            if not reader:
-                raise TypeError(f"Couldn't compile a reader for array {field!r}, {field_type!r}.")
+        size = 0
+        slice_index = 0
+        for field, count, _ in info:
+            if field is None:
+                # Padding
+                size += count
+                continue
 
-            return f"s = stream.tell()\n{reader}\nr['{field.name}'] = t\nsizes['{field.name}'] = stream.tell() - s"
+            field_type = self.cs.resolve(field.type)
+            read_type = _get_read_type(self.cs, field_type)
 
-        expr_read = dedent(
-            f"""
-            dynsize = max(0, Expression(self.cstruct, "{field.type.count.expression}").evaluate(r))
-            buf = stream.read(dynsize * {field_type.size})
-            if len(buf) != dynsize * {field_type.size}: raise EOFError()
-            r['{field.name}'] = {{reader}}
-            sizes['{field.name}'] = dynsize * {field_type.size}
-            """
-        )
+            if issubclass(field_type, (Array, CharArray, WcharArray)):
+                count = field_type.num_entries
+                read_type = _get_read_type(self.cs, field_type.type)
 
-        if isinstance(field_type, PackedType):
-            reader = f"list(struct.unpack(self.cstruct.endian + f'{{dynsize}}{field_type.packchar}', buf))"
-        elif isinstance(field_type, (CharType, WcharType)):
-            reader = "buf"
-            if isinstance(field_type, WcharType):
-                reader += ".decode('utf-16-le' if self.cstruct.endian == '<' else 'utf-16-be')"
-        elif isinstance(field_type, BytesInteger):
-            reader = f"BytesInteger.parse(buf, {field_type.size}, dynsize, {field_type.signed}, self.cstruct.endian)"
+                if issubclass(read_type, (Char, Wchar, Int)):
+                    count *= read_type.size
+                    getter = f"buf[{size}:{size + count}]"
+                else:
+                    getter = f"data[{slice_index}:{slice_index + count}]"
+                    slice_index += count
+            elif issubclass(read_type, (Char, Wchar, Int)):
+                getter = f"buf[{size}:{size + read_type.size}]"
+            else:
+                getter = f"data[{slice_index}]"
+                slice_index += 1
 
-        if isinstance(field_type, (Enum, Flag)):
-            enum_type = field_type.__class__.__name__
-            reader += f"[{enum_type}Instance(self.cstruct.{field_type.name}, d) for d in {reader}]"
+            if issubclass(read_type, (Wchar, Int)):
+                # Types that parse bytes further down to their own type
+                parser_template = "{type}({getter})"
+            else:
+                # All other types can be simply intialized
+                parser_template = "type.__call__({type}, {getter})"
 
-        return expr_read.format(reader=reader, size=None)
+            # Create the final reading code
+            if issubclass(field_type, Array):
+                reads.append(f"_t = {self._map_field(field)}")
+                reads.append("_et = _t.type")
+
+                if issubclass(field_type.type, Int):
+                    reads.append(f"_b = {getter}")
+                    item_parser = parser_template.format(type="_et", getter=f"_b[i:i + {field_type.type.size}]")
+                    list_comp = f"[{item_parser} for i in range(0, {count}, {field_type.type.size})]"
+                elif issubclass(field_type.type, Pointer):
+                    item_parser = "_et.__new__(_et, e, stream, r)"
+                    list_comp = f"[{item_parser} for e in {getter}]"
+                else:
+                    item_parser = parser_template.format(type="_et", getter="e")
+                    list_comp = f"[{item_parser} for e in {getter}]"
+
+                parser = f"type.__call__(_t, {list_comp})"
+            elif issubclass(field_type, CharArray):
+                parser = f"type.__call__({self._map_field(field)}, {getter})"
+            elif issubclass(field_type, Pointer):
+                reads.append(f"_pt = {self._map_field(field)}")
+                parser = f"_pt.__new__(_pt, {getter}, stream, r)"
+            else:
+                parser = parser_template.format(type=self._map_field(field), getter=getter)
+
+            reads.append(f'r["{field.name}"] = {parser}')
+            reads.append(f's["{field.name}"] = {field_type.size}')
+            reads.append("")  # Generates a newline in the resulting code
+
+            size += field_type.size
+
+        fmt = _optimize_struct_fmt(info)
+        if fmt == "x" or (len(fmt) == 2 and fmt[1] == "x"):
+            unpack = ""
+        else:
+            unpack = f'data = _struct(cls.cs.endian, "{fmt}").unpack(buf)\n'
+
+        template = f"""
+        buf = stream.read({size})
+        if len(buf) != {size}: raise EOFError()
+        {unpack}
+        """
+
+        yield dedent(template) + "\n".join(reads)
+
+
+def _generate_struct_info(cs: cstruct, fields: list[Field], align: bool = False) -> Iterator[tuple[Field, int, str]]:
+    if not fields:
+        return
+
+    current_offset = fields[0].offset
+    imaginary_offset = 0
+    for field in fields:
+        # We moved -- probably due to alignment
+        if field.offset is not None and (drift := field.offset - current_offset) > 0:
+            yield None, drift, "x"
+            current_offset += drift
+
+        if align and field.offset is None and (drift := -imaginary_offset & (field.alignment - 1)) > 0:
+            # Assume we started at a correctly aligned boundary
+            yield None, drift, "x"
+            imaginary_offset += drift
+
+        count = 1
+        read_type = _get_read_type(cs, field.type)
+
+        # Drop voids
+        if issubclass(read_type, Void):
+            continue
+
+        # Array of more complex types are handled elsewhere
+        if issubclass(read_type, (Array, CharArray, WcharArray)):
+            count = read_type.num_entries
+            read_type = _get_read_type(cs, read_type.type)
+
+        # Take the pack char for Packed
+        if issubclass(read_type, Packed):
+            yield field, count, read_type.packchar
+
+        # Other types are byte based
+        # We don't actually unpack anything here but slice directly out of the buffer
+        elif issubclass(read_type, (Char, Wchar, Int)):
+            yield field, count * read_type.size, "x"
+
+        size = count * read_type.size
+        imaginary_offset += size
+        if current_offset is not None:
+            current_offset += size
+
+
+def _optimize_struct_fmt(info: Iterator[tuple[Field, int, str]]) -> str:
+    chars = []
+
+    current_count = 0
+    current_char = None
+
+    for _, count, char in info:
+        if current_char is None:
+            current_count = count
+            current_char = char
+            continue
+
+        if char != current_char:
+            if current_count:
+                chars.append((current_count, current_char))
+            current_count = count
+            current_char = char
+        else:
+            current_count += count
+
+    if current_char is not None and current_count:
+        chars.append((current_count, current_char))
+
+    return "".join(f"{count if count > 1 else ''}{char}" for count, char in chars)
+
+
+def _get_read_type(cs: cstruct, type_: MetaType | str) -> MetaType:
+    type_ = cs.resolve(type_)
+
+    if issubclass(type_, (Enum, Flag)):
+        type_ = type_.type
+
+    if issubclass(type_, Pointer):
+        type_ = cs.pointer
+
+    return cs.resolve(type_)

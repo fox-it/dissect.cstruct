@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import string
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable
 
 from dissect.cstruct.exceptions import ExpressionParserError, ExpressionTokenizerError
 
@@ -41,8 +41,8 @@ class ExpressionTokenizer:
 
     def match(
         self,
-        func: Optional[Callable[[str], bool]] = None,
-        expected: Optional[str | set[str]] = None,
+        func: Callable[[str], bool] | None = None,
+        expected: str | None = None,
         consume: bool = True,
         append: bool = True,
     ) -> bool:
@@ -154,7 +154,7 @@ class ExpressionTokenizer:
 class Expression:
     """Expression parser for calculations in definitions."""
 
-    operators = {
+    binary_operators = {
         "|": lambda a, b: a | b,
         "^": lambda a, b: a ^ b,
         "&": lambda a, b: a & b,
@@ -165,6 +165,9 @@ class Expression:
         "*": lambda a, b: a * b,
         "/": lambda a, b: a // b,
         "%": lambda a, b: a % b,
+    }
+
+    unary_operators = {
         "u": lambda a: -a,
         "~": lambda a: ~a,
     }
@@ -206,26 +209,26 @@ class Expression:
             raise ExpressionParserError("Invalid expression: not enough operands")
 
         right = self.queue.pop(-1)
-        if operator in ("u", "~"):
-            res = self.operators[operator](right)
+        if operator in self.unary_operators:
+            res = self.unary_operators[operator](right)
         else:
             if len(self.queue) < 1:
                 raise ExpressionParserError("Invalid expression: not enough operands")
 
             left = self.queue.pop(-1)
-            res = self.operators[operator](left, right)
+            res = self.binary_operators[operator](left, right)
 
         self.queue.append(res)
 
     def is_number(self, token: str) -> bool:
         return token.isnumeric() or (len(token) > 2 and token[0] == "0" and token[1] in ("x", "X", "b", "B", "o", "O"))
 
-    def evaluate(self, context: Optional[dict[str, int]] = None) -> int:
+    def evaluate(self, context: dict[str, int] | None = None) -> int:
         """Evaluates an expression using a Shunting-Yard implementation."""
 
         self.stack = []
         self.queue = []
-        operators = set(self.operators.keys())
+        operators = set(self.binary_operators.keys()) | set(self.unary_operators.keys())
 
         context = context or {}
         tmp_expression = self.tokens
@@ -249,9 +252,7 @@ class Expression:
                 self.queue.append(int(context[current_token]))
             elif current_token in self.cstruct.consts:
                 self.queue.append(int(self.cstruct.consts[current_token]))
-            elif current_token == "u":
-                self.stack.append(current_token)
-            elif current_token == "~":
+            elif current_token in self.unary_operators:
                 self.stack.append(current_token)
             elif current_token == "sizeof":
                 if len(tmp_expression) < i + 3 or (tmp_expression[i + 1] != "(" or tmp_expression[i + 3] != ")"):

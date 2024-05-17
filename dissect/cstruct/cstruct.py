@@ -1,22 +1,30 @@
-from __future__ import print_function
+from __future__ import annotations
 
 import ctypes as _ctypes
+import struct
 import sys
-from typing import Any, BinaryIO, Optional
+import types
+from typing import Any, BinaryIO, Iterator
 
 from dissect.cstruct.exceptions import ResolveError
+from dissect.cstruct.expression import Expression
 from dissect.cstruct.parser import CStyleParser, TokenParser
 from dissect.cstruct.types import (
     LEB128,
-    Array,
+    ArrayMetaType,
     BaseType,
-    BytesInteger,
-    CharType,
-    PackedType,
+    Char,
+    Enum,
+    Field,
+    Flag,
+    Int,
+    MetaType,
+    Packed,
     Pointer,
     Structure,
-    VoidType,
-    WcharType,
+    Union,
+    Void,
+    Wchar,
 )
 
 
@@ -31,7 +39,7 @@ class cstruct:
     DEF_CSTYLE = 1
     DEF_LEGACY = 2
 
-    def __init__(self, endian: str = "<", pointer: Optional[str] = None):
+    def __init__(self, endian: str = "<", pointer: str | None = None):
         self.endian = endian
 
         self.consts = {}
@@ -39,31 +47,31 @@ class cstruct:
         # fmt: off
         self.typedefs = {
             # Internal types
-            "int8": PackedType(self, "int8", 1, "b"),
-            "uint8": PackedType(self, "uint8", 1, "B"),
-            "int16": PackedType(self, "int16", 2, "h"),
-            "uint16": PackedType(self, "uint16", 2, "H"),
-            "int32": PackedType(self, "int32", 4, "i"),
-            "uint32": PackedType(self, "uint32", 4, "I"),
-            "int64": PackedType(self, "int64", 8, "q"),
-            "uint64": PackedType(self, "uint64", 8, "Q"),
-            "float16": PackedType(self, "float16", 2, "e"),
-            "float": PackedType(self, "float", 4, "f"),
-            "double": PackedType(self, "double", 8, "d"),
-            "char": CharType(self),
-            "wchar": WcharType(self),
+            "int8": self._make_packed_type("int8", "b", int),
+            "uint8": self._make_packed_type("uint8", "B", int),
+            "int16": self._make_packed_type("int16", "h", int),
+            "uint16": self._make_packed_type("uint16", "H", int),
+            "int32": self._make_packed_type("int32", "i", int),
+            "uint32": self._make_packed_type("uint32", "I", int),
+            "int64": self._make_packed_type("int64", "q", int),
+            "uint64": self._make_packed_type("uint64", "Q", int),
+            "float16": self._make_packed_type("float16", "e", float),
+            "float": self._make_packed_type("float", "f", float),
+            "double": self._make_packed_type("double", "d", float),
+            "char": self._make_type("char", (Char,), 1),
+            "wchar": self._make_type("wchar", (Wchar,), 2),
 
-            "int24": BytesInteger(self, "int24", 3, True, alignment=4),
-            "uint24": BytesInteger(self, "uint24", 3, False, alignment=4),
-            "int48": BytesInteger(self, "int48", 6, True, alignment=8),
-            "uint48": BytesInteger(self, "uint48", 6, False, alignment=8),
-            "int128": BytesInteger(self, "int128", 16, True, alignment=16),
-            "uint128": BytesInteger(self, "uint128", 16, False, alignment=16),
+            "int24": self._make_int_type("int24", 3, True, alignment=4),
+            "uint24": self._make_int_type("uint24", 3, False, alignment=4),
+            "int48": self._make_int_type("int48", 6, True, alignment=8),
+            "uint48": self._make_int_type("int48", 6, False, alignment=8),
+            "int128": self._make_int_type("int128", 16, True, alignment=16),
+            "uint128": self._make_int_type("uint128", 16, False, alignment=16),
 
-            "uleb128": LEB128(self, 'uleb128', None, False),
-            "ileb128": LEB128(self, 'ileb128', None, True),
+            "uleb128": self._make_type("uleb128", (LEB128,), None, attrs={"signed": False}),
+            "ileb128": self._make_type("ileb128", (LEB128,), None, attrs={"signed": True}),
 
-            "void": VoidType(),
+            "void": self._make_type("void", (Void,), 0),
 
             # Common C types not covered by internal types
             "signed char": "int8",
@@ -121,6 +129,13 @@ class cstruct:
             "__int64": "int64",
             "__int128": "int128",
 
+            "unsigned __int8": "uint8",
+            "unsigned __int16": "uint16",
+            "unsigned __int32": "uint32",
+            "unsigned __int64": "uint64",
+            "unsigned __int128": "uint128",
+            "unsigned __int128": "uint128",
+
             "wchar_t": "wchar",
 
             # GNU C types
@@ -135,7 +150,6 @@ class cstruct:
             "uint32_t": "uint32",
             "uint64_t": "uint64",
             "uint128_t": "uint128",
-            "unsigned __int128": "uint128",
 
             # IDA types
             "_BYTE": "uint8",
@@ -167,29 +181,30 @@ class cstruct:
 
     def __getattr__(self, attr: str) -> Any:
         try:
-            return self.resolve(self.typedefs[attr])
+            return self.consts[attr]
         except KeyError:
             pass
 
         try:
-            return self.consts[attr]
+            return self.resolve(self.typedefs[attr])
         except KeyError:
             pass
 
         raise AttributeError(f"Invalid attribute: {attr}")
 
     def _next_anonymous(self) -> str:
-        name = f"anonymous_{self._anonymous_count}"
+        name = f"__anonymous_{self._anonymous_count}__"
         self._anonymous_count += 1
         return name
 
-    def addtype(self, name: str, type_: BaseType, replace: bool = False) -> None:
+    def add_type(self, name: str, type_: MetaType | str, replace: bool = False) -> None:
         """Add a type or type reference.
+
+        Only use this method when creating type aliases or adding already bound types.
 
         Args:
             name: Name of the type to be added.
-            type_: The type to be added. Can be a str reference to another type
-                or a compatible type class.
+            type_: The type to be added. Can be a str reference to another type or a compatible type class.
 
         Raises:
             ValueError: If the type already exists.
@@ -199,7 +214,26 @@ class cstruct:
 
         self.typedefs[name] = type_
 
-    def load(self, definition: str, deftype: int = None, **kwargs) -> "cstruct":
+    addtype = add_type
+
+    def add_custom_type(
+        self, name: str, type_: MetaType, size: int | None = None, alignment: int | None = None, **kwargs
+    ) -> None:
+        """Add a custom type.
+
+        Use this method to add custom types to this cstruct instance. This is largely a convenience method for
+        the internal :func:`_make_type` method, which binds a class to this cstruct instance.
+
+        Args:
+            name: Name of the type to be added.
+            type_: The type to be added.
+            size: The size of the type.
+            alignment: The alignment of the type.
+            **kwargs: Additional attributes to add to the type.
+        """
+        self.add_type(name, self._make_type(name, (type_,), size, alignment=alignment, attrs=kwargs))
+
+    def load(self, definition: str, deftype: int = None, **kwargs) -> cstruct:
         """Parse structures from the given definitions using the given definition type.
 
         Definitions can be parsed using different parsers. Currently, there's
@@ -250,7 +284,7 @@ class cstruct:
         """
         return self.resolve(name).read(stream)
 
-    def resolve(self, name: str) -> BaseType:
+    def resolve(self, name: str) -> MetaType:
         """Resolve a type name to get the actual type object.
 
         Types can be referenced using different names. When we want
@@ -280,11 +314,103 @@ class cstruct:
 
         raise ResolveError(f"Recursion limit exceeded while resolving type {name}")
 
+    def _make_type(
+        self,
+        name: str,
+        bases: Iterator[object],
+        size: int | None,
+        *,
+        alignment: int | None = None,
+        attrs: dict[str, Any] = None,
+    ) -> type[BaseType]:
+        """Create a new type class bound to this cstruct instance.
+
+        All types are created using this method. This method automatically binds the type to this cstruct instance.
+        """
+        attrs = attrs or {}
+        attrs.update(
+            {
+                "cs": self,
+                "size": size,
+                "dynamic": size is None,
+                "alignment": alignment or size,
+            }
+        )
+        return types.new_class(name, bases, {}, lambda ns: ns.update(attrs))
+
+    def _make_array(self, type_: MetaType, num_entries: int | Expression | None) -> ArrayMetaType:
+        null_terminated = num_entries is None
+        dynamic = isinstance(num_entries, Expression) or type_.dynamic
+        size = None if (null_terminated or dynamic) else (num_entries * type_.size)
+        name = f"{type_.__name__}[]" if null_terminated else f"{type_.__name__}[{num_entries}]"
+
+        bases = (type_.ArrayType,)
+
+        attrs = {
+            "type": type_,
+            "num_entries": num_entries,
+            "null_terminated": null_terminated,
+        }
+
+        return self._make_type(name, bases, size, alignment=type_.alignment, attrs=attrs)
+
+    def _make_int_type(self, name: str, size: int, signed: bool, *, alignment: int = None) -> type[Int]:
+        return self._make_type(name, (Int,), size, alignment=alignment, attrs={"signed": signed})
+
+    def _make_packed_type(self, name: str, packchar: str, base: type, *, alignment: int = None) -> type[Packed]:
+        return self._make_type(
+            name,
+            (base, Packed),
+            struct.calcsize(packchar),
+            alignment=alignment,
+            attrs={"packchar": packchar},
+        )
+
+    def _make_enum(self, name: str, type_: MetaType, values: dict[str, int]) -> type[Enum]:
+        return Enum(self, name, type_, values)
+
+    def _make_flag(self, name: str, type_: MetaType, values: dict[str, int]) -> type[Flag]:
+        return Flag(self, name, type_, values)
+
+    def _make_pointer(self, target: MetaType) -> type[Pointer]:
+        return self._make_type(
+            f"{target.__name__}*",
+            (Pointer,),
+            self.pointer.size,
+            alignment=self.pointer.alignment,
+            attrs={"type": target},
+        )
+
+    def _make_struct(
+        self,
+        name: str,
+        fields: list[Field],
+        *,
+        align: bool = False,
+        anonymous: bool = False,
+        base: type[Structure] = Structure,
+    ) -> type[Structure]:
+        return self._make_type(
+            name,
+            (base,),
+            None,
+            attrs={
+                "fields": fields,
+                "__align__": align,
+                "__anonymous__": anonymous,
+            },
+        )
+
+    def _make_union(
+        self, name: str, fields: list[Field], *, align: bool = False, anonymous: bool = False
+    ) -> type[Structure]:
+        return self._make_struct(name, fields, align=align, anonymous=anonymous, base=Union)
+
 
 def ctypes(structure: Structure) -> _ctypes.Structure:
     """Create ctypes structures from cstruct structures."""
     fields = []
-    for field in structure.fields:
+    for field in structure.__fields__:
         t = ctypes_type(field.type)
         fields.append((field.name, t))
 
@@ -292,25 +418,38 @@ def ctypes(structure: Structure) -> _ctypes.Structure:
     return tt
 
 
-def ctypes_type(type_: BaseType) -> Any:
+def ctypes_type(type_: MetaType) -> Any:
     mapping = {
-        "I": _ctypes.c_ulong,
-        "i": _ctypes.c_long,
         "b": _ctypes.c_int8,
+        "B": _ctypes.c_uint8,
+        "h": _ctypes.c_int16,
+        "H": _ctypes.c_uint16,
+        "i": _ctypes.c_int32,
+        "I": _ctypes.c_uint32,
+        "q": _ctypes.c_int64,
+        "Q": _ctypes.c_uint64,
+        "f": _ctypes.c_float,
+        "d": _ctypes.c_double,
     }
 
-    if isinstance(type_, PackedType):
+    if issubclass(type_, Packed) and type_.packchar in mapping:
         return mapping[type_.packchar]
 
-    if isinstance(type_, CharType):
+    if issubclass(type_, Char):
         return _ctypes.c_char
 
-    if isinstance(type_, Array):
-        subtype = ctypes_type(type_.type)
-        return subtype * type_.count
+    if issubclass(type_, Wchar):
+        return _ctypes.c_wchar
 
-    if isinstance(type_, Pointer):
+    if isinstance(type_, ArrayMetaType):
+        subtype = ctypes_type(type_.type)
+        return subtype * type_.num_entries
+
+    if issubclass(type_, Pointer):
         subtype = ctypes_type(type_.type)
         return _ctypes.POINTER(subtype)
+
+    if issubclass(type_, Structure):
+        return ctypes(type_)
 
     raise NotImplementedError(f"Type not implemented: {type_.__class__.__name__}")

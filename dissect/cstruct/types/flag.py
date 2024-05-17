@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from typing import BinaryIO, List, Tuple, Union
+from enum import IntFlag
 
-from dissect.cstruct.types import Enum, EnumInstance
+from dissect.cstruct.types.base import BaseType
+from dissect.cstruct.types.enum import PY_311, EnumMetaType
 
 
-class Flag(Enum):
-    """Implements a Flag type.
+class Flag(BaseType, IntFlag, metaclass=EnumMetaType):
+    """Flag type supercharged with cstruct functionality.
 
-    Flags can be made using any type. The API for accessing flags and their
-    values is very similar to Python 3 native flags.
+    Flags are (mostly) compatible with the Python 3 standard library ``IntFlag`` with some notable differences:
+        - Flag members are only considered equal if the flag class is the same
+
+    Flags can be made using any integer type.
 
     Example:
         When using the default C-style parser, the following syntax is supported:
@@ -25,82 +28,45 @@ class Flag(Enum):
             };
     """
 
-    def __call__(self, value: Union[int, BinaryIO]) -> FlagInstance:
-        if isinstance(value, int):
-            return FlagInstance(self, value)
-
-        return super().__call__(value)
-
-
-class FlagInstance(EnumInstance):
-    """Implements a value instance of a Flag"""
-
-    def __bool__(self):
-        return bool(self.value)
-
-    __nonzero__ = __bool__
-
-    def __or__(self, other: Union[int, FlagInstance]) -> FlagInstance:
-        if hasattr(other, "value"):
-            other = other.value
-
-        return self.__class__(self.enum, self.value | other)
-
-    def __and__(self, other: Union[int, FlagInstance]) -> FlagInstance:
-        if hasattr(other, "value"):
-            other = other.value
-
-        return self.__class__(self.enum, self.value & other)
-
-    def __xor__(self, other: Union[int, FlagInstance]) -> FlagInstance:
-        if hasattr(other, "value"):
-            other = other.value
-
-        return self.__class__(self.enum, self.value ^ other)
-
-    __ror__ = __or__
-    __rand__ = __and__
-    __rxor__ = __xor__
-
-    def __invert__(self) -> FlagInstance:
-        return self.__class__(self.enum, ~self.value)
-
-    def __str__(self) -> str:
-        if self.name is not None:
-            return f"{self.enum.name}.{self.name}"
-
-        members, _ = self.decompose()
-        members_str = "|".join([str(name or value) for name, value in members])
-        return f"{self.enum.name}.{members_str}"
-
     def __repr__(self) -> str:
-        base_name = f"{self.enum.name}." if self.enum.name else ""
+        result = super().__repr__()
+        if not self.__class__.__name__:
+            # Deal with anonymous flags by stripping off the first bit
+            # I.e. <.RED: 1> -> <RED: 1>
+            result = f"<{result[2:]}"
+        return result
 
-        if self.name is not None:
-            return f"<{base_name}{self.name}: {self.value}>"
+    if PY_311:
 
-        members, _ = self.decompose()
-        members_str = "|".join([str(name or value) for name, value in members])
-        return f"<{base_name}{members_str}: {self.value}>"
+        def __str__(self) -> str:
+            # We differentiate with standard Python flags in that we use a more descriptive str representation
+            # Standard Python flags just use the integer value as str, we use FlagName.ValueName
+            # In case of anonymous flags, we just use the ValueName
+            base = f"{self.__class__.__name__}." if self.__class__.__name__ else ""
+            return f"{base}{self.name}"
 
-    @property
-    def name(self) -> str:
-        return self.enum.reverse.get(self.value, None)
+    else:
 
-    def decompose(self) -> Tuple[List[str], int]:
-        members = []
-        not_covered = self.value
+        def __str__(self) -> str:
+            result = IntFlag.__str__(self)
+            if not self.__class__.__name__:
+                # Deal with anonymous flags
+                # I.e. .RED -> RED
+                result = result[1:]
+            return result
 
-        for name, value in self.enum.values.items():
-            if value and ((value & self.value) == value):
-                members.append((name, value))
-                not_covered &= ~value
+    def __eq__(self, other: int | Flag) -> bool:
+        if isinstance(other, Flag) and other.__class__ is not self.__class__:
+            return False
 
-        if not members:
-            members.append((None, self.value))
+        # Python <= 3.10 compatibility
+        if isinstance(other, Flag):
+            other = other.value
 
-        members.sort(key=lambda m: m[0], reverse=True)
-        if len(members) > 1 and members[0][1] == self.value:
-            members.pop(0)
+        return self.value == other
 
-        return members, not_covered
+    def __ne__(self, value: int | Flag) -> bool:
+        return not self.__eq__(value)
+
+    def __hash__(self) -> int:
+        return hash((self.__class__, self.name, self.value))

@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import pprint
 import string
-from typing import List, Tuple
+import sys
+from typing import Iterator
 
-from dissect.cstruct.types import Instance, Structure
+from dissect.cstruct.types.structure import Structure
 
 COLOR_RED = "\033[1;31m"
 COLOR_GREEN = "\033[1;32m"
@@ -24,16 +27,18 @@ COLOR_BG_WHITE = "\033[1;47m\033[1;30m"
 PRINTABLE = string.digits + string.ascii_letters + string.punctuation + " "
 
 ENDIANNESS_MAP = {
-    "network": "big",
+    "@": sys.byteorder,
+    "=": sys.byteorder,
     "<": "little",
     ">": "big",
     "!": "big",
+    "network": "big",
 }
 
-Palette = List[Tuple[str, str]]
+Palette = list[tuple[str, str]]
 
 
-def _hexdump(data: bytes, palette: Palette = None, offset: int = 0, prefix: str = ""):
+def _hexdump(data: bytes, palette: Palette | None = None, offset: int = 0, prefix: str = "") -> Iterator[str]:
     """Hexdump some data.
 
     Args:
@@ -100,7 +105,9 @@ def _hexdump(data: bytes, palette: Palette = None, offset: int = 0, prefix: str 
         yield f"{prefix}{offset + i:08x}  {values:48s}  {chars}"
 
 
-def hexdump(data: bytes, palette=None, offset: int = 0, prefix: str = "", output: str = "print"):
+def hexdump(
+    data: bytes, palette: Palette | None = None, offset: int = 0, prefix: str = "", output: str = "print"
+) -> Iterator[str] | str | None:
     """Hexdump some data.
 
     Args:
@@ -123,12 +130,11 @@ def hexdump(data: bytes, palette=None, offset: int = 0, prefix: str = "", output
 
 def _dumpstruct(
     structure: Structure,
-    instance: Instance,
     data: bytes,
     offset: int,
     color: bool,
     output: str,
-):
+) -> str | None:
     palette = []
     colors = [
         (COLOR_RED, COLOR_BG_RED),
@@ -140,18 +146,18 @@ def _dumpstruct(
         (COLOR_WHITE, COLOR_BG_WHITE),
     ]
     ci = 0
-    out = [f"struct {structure.name}:"]
+    out = [f"struct {structure.__class__.__name__}:"]
     foreground, background = None, None
-    for field in instance._type.lookup.values():
+    for field in structure.__class__.__fields__:
         if getattr(field.type, "anonymous", False):
             continue
 
         if color:
             foreground, background = colors[ci % len(colors)]
-            palette.append((instance._size(field.name), background))
+            palette.append((structure._sizes[field.name], background))
         ci += 1
 
-        value = getattr(instance, field.name)
+        value = getattr(structure, field.name)
         if isinstance(value, str):
             value = repr(value)
         elif isinstance(value, int):
@@ -177,24 +183,30 @@ def _dumpstruct(
         return "\n".join(["", hexdump(data, palette, offset=offset, output="string"), "", out])
 
 
-def dumpstruct(obj, data: bytes = None, offset: int = 0, color: bool = True, output: str = "print"):
+def dumpstruct(
+    obj: Structure | type[Structure],
+    data: bytes | None = None,
+    offset: int = 0,
+    color: bool = True,
+    output: str = "print",
+) -> str | None:
     """Dump a structure or parsed structure instance.
 
     Prints a colorized hexdump and parsed structure output.
 
     Args:
-        obj: Structure or Instance to dump.
-        data: Bytes to parse the Structure on, if obj is not a parsed Instance.
+        obj: Structure to dump.
+        data: Bytes to parse the Structure on, if obj is not a parsed Structure already.
         offset: Byte offset of the hexdump.
         output: Output format, can be 'print' or 'string'.
     """
     if output not in ("print", "string"):
         raise ValueError(f"Invalid output argument: {output!r} (should be 'print' or 'string').")
 
-    if isinstance(obj, Instance):
-        return _dumpstruct(obj._type, obj, obj.dumps(), offset, color, output)
-    elif isinstance(obj, Structure) and data:
-        return _dumpstruct(obj, obj(data), data, offset, color, output)
+    if isinstance(obj, Structure):
+        return _dumpstruct(obj, obj.dumps(), offset, color, output)
+    elif issubclass(obj, Structure) and data:
+        return _dumpstruct(obj(data), data, offset, color, output)
     else:
         raise ValueError("Invalid arguments")
 

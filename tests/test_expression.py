@@ -1,6 +1,6 @@
 import pytest
-from dissect import cstruct
 
+from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exceptions import ExpressionParserError, ExpressionTokenizerError
 from dissect.cstruct.expression import Expression
 
@@ -106,7 +106,7 @@ def test_expression_failure(expression: str, exception: type, message: str) -> N
         parser.evaluate()
 
 
-def test_sizeof():
+def test_sizeof(cs: cstruct) -> None:
     d = """
     struct test {
         char    a[sizeof(uint32)];
@@ -116,8 +116,7 @@ def test_sizeof():
         char    a[sizeof(test) * 2];
     };
     """
-    c = cstruct.cstruct()
-    c.load(d)
+    cs.load(d)
 
-    assert len(c.test) == 4
-    assert len(c.test2) == 8
+    assert len(cs.test) == 4
+    assert len(cs.test2) == 8
