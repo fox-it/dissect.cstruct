@@ -94,6 +94,7 @@ def test_expression(expression: str, answer: int) -> None:
         ("-", ExpressionParserError, "Invalid expression: not enough operands"),
         ("(", ExpressionParserError, "Invalid expression"),
         (")", ExpressionParserError, "Invalid expression"),
+        (" ", ExpressionParserError, "Invalid expression"),
         ("()", ExpressionParserError, "Parser expected an expression, instead received empty parenthesis. Index: 1"),
         ("0()", ExpressionParserError, "Parser expected sizeof or an arethmethic operator instead got: '0'"),
         ("sizeof)", ExpressionParserError, "Invalid sizeof operation"),
