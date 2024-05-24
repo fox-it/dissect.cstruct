@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 
 PY_311 = sys.version_info >= (3, 11, 0)
+PY_312 = sys.version_info >= (3, 12, 0)
 
 
 class EnumMetaType(EnumMeta, MetaType):
@@ -55,6 +56,13 @@ class EnumMetaType(EnumMeta, MetaType):
         return MetaType.__getitem__(cls, name)
 
     __len__ = MetaType.__len__
+
+    if not PY_312:
+        # Backport __contains__ from CPython 3.12
+        def __contains__(cls, value: Any) -> bool:
+            if isinstance(value, cls):
+                return True
+            return value in cls._value2member_map_
 
     def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Enum:
         return cls(cls.type._read(stream, context))
@@ -174,10 +182,7 @@ class Enum(BaseType, IntEnum, metaclass=EnumMetaType):
     @classmethod
     def _missing_(cls, value: int) -> Enum:
         # Emulate FlagBoundary.KEEP for enum (allow values other than the defined members)
-        pseudo_member = cls._value2member_map_.get(value, None)
-        if pseudo_member is None:
-            new_member = int.__new__(cls, value)
-            new_member._name_ = None
-            new_member._value_ = value
-            pseudo_member = cls._value2member_map_.setdefault(value, new_member)
-        return pseudo_member
+        new_member = int.__new__(cls, value)
+        new_member._name_ = None
+        new_member._value_ = value
+        return new_member

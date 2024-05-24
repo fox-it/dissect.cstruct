@@ -34,6 +34,18 @@ def test_enum(cs: cstruct, TestEnum: type[Enum]) -> None:
     assert TestEnum(0).name is None
     assert TestEnum(0).value == 0
 
+    assert 0 not in TestEnum
+    assert 1 in TestEnum
+    assert 2 in TestEnum
+    assert 3 in TestEnum
+    assert 4 not in TestEnum
+
+    assert TestEnum.A in TestEnum
+
+    # Mixing enums is not allowed
+    OtherEnum = cs._make_enum("Other", cs.uint8, {"A": 1, "B": 2, "C": 3})
+    assert OtherEnum.A not in TestEnum
+
 
 def test_enum_read(TestEnum: type[Enum]) -> None:
     assert TestEnum(b"\x02") == TestEnum.B
