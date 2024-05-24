@@ -299,4 +299,7 @@ class Expression:
 
             self.evaluate_exp()
 
+        if len(self.queue) != 1:
+            raise ExpressionParserError("Invalid expression")
+
         return self.queue[0]
