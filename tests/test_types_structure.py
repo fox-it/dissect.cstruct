@@ -533,9 +533,7 @@ def test_structure_definition_self(cs: cstruct) -> None:
 
 def test_align_struct_in_struct(cs: cstruct) -> None:
     with patch.object(StructureMetaType, "_update_fields") as update_fields:
-        fields = [Field("a", cs.uint64)]
-        cs._make_struct("test", fields, align=True)
-        args, kwargs = update_fields.call_args
-        new_kwargs = kwargs.copy()
-        new_kwargs.update({"align": True})
-        update_fields.assert_called_with(*args, **new_kwargs)
+        cs._make_struct("test", [Field("a", cs.uint64)], align=True)
+
+        _, kwargs = update_fields.call_args
+        assert kwargs["align"]
