@@ -9,7 +9,7 @@ from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exceptions import ParserError
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.pointer import Pointer
-from dissect.cstruct.types.structure import Field, Structure
+from dissect.cstruct.types.structure import Field, Structure, StructureMetaType
 
 from .utils import verify_compiled
 
@@ -529,3 +529,11 @@ def test_structure_definition_self(cs: cstruct) -> None:
 
     assert issubclass(cs.test.fields["b"].type, Pointer)
     assert cs.test.fields["b"].type.type is cs.test
+
+
+def test_align_struct_in_struct(cs: cstruct) -> None:
+    with patch.object(StructureMetaType, "_update_fields") as update_fields:
+        cs._make_struct("test", [Field("a", cs.uint64)], align=True)
+
+        _, kwargs = update_fields.call_args
+        assert kwargs["align"]
