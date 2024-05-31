@@ -49,7 +49,7 @@ class StructureMetaType(MetaType):
 
     def __new__(metacls, name: str, bases: tuple[type, ...], classdict: dict[str, Any]) -> MetaType:
         if (fields := classdict.pop("fields", None)) is not None:
-            metacls._update_fields(metacls, fields, align=classdict.get("align", False), classdict=classdict)
+            metacls._update_fields(metacls, fields, align=classdict.get("__align__", False), classdict=classdict)
 
         return super().__new__(metacls, name, bases, classdict)
 
