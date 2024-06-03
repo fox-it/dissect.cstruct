@@ -198,8 +198,11 @@ class _ReadSourceGenerator:
                     prev_was_bits = True
 
                 if bits_remaining == 0 or prev_bits_type != field_type:
-                    bits_remaining = (size * 8) - field.bits
-                    bits_rollover = True
+                    if bits_remaining == field.bits:
+                        bits_remaining = 0
+                    else:
+                        bits_remaining = (size * 8) - field.bits
+                        bits_rollover = True
 
                 yield from flush()
                 yield from align_to_field(field)
