@@ -1,3 +1,5 @@
+import io
+
 import pytest
 
 from dissect.cstruct.cstruct import cstruct
@@ -265,3 +267,31 @@ def test_bitfield_char(cs: cstruct, compiled: bool) -> None:
     assert obj.d == b"i420"
 
     assert obj.dumps() == buf
+
+
+def test_bitfield_dynamic(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    enum A : uint16 {
+        A = 0x0
+    };
+
+    struct test {
+        uint16  size : 4;
+        A       b : 4;
+        char    d[size];
+    };
+    """
+
+    cs.load(cdef, compiled=compiled)
+    assert verify_compiled(cs.test, compiled)
+
+    buf = io.BytesIO(b"\x00\x00\xF4\x00help")
+    buf.seek(2)
+    obj = cs.test(buf)
+
+    assert obj.size == 4
+    assert obj.b == 0xF
+    assert obj.d == b"help"
+
+    buf.seek(2)
+    assert obj.dumps() == buf.read()

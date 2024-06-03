@@ -109,6 +109,7 @@ class _ReadSourceGenerator:
         preamble = """
         r = {}
         s = {}
+        o = stream.tell()
         """
 
         if any(field.bits for field in self.fields):
@@ -150,7 +151,7 @@ class _ReadSourceGenerator:
 
             if field.offset is not None and field.offset != current_offset:
                 # If a field has a set offset and it's not the same as the current tracked offset, seek to it
-                yield f"stream.seek({field.offset})"
+                yield f"stream.seek(o + {field.offset})"
                 current_offset = field.offset
 
             if self.align and field.offset is None:
@@ -198,11 +199,8 @@ class _ReadSourceGenerator:
                     prev_was_bits = True
 
                 if bits_remaining == 0 or prev_bits_type != field_type:
-                    if bits_remaining == field.bits:
-                        bits_remaining = 0
-                    else:
-                        bits_remaining = (size * 8) - field.bits
-                        bits_rollover = True
+                    bits_remaining = (size * 8) - field.bits
+                    bits_rollover = True
 
                 yield from flush()
                 yield from align_to_field(field)

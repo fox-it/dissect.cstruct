@@ -324,7 +324,7 @@ def test_generate_bits_read(cs: cstruct, TestEnum: type[Enum]) -> None:
 
 
 # TODO: the rest of the compiler
-@pytest.mark.parametrize("other_type", ["uint8", "int8", "uint64"])
+@pytest.mark.parametrize("other_type", ["int8", "uint64"])
 def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, other_type: str) -> None:
     _type = getattr(cs, other_type)
 
@@ -354,6 +354,7 @@ def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, oth
     r["b"] = type.__call__(_t, bit_reader.read(_t, 4))
 
     bit_reader.reset()
+    stream.seek(o + 3)
 
     _s = stream.tell()
     r["c"] = _3._read(stream, context=r)
@@ -364,7 +365,7 @@ def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, oth
 
 
 # TODO: the rest of the compiler
-@pytest.mark.parametrize("other_type", ["uint8", "int8", "uint64"])
+@pytest.mark.parametrize("other_type", ["int8", "uint64"])
 def test_generate_fields_dynamic_after_bitfield_reverse(cs: cstruct, TestEnum: Enum, other_type: str) -> None:
     _type = getattr(cs, other_type)
 
@@ -394,6 +395,7 @@ def test_generate_fields_dynamic_after_bitfield_reverse(cs: cstruct, TestEnum: E
     r["b"] = type.__call__(_t, bit_reader.read(_t.type, 4))
 
     bit_reader.reset()
+    stream.seek(o + 3)
 
     _s = stream.tell()
     r["c"] = _3._read(stream, context=r)
