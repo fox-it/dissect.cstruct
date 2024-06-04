@@ -323,7 +323,6 @@ def test_generate_bits_read(cs: cstruct, TestEnum: type[Enum]) -> None:
     assert code == dedent(expected)
 
 
-# TODO: the rest of the compiler
 @pytest.mark.parametrize("other_type", ["int8", "uint64"])
 def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, other_type: str) -> None:
     _type = getattr(cs, other_type)
@@ -364,9 +363,8 @@ def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, oth
     assert output.strip() == dedent(expected).strip()
 
 
-# TODO: the rest of the compiler
 @pytest.mark.parametrize("other_type", ["int8", "uint64"])
-def test_generate_fields_dynamic_after_bitfield_reverse(cs: cstruct, TestEnum: Enum, other_type: str) -> None:
+def test_generate_fields_dynamic_before_bitfield(cs: cstruct, TestEnum: Enum, other_type: str) -> None:
     _type = getattr(cs, other_type)
 
     fields = [
