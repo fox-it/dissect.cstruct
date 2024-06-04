@@ -26,6 +26,7 @@ from dissect.cstruct.types import (
     Wchar,
     WcharArray,
 )
+from dissect.cstruct.types.enum import EnumMetaType
 from dissect.cstruct.types.packed import _struct
 
 if TYPE_CHECKING:
@@ -108,6 +109,7 @@ class _ReadSourceGenerator:
         preamble = """
         r = {}
         s = {}
+        o = stream.tell()
         """
 
         if any(field.bits for field in self.fields):
@@ -149,7 +151,7 @@ class _ReadSourceGenerator:
 
             if field.offset is not None and field.offset != current_offset:
                 # If a field has a set offset and it's not the same as the current tracked offset, seek to it
-                yield f"stream.seek({field.offset})"
+                yield f"stream.seek(o + {field.offset})"
                 current_offset = field.offset
 
             if self.align and field.offset is None:
@@ -157,6 +159,9 @@ class _ReadSourceGenerator:
 
         for field in self.fields:
             field_type = self.cs.resolve(field.type)
+
+            if isinstance(field_type, EnumMetaType):
+                field_type = field_type.type
 
             if not issubclass(field_type, SUPPORTED_TYPES):
                 raise TypeError(f"Unsupported type for compiler: {field_type}")
@@ -190,10 +195,10 @@ class _ReadSourceGenerator:
             # Bit fields
             elif field.bits:
                 if not prev_was_bits:
-                    prev_bits_type = field.type
+                    prev_bits_type = field_type
                     prev_was_bits = True
 
-                if bits_remaining == 0 or prev_bits_type != field.type:
+                if bits_remaining == 0 or prev_bits_type != field_type:
                     bits_remaining = (size * 8) - field.bits
                     bits_rollover = True
 

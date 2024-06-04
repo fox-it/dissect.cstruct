@@ -323,4 +323,81 @@ def test_generate_bits_read(cs: cstruct, TestEnum: type[Enum]) -> None:
     assert code == dedent(expected)
 
 
-# TODO: the rest of the compiler
+@pytest.mark.parametrize("other_type", ["int8", "uint64"])
+def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, other_type: str) -> None:
+    _type = getattr(cs, other_type)
+
+    fields = [
+        Field("size", cs.uint16, offset=0),
+        Field("a", TestEnum, 4, offset=2),
+        Field("b", _type, 4),
+        Field("c", cs.char["size"], offset=3),
+    ]
+
+    output = "\n".join(compiler._ReadSourceGenerator(cs, fields)._generate_fields())
+
+    expected = """
+    buf = stream.read(2)
+    if len(buf) != 2: raise EOFError()
+    data = _struct(cls.cs.endian, "H").unpack(buf)
+
+    r["size"] = type.__call__(_0, data[0])
+    s["size"] = 2
+
+
+    _t = _1
+    r["a"] = type.__call__(_t, bit_reader.read(_t.type, 4))
+
+
+    _t = _2
+    r["b"] = type.__call__(_t, bit_reader.read(_t, 4))
+
+    bit_reader.reset()
+    stream.seek(o + 3)
+
+    _s = stream.tell()
+    r["c"] = _3._read(stream, context=r)
+    s["c"] = stream.tell() - _s
+    """
+
+    assert output.strip() == dedent(expected).strip()
+
+
+@pytest.mark.parametrize("other_type", ["int8", "uint64"])
+def test_generate_fields_dynamic_before_bitfield(cs: cstruct, TestEnum: Enum, other_type: str) -> None:
+    _type = getattr(cs, other_type)
+
+    fields = [
+        Field("size", cs.uint16, offset=0),
+        Field("a", _type, 4, offset=2),
+        Field("b", TestEnum, 4),
+        Field("c", cs.char["size"], offset=3),
+    ]
+
+    output = "\n".join(compiler._ReadSourceGenerator(cs, fields)._generate_fields())
+
+    expected = """
+    buf = stream.read(2)
+    if len(buf) != 2: raise EOFError()
+    data = _struct(cls.cs.endian, "H").unpack(buf)
+
+    r["size"] = type.__call__(_0, data[0])
+    s["size"] = 2
+
+
+    _t = _1
+    r["a"] = type.__call__(_t, bit_reader.read(_t, 4))
+
+
+    _t = _2
+    r["b"] = type.__call__(_t, bit_reader.read(_t.type, 4))
+
+    bit_reader.reset()
+    stream.seek(o + 3)
+
+    _s = stream.tell()
+    r["c"] = _3._read(stream, context=r)
+    s["c"] = stream.tell() - _s
+    """
+
+    assert output.strip() == dedent(expected).strip()
