@@ -41,6 +41,8 @@ def test_union(TestUnion: type[Union]) -> None:
     assert obj.b is None
     assert len(obj) == 4
 
+    assert hash((obj.a, obj.b)) == hash(obj)
+
 
 def test_union_read(TestUnion: type[Union]) -> None:
     obj = TestUnion(b"\x01\x00\x00\x00")
@@ -288,7 +290,7 @@ def test_union_update(cs: cstruct) -> None:
     assert obj.a == 2
     obj.b = 0xFFFF
     assert obj.a == 0xFF
-    assert obj.dumps() == b"\xFF\xFF"
+    assert obj.dumps() == b"\xff\xff"
 
 
 def test_union_nested_update(cs: cstruct) -> None:

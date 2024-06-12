@@ -46,6 +46,9 @@ def test_structure(TestStruct: type[Structure]) -> None:
     assert obj.b is None
     assert len(obj) == 8
 
+    # Test hashing of values
+    assert hash((obj.a, obj.b)) == hash(obj)
+
 
 def test_structure_read(TestStruct: type[Structure]) -> None:
     obj = TestStruct(b"\x01\x00\x00\x00\x02\x00\x00\x00")
