@@ -111,6 +111,8 @@ class StructureMetaType(MetaType):
             classdict["__init__"] = _patch_args_and_attributes(_make__init__(len(init_names)), init_names)
             classdict["__eq__"] = _patch_attributes(_make__eq__(num_fields), field_names, 1)
 
+        classdict["__hash__"] = _patch_attributes(_make__hash__(num_fields), field_names, 1)
+
         # If we're calling this as a class method or a function on the metaclass
         if issubclass(cls, type):
             size, alignment = cls._calculate_size_and_offsets(cls, fields, align)
@@ -673,6 +675,18 @@ def _make__bool__(fields: list[str]) -> str:
     code = f"""
     def __bool__(self):
         return any([{vals}])
+    """
+
+    return dedent(code)
+
+
+@_codegen
+def _make__hash__(fields: list[str]) -> str:
+    vals = ", ".join(f"self.{name}" for name in fields)
+
+    code = f"""
+    def __hash__(self):
+        return hash(({vals}))
     """
 
     return dedent(code)
