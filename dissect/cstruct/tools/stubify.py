@@ -6,6 +6,7 @@ import logging
 from argparse import ArgumentParser
 from pathlib import Path
 
+import dissect.cstruct.types as types
 from dissect.cstruct import cstruct
 
 log = logging.getLogger(__name__)
@@ -28,7 +29,8 @@ def load_module(path: Path, base_path: Path):
 def stubify_file(path: Path, base_path: Path):
     buffer = io.StringIO()
 
-    buffer.write("from dissect.cstruct.types import *\n")
+    cstruct_types = ",".join(types.__all__)
+    buffer.write(f"from dissect.cstruct.types import {cstruct_types}\n")
     prev_offset = buffer.tell()
 
     tmp_module = load_module(path, base_path)
