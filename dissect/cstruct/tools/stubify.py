@@ -5,6 +5,7 @@ import io
 import logging
 from argparse import ArgumentParser
 from pathlib import Path
+from types import ModuleType
 
 import dissect.cstruct.types as types
 from dissect.cstruct import cstruct
@@ -12,7 +13,7 @@ from dissect.cstruct import cstruct
 log = logging.getLogger(__name__)
 
 
-def load_module(path: Path, base_path: Path):
+def load_module(path: Path, base_path: Path) -> ModuleType:
     module = None
     try:
         relative_path = path.relative_to(base_path)
@@ -26,25 +27,36 @@ def load_module(path: Path, base_path: Path):
         log.debug("Error while trying to import module %s", path, exc_info=e)
 
 
-def stubify_file(path: Path, base_path: Path):
-    buffer = io.StringIO()
-
-    cstruct_types = ",".join(types.__all__)
-    buffer.write(f"from dissect.cstruct.types import {cstruct_types}\n")
-    prev_offset = buffer.tell()
-
+def stubify_file(path: Path, base_path: Path) -> str:
     tmp_module = load_module(path, base_path)
     if tmp_module is None:
         return ""
+
+    if not hasattr(tmp_module, "cstruct"):
+        return ""
+
+    buffer = io.StringIO()
+    all_types = types.__all__.copy()
+    all_types.sort()
+
+    cstruct_types = ", ".join(all_types)
+    buffer.write("from __future__ import annotations\n\n")
+    buffer.write("from dissect.cstruct import cstruct\n")
+    buffer.write(f"from dissect.cstruct.types import {cstruct_types}\n\n")
+
+    empty_cstruct = cstruct()
+
+    buffer.write(empty_cstruct.stubify_typedefs())
+    buffer.write("\n")
+
+    prev_offset = buffer.tell()
 
     for name, variable in tmp_module.__dict__.items():
         if name.startswith("__"):
             continue
 
         if isinstance(variable, cstruct):
-            if variable._module != tmp_module.__name__:
-                continue
-            buffer.write(variable.to_stub(name))
+            buffer.write(variable.to_stub(name, empty_cstruct.typedefs.keys()))
 
     output = buffer.getvalue()
     if buffer.tell() == prev_offset:
@@ -85,6 +97,7 @@ def main():
                 continue
 
             with file.with_suffix(".pyi").open("wt") as output_file:
+                log.info(f"Writing stub of file {file} to {output_file}")
                 output_file.write(stub)
 
 
