@@ -98,7 +98,7 @@ def stubify_typedefs(c_structure: cstruct, ignore_type_defs: list[str] = None, i
     for name, type_def in c_structure.typedefs.items():
         if name in ignore_type_defs:
             continue
-        if isinstance(type_def, types.MetaType) and (text := type_def.to_stub(name)):
+        if isinstance(type_def, types.MetaType) and (text := type_def.to_type_stub(name)):
             buffer.write(indent(text, prefix=indentation))
             buffer.write("\n")
 

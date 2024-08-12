@@ -65,6 +65,6 @@ class Packed(BaseType):
         return stream.write(_struct(cls.cs.endian, f"{len(data)}{cls.packchar}").pack(*data))
 
     @classmethod
-    def to_stub(cls, name: str):
+    def to_type_stub(cls, name: str):
         types = ", ".join([x.__name__ for x in cls.__bases__])
         return f"{name}= type[{types}]"
