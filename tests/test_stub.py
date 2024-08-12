@@ -3,6 +3,7 @@ import textwrap
 import pytest
 
 from dissect.cstruct import cstruct
+from dissect.cstruct.tools.stubify import stubify_cstruct
 
 
 @pytest.mark.parametrize(
@@ -118,14 +119,14 @@ from dissect.cstruct import cstruct
     ],
     ids=["standard structure", "array", "definitions", "pointers", "enums", "flags", "unions"],
 )
-def test_to_stub(definition: str, name: str, expected_stub: str):
+def test_to_stub(definition: str, name: str, expected_stub: str) -> None:
     structure = cstruct()
     structure.load(definition)
 
     if name:
-        generated_stub = getattr(structure, name).to_stub()
+        generated_stub = getattr(structure, name).cs
     else:
-        generated_stub = structure.to_stub()
+        generated_stub = structure
     expected_stub = textwrap.dedent(expected_stub).strip()
 
-    assert expected_stub in generated_stub
+    assert expected_stub in stubify_cstruct(generated_stub)

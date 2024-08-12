@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import ctypes as _ctypes
-import io
 import struct
 import sys
 import types
 from pathlib import Path
-from textwrap import indent
 from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.exceptions import ResolveError
@@ -410,42 +408,6 @@ class cstruct:
         self, name: str, fields: list[Field], *, align: bool = False, anonymous: bool = False
     ) -> type[Structure]:
         return self._make_struct(name, fields, align=align, anonymous=anonymous, base=Union)
-
-    def to_stub(self, name: str = "", ignore_type_defs: list[str] | None = None):
-        ignore_type_defs = ignore_type_defs or []
-
-        buffer = io.StringIO()
-        indentation = ""
-        if name:
-            buffer.write(f"class {name}(cstruct):\n")
-            indentation = " " * 4
-
-        prev_offset = buffer.tell()
-        for const, value in self.consts.items():
-            buffer.write(indent(f"{const}: {type(value).__name__}=...\n", prefix=indentation))
-
-        buffer.write(self.stubify_typedefs(ignore_type_defs, indentation))
-
-        if prev_offset == buffer.tell():
-            buffer.write(indent("...", prefix=indentation))
-
-        output_value = buffer.getvalue()
-        buffer.close()
-        return output_value
-
-    def stubify_typedefs(self, ignore_type_defs: list[str] = None, indentation: str = "") -> str:
-        ignore_type_defs = ignore_type_defs or []
-        buffer = io.StringIO()
-        for name, type_def in self.typedefs.items():
-            if name in ignore_type_defs:
-                continue
-            if isinstance(type_def, MetaType) and (text := type_def.to_stub(name)):
-                buffer.write(indent(text, prefix=indentation))
-                buffer.write("\n")
-
-        output = buffer.getvalue()
-        buffer.close()
-        return output
 
 
 def ctypes(structure: Structure) -> _ctypes.Structure:
