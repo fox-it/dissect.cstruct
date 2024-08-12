@@ -1,4 +1,3 @@
-# Searches and creates a stub of a cstruct definitions
 import importlib
 import importlib.util
 import io
@@ -76,8 +75,8 @@ def setup_logger(verbosity: int) -> None:
         log.setLevel(level=logging.DEBUG)
 
 
-def main():
-    parser = ArgumentParser("stubify")
+def main() -> None:
+    parser = ArgumentParser("stubify", description="Create stubs for cstruct definitions")
     parser.add_argument("path", type=Path)
     parser.add_argument("-v", "--verbose", action="count", default=0)
     args = parser.parse_args()
@@ -91,13 +90,13 @@ def main():
         iterator = [file_path]
 
     for file in iterator:
-        if file.is_file() and ".py" in file.suffixes:
+        if file.is_file() and ".py" == file.suffix:
             stub = stubify_file(file, file_path)
             if not stub:
                 continue
 
             with file.with_suffix(".pyi").open("wt") as output_file:
-                log.info(f"Writing stub of file {file} to {output_file}")
+                log.info("Writing stub of file %s to %s", file, output_file)
                 output_file.write(stub)
 
 
