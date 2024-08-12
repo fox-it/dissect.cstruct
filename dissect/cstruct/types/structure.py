@@ -373,13 +373,13 @@ class StructureMetaType(MetaType):
         for key, value in classdict.items():
             setattr(cls, key, value)
 
-    def to_stub(cls, name: str = ""):
+    def to_type_stub(cls, name: str = ""):
         with io.StringIO() as data:
             data.write(f"class {cls.__name__}({cls.__base__.__name__}):\n")
             call_args = ["self"]
             for key, field in cls.lookup.items():
                 if isinstance(field.type, StructureMetaType):
-                    class_info = field.type.to_stub()
+                    class_info = field.type.to_type_stub()
                     data.write(indent(class_info, prefix=" " * 4))
                 call_args.append(f"{field.type_stub()}=...")
 

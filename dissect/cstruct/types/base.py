@@ -184,7 +184,7 @@ class MetaType(type):
     def _type_stub(cls, name: str = "") -> str:
         return f"{name}: {cls.__name__}"
 
-    def to_stub(cls, name: str) -> str:
+    def to_type_stub(cls, name: str) -> str:
         return ""
 
 

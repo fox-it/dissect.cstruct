@@ -88,7 +88,7 @@ class EnumMetaType(EnumMeta, MetaType):
     def _class_stub(cls) -> str:
         return f"class {cls.__name__}({cls.__base__.__name__}, {cls.type.__name__}):\n"
 
-    def to_stub(cls, name: str = "") -> str:
+    def to_type_stub(cls, name: str = "") -> str:
         output = ""
         with io.StringIO() as buf:
             buf.write(cls._class_stub())
