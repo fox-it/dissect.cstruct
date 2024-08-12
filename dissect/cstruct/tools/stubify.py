@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import importlib
 import importlib.util
 import io
 import logging
 from argparse import ArgumentParser
 from pathlib import Path
+from textwrap import indent
 from types import ModuleType
 
 import dissect.cstruct.types as types
@@ -45,7 +48,7 @@ def stubify_file(path: Path, base_path: Path) -> str:
 
     empty_cstruct = cstruct()
 
-    buffer.write(empty_cstruct.stubify_typedefs())
+    buffer.write(stubify_typedefs(empty_cstruct))
     buffer.write("\n")
 
     prev_offset = buffer.tell()
@@ -55,7 +58,7 @@ def stubify_file(path: Path, base_path: Path) -> str:
             continue
 
         if isinstance(variable, cstruct):
-            buffer.write(variable.to_stub(name, empty_cstruct.typedefs.keys()))
+            buffer.write(stubify_cstruct(variable, name, empty_cstruct.typedefs.keys()))
 
     output = buffer.getvalue()
     if buffer.tell() == prev_offset:
@@ -63,6 +66,44 @@ def stubify_file(path: Path, base_path: Path) -> str:
 
     buffer.close()
 
+    return output
+
+
+def stubify_cstruct(c_structure: cstruct, name: str = "", ignore_type_defs: list[str] | None = None) -> str:
+    ignore_type_defs = ignore_type_defs or []
+
+    buffer = io.StringIO()
+    indentation = ""
+    if name:
+        buffer.write(f"class {name}(cstruct):\n")
+        indentation = " " * 4
+
+    prev_offset = buffer.tell()
+    for const, value in c_structure.consts.items():
+        buffer.write(indent(f"{const}: {type(value).__name__}=...\n", prefix=indentation))
+
+    buffer.write(stubify_typedefs(c_structure, ignore_type_defs, indentation))
+
+    if prev_offset == buffer.tell():
+        buffer.write(indent("...", prefix=indentation))
+
+    output_value = buffer.getvalue()
+    buffer.close()
+    return output_value
+
+
+def stubify_typedefs(c_structure: cstruct, ignore_type_defs: list[str] = None, indentation: str = "") -> str:
+    ignore_type_defs = ignore_type_defs or []
+    buffer = io.StringIO()
+    for name, type_def in c_structure.typedefs.items():
+        if name in ignore_type_defs:
+            continue
+        if isinstance(type_def, types.MetaType) and (text := type_def.to_stub(name)):
+            buffer.write(indent(text, prefix=indentation))
+            buffer.write("\n")
+
+    output = buffer.getvalue()
+    buffer.close()
     return output
 
 
