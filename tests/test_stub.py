@@ -119,7 +119,7 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
     ],
     ids=["standard structure", "array", "definitions", "pointers", "enums", "flags", "unions"],
 )
-def test_to_stub(definition: str, name: str, expected_stub: str) -> None:
+def test_to_type_stub(definition: str, name: str, expected_stub: str) -> None:
     structure = cstruct()
     structure.load(definition)
 
