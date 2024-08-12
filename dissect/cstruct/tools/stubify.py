@@ -117,7 +117,15 @@ def setup_logger(verbosity: int) -> None:
 
 
 def main() -> None:
-    parser = ArgumentParser("stubify", description="Create stubs for cstruct definitions")
+    description = """
+        Create stub files for cstruct definitions.
+    
+        These stub files are in a `.pyi` format and provides `type` information to cstruct definitions.
+        This in turn gives a developer insight into the elements inside the definition and 
+        parameter completion when dealing with cstructs.
+    """
+
+    parser = ArgumentParser("stubify", description=description)
     parser.add_argument("path", type=Path)
     parser.add_argument("-v", "--verbose", action="count", default=0)
     args = parser.parse_args()
