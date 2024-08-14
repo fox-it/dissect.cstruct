@@ -251,8 +251,10 @@ class TokenParser(Parser):
             type_ = self.cstruct.resolve(self._identifier(tokens))
         elif tokens.next == self.TOK.STRUCT:
             type_ = self._struct(tokens)
+
             if tokens.next != self.TOK.NAME:
-                return Field(type_.__name__, type_)
+                type_, name, bits = self._parse_field_type(type_, type_.__name__)
+                return Field(name.strip(), type_, bits)
 
         if tokens.next != self.TOK.NAME:
             raise ParserError(f"line {self._lineno(tokens.next)}: expected name")
