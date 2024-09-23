@@ -381,10 +381,15 @@ class Structure(BaseType, metaclass=StructureMetaType):
         return getattr(self, item)
 
     def __repr__(self) -> str:
-        values = [
-            f"{k}={hex(self[k]) if (issubclass(f.type, int) and not issubclass(f.type, (Pointer, Enum))) else repr(self[k])}"
-            for k, f in self.__class__.fields.items()
-        ]
+        values = []
+        for k, f in self.__class__.fields.items():
+            value = self[k]
+            if issubclass(f.type, int) and not issubclass(f.type, (Pointer, Enum)):
+                value = hex(value)
+            else:
+                value = repr(value)
+            values.append(f"{k}={value}")
+
         return f"<{self.__class__.__name__} {' '.join(values)}>"
 
 
