@@ -86,6 +86,31 @@ def test_dumpstruct_anonymous(cs: cstruct, capsys: pytest.CaptureFixture, compil
     assert str(excinfo.value) == "Invalid output argument: 'generator' (should be 'print' or 'string')."
 
 
+def test_dumpstruct_enum(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    enum Test16 : uint16 {
+        A = 0x1,
+        B = 0x2
+    };
+
+    struct test {
+        Test16 testval;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"\x02\x00"
+    obj = cs.test(buf)
+
+    out1 = utils.dumpstruct(cs.test, buf, output="string")
+    out2 = utils.dumpstruct(obj, output="string")
+
+    assert "<Test16.B: 2>" in out1
+    assert "<Test16.B: 2>" in out2
+
+
 def test_pack_unpack() -> None:
     endian = "little"
     sign = False
