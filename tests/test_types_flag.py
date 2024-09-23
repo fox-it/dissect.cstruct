@@ -71,8 +71,8 @@ def test_flag_str_repr(TestFlag: type[Flag]) -> None:
     else:
         assert repr(TestFlag.A | TestFlag.B) == "<Test.B|A: 3>"
         assert str(TestFlag.A | TestFlag.B) == "Test.B|A"
-        assert repr(TestFlag(69)) == "<Test.68|A: 69>"
-        assert str(TestFlag(69)) == "Test.68|A"
+        assert repr(TestFlag(69)) == "<Test.64|4|A: 69>"
+        assert str(TestFlag(69)) == "Test.64|4|A"
 
 
 def test_flag_str_repr_in_struct(cs: cstruct, compiled: bool) -> None:
