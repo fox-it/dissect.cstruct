@@ -62,6 +62,42 @@ def test_flag_operator(TestFlag: type[Flag]) -> None:
     assert TestFlag[2]([TestFlag.B, (TestFlag.A | TestFlag.B)]).dumps() == b"\x02\x03"
 
 
+def test_flag_str_repr(TestFlag: type[Flag]) -> None:
+    if PY_311:
+        assert repr(TestFlag.A | TestFlag.B) == "<Test.A|B: 3>"
+        assert str(TestFlag.A | TestFlag.B) == "Test.A|B"
+        assert repr(TestFlag(69)) == "<Test.A|68: 69>"
+        assert str(TestFlag(69)) == "Test.A|68"
+    else:
+        assert repr(TestFlag.A | TestFlag.B) == "<Test.B|A: 12>"
+        assert str(TestFlag.A | TestFlag.B) == "Test.B|A"
+        assert repr(TestFlag(69)) == "<Test.68|A: 69>"
+        assert str(TestFlag(69)) == "Test.68|A"
+
+
+def test_flag_str_repr_in_struct(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    flag Test : uint16 {
+        A,
+        B
+    };
+
+    struct test {
+        Test    a;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    obj = cs.test(b"\x03\x00")
+
+    if PY_311:
+        assert repr(obj) == "<test a=<Test.A|B: 3>>"
+        assert str(obj) == "<test a=<Test.A|B: 3>>"
+    else:
+        assert repr(obj) == "<test a=<Test.B|A: 3>>"
+        assert str(obj) == "<test a=<Test.B|A: 3>>"
+
+
 def test_flag_struct(cs: cstruct) -> None:
     cdef = """
     flag Test {
@@ -101,20 +137,6 @@ def test_flag_struct(cs: cstruct) -> None:
     assert bool(cs.Test(1)) is True
 
     assert cs.Test.a | cs.Test.b == 3
-    if PY_311:
-        assert repr(cs.Test.c | cs.Test.d) == "<Test.c|d: 12>"
-        assert str(cs.Test.c | cs.Test.d) == "Test.c|d"
-        assert repr(cs.Test.a | cs.Test.b) == "<Test.a|b: 3>"
-        assert str(cs.Test.a | cs.Test.b) == "Test.a|b"
-        assert repr(cs.Test(69)) == "<Test.a|c|64: 69>"
-        assert str(cs.Test(69)) == "Test.a|c|64"
-    else:
-        assert repr(cs.Test.c | cs.Test.d) == "<Test.d|c: 12>"
-        assert str(cs.Test.c | cs.Test.d) == "Test.d|c"
-        assert repr(cs.Test.a | cs.Test.b) == "<Test.b|a: 3>"
-        assert str(cs.Test.a | cs.Test.b) == "Test.b|a"
-        assert repr(cs.Test(69)) == "<Test.64|c|a: 69>"
-        assert str(cs.Test(69)) == "Test.64|c|a"
     assert cs.Test(2) == cs.Test.b
     assert cs.Test(3) == cs.Test.a | cs.Test.b
     assert cs.Test.c & 12 == cs.Test.c
@@ -231,5 +253,5 @@ def test_flag_anonymous_struct(cs: cstruct, compiled: bool) -> None:
 
     test = cs.test
 
-    t = test(b"\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0A\x00\x00\x00")
+    t = test(b"\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00")
     assert t.arr == [255, 0, 0, 10]
