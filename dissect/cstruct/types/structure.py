@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 from contextlib import contextmanager
+from enum import Enum
 from functools import lru_cache
 from operator import attrgetter
 from textwrap import dedent
@@ -380,10 +381,15 @@ class Structure(BaseType, metaclass=StructureMetaType):
         return getattr(self, item)
 
     def __repr__(self) -> str:
-        values = [
-            f"{k}={hex(self[k]) if (issubclass(f.type, int) and not issubclass(f.type, Pointer)) else repr(self[k])}"
-            for k, f in self.__class__.fields.items()
-        ]
+        values = []
+        for name, field in self.__class__.fields.items():
+            value = self[name]
+            if issubclass(field.type, int) and not issubclass(field.type, (Pointer, Enum)):
+                value = hex(value)
+            else:
+                value = repr(value)
+            values.append(f"{name}={value}")
+
         return f"<{self.__class__.__name__} {' '.join(values)}>"
 
 

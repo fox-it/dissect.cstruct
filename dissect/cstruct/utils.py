@@ -3,8 +3,10 @@ from __future__ import annotations
 import pprint
 import string
 import sys
+from enum import Enum
 from typing import Iterator
 
+from dissect.cstruct.types.pointer import Pointer
 from dissect.cstruct.types.structure import Structure
 
 COLOR_RED = "\033[1;31m"
@@ -158,7 +160,7 @@ def _dumpstruct(
         ci += 1
 
         value = getattr(structure, field.name)
-        if isinstance(value, str):
+        if isinstance(value, (str, Pointer, Enum)):
             value = repr(value)
         elif isinstance(value, int):
             value = hex(value)

@@ -98,6 +98,66 @@ def test_enum_eof(TestEnum: type[Enum]) -> None:
         TestEnum[None](b"\x01")
 
 
+def test_enum_same_value_different_type(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    enum Test16 : uint16 {
+        A = 0x1,
+        B = 0x2
+    };
+
+    enum Test24 : uint24 {
+        A = 0x1,
+        B = 0x2
+    };
+
+    enum Test32 : uint32 {
+        A = 0x1,
+        B = 0x2
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    obj = {
+        cs.Test16.A: "Test16.A",
+        cs.Test16.B: "Test16.B",
+        cs.Test24.A: "Test24.A",
+        cs.Test24.B: "Test24.B",
+    }
+
+    assert obj[cs.Test16.A] == "Test16.A"
+    assert obj[cs.Test16(2)] == "Test16.B"
+    assert obj[cs.Test24(1)] == "Test24.A"
+    assert obj[cs.Test24.B] == "Test24.B"
+
+    with pytest.raises(KeyError):
+        obj[cs.Test32.A]
+
+
+def test_enum_str_repr(TestEnum: type[Enum]) -> None:
+    assert repr(TestEnum.A) == "<Test.A: 1>"
+    assert str(TestEnum.A) == "Test.A"
+    assert repr(TestEnum(69)) == "<Test: 69>"
+    assert str(TestEnum(69)) == "Test.69"
+
+
+def test_enum_str_repr_in_struct(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    enum Test16 : uint16 {
+        A = 0x1,
+        B = 0x2
+    };
+
+    struct test {
+        Test16  a;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    obj = cs.test(b"\x02\x00")
+    assert repr(obj) == "<test a=<Test16.B: 2>>"
+    assert str(obj) == "<test a=<Test16.B: 2>>"
+
+
 def test_enum_struct(cs: cstruct, compiled: bool) -> None:
     cdef = """
     enum Test16 : uint16 {
@@ -174,26 +234,6 @@ def test_enum_struct(cs: cstruct, compiled: bool) -> None:
     assert cs.test_expr(buf).expr == [cs.Test16.A, cs.Test16.B]
     assert cs.test_expr(size=1, expr=[cs.Test16.A, cs.Test16.B]).dumps() == buf
 
-    obj = {
-        cs.Test16.A: "Test16.A",
-        cs.Test16.B: "Test16.B",
-        cs.Test24.A: "Test24.A",
-        cs.Test24.B: "Test24.B",
-    }
-
-    assert obj[cs.Test16.A] == "Test16.A"
-    assert obj[cs.Test16(2)] == "Test16.B"
-    assert obj[cs.Test24(1)] == "Test24.A"
-    assert obj[cs.Test24.B] == "Test24.B"
-
-    with pytest.raises(KeyError):
-        obj[cs.Test32.A]
-
-    assert repr(cs.Test16.A) == "<Test16.A: 1>"
-    assert str(cs.Test16.A) == "Test16.A"
-    assert repr(cs.Test16(69)) == "<Test16: 69>"
-    assert str(cs.Test16(69)) == "Test16.69"
-
 
 def test_enum_comments(cs: cstruct) -> None:
     cdef = """
@@ -259,7 +299,7 @@ def test_enum_name(cs: cstruct, compiled: bool) -> None:
     Color = cs.Color
     Pixel = cs.Pixel
 
-    pixel = Pixel(b"\xFF\x0A\x01\x00\xAA\xBB\xCC\xDD")
+    pixel = Pixel(b"\xff\x0a\x01\x00\xaa\xbb\xcc\xdd")
     assert pixel.x == 255
     assert pixel.y == 10
     assert pixel.color.name == "RED"
@@ -267,7 +307,7 @@ def test_enum_name(cs: cstruct, compiled: bool) -> None:
     assert pixel.color.value == 1
     assert pixel.hue == 0xDDCCBBAA
 
-    pixel = Pixel(b"\x00\x00\xFF\x00\xAA\xBB\xCC\xDD")
+    pixel = Pixel(b"\x00\x00\xff\x00\xaa\xbb\xcc\xdd")
     assert pixel.color.name is None
     assert pixel.color.value == 0xFF
     assert repr(pixel.color) == "<Color: 255>"
@@ -350,7 +390,7 @@ def test_enum_anonymous_struct(cs: cstruct, compiled: bool) -> None:
 
     test = cs.test
 
-    t = test(b"\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0A\x00\x00\x00")
+    t = test(b"\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00")
     assert t.arr == [255, 0, 0, 10]
 
 
