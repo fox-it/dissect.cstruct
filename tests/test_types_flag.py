@@ -69,7 +69,7 @@ def test_flag_str_repr(TestFlag: type[Flag]) -> None:
         assert repr(TestFlag(69)) == "<Test.A|68: 69>"
         assert str(TestFlag(69)) == "Test.A|68"
     else:
-        assert repr(TestFlag.A | TestFlag.B) == "<Test.B|A: 12>"
+        assert repr(TestFlag.A | TestFlag.B) == "<Test.B|A: 3>"
         assert str(TestFlag.A | TestFlag.B) == "Test.B|A"
         assert repr(TestFlag(69)) == "<Test.68|A: 69>"
         assert str(TestFlag(69)) == "Test.68|A"
