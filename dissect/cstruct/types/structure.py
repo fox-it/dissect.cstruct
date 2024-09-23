@@ -382,13 +382,13 @@ class Structure(BaseType, metaclass=StructureMetaType):
 
     def __repr__(self) -> str:
         values = []
-        for k, f in self.__class__.fields.items():
-            value = self[k]
-            if issubclass(f.type, int) and not issubclass(f.type, (Pointer, Enum)):
+        for name, field in self.__class__.fields.items():
+            value = self[name]
+            if issubclass(field.type, int) and not issubclass(field.type, (Pointer, Enum)):
                 value = hex(value)
             else:
                 value = repr(value)
-            values.append(f"{k}={value}")
+            values.append(f"{name}={value}")
 
         return f"<{self.__class__.__name__} {' '.join(values)}>"
 
