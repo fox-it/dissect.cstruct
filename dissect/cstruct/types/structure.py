@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from enum import Enum
 from functools import lru_cache
 from operator import attrgetter
-from textwrap import dedent
+from textwrap import dedent, indent
 from types import FunctionType
 from typing import Any, BinaryIO, Callable, ContextManager
 
@@ -28,6 +28,9 @@ class Field:
     def __repr__(self) -> str:
         bits_str = f" : {self.bits}" if self.bits else ""
         return f"<Field {self.name} {self.type.__name__}{bits_str}>"
+
+    def type_stub(self):
+        return self.type._type_stub(self.name)
 
 
 class StructureMetaType(MetaType):
@@ -363,6 +366,27 @@ class StructureMetaType(MetaType):
 
         for key, value in classdict.items():
             setattr(cls, key, value)
+
+    def to_type_stub(cls, name: str = "") -> str:
+        buffer = io.StringIO()
+        buffer.write(f"class {cls.__name__}({cls.__base__.__name__}):\n")
+        call_args = ["self"]
+        for key, field in cls.lookup.items():
+            if isinstance(field.type, StructureMetaType):
+                class_info = field.type.to_type_stub()
+                buffer.write(indent(class_info, prefix=" " * 4))
+            call_args.append(f"{field.type_stub()}=...")
+
+        for field in cls.fields.values():
+            type_info = field.type_stub()
+            buffer.write(indent(f"{type_info}\n", prefix=" " * 4))
+
+        call = ", ".join(call_args)
+        buffer.write(indent(f"def __init__({call}): ...\n", prefix=" " * 4))
+
+        output = buffer.getvalue()
+        buffer.close()
+        return output
 
 
 class Structure(BaseType, metaclass=StructureMetaType):
