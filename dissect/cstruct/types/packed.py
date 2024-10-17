@@ -18,11 +18,11 @@ class Packed(BaseType):
     packchar: str
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Packed:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Packed:
         return cls._read_array(stream, 1, context)[0]
 
     @classmethod
-    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> list[Packed]:
+    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Packed]:
         if count == EOF:
             data = stream.read()
             length = len(data)
@@ -39,7 +39,7 @@ class Packed(BaseType):
         return [cls.__new__(cls, value) for value in fmt.unpack(data)]
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Packed:
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Packed:
         result = []
 
         fmt = _struct(cls.cs.endian, cls.packchar)

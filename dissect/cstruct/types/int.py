@@ -12,7 +12,7 @@ class Int(int, BaseType):
     signed: bool
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Int:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Int:
         data = stream.read(cls.size)
 
         if len(data) != cls.size:
@@ -21,7 +21,7 @@ class Int(int, BaseType):
         return cls.from_bytes(data, ENDIANNESS_MAP[cls.cs.endian], signed=cls.signed)
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Int:
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Int:
         result = []
 
         while True:

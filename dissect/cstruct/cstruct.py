@@ -321,7 +321,7 @@ class cstruct:
         size: int | None,
         *,
         alignment: int | None = None,
-        attrs: dict[str, Any] = None,
+        attrs: dict[str, Any] | None = None,
     ) -> type[BaseType]:
         """Create a new type class bound to this cstruct instance.
 

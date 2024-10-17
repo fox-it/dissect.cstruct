@@ -14,7 +14,7 @@ class LEB128(int, BaseType):
     signed: bool
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> LEB128:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> LEB128:
         result = 0
         shift = 0
         while True:
@@ -35,7 +35,7 @@ class LEB128(int, BaseType):
         return cls.__new__(cls, result)
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] = None) -> LEB128:
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> LEB128:
         result = []
 
         while True:

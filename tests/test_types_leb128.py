@@ -189,3 +189,11 @@ def test_leb128_unsigned_write_amount_written(cs: cstruct) -> None:
     out3 = io.BytesIO()
     bytes_written3 = cs.uleb128(13371337).write(out3)
     assert bytes_written3 == out3.tell()
+
+
+def test_leb128_default(cs: cstruct) -> None:
+    assert cs.uleb128.default() == 0
+    assert cs.ileb128.default() == 0
+
+    assert cs.uleb128[1].default() == [0]
+    assert cs.uleb128[None].default() == []

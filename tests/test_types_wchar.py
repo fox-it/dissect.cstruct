@@ -75,3 +75,9 @@ def test_wchar_eof(cs: cstruct) -> None:
         cs.wchar[None](b"A\x00A\x00A\x00A\x00")
 
     assert cs.wchar[0](b"") == ""
+
+
+def test_wchar_default(cs: cstruct) -> None:
+    assert cs.wchar.default() == "\x00"
+    assert cs.wchar[4].default() == "\x00\x00\x00\x00"
+    assert cs.wchar[None].default() == ""

@@ -1,5 +1,6 @@
 import inspect
 from io import BytesIO
+from textwrap import dedent
 from types import MethodType
 from unittest.mock import MagicMock, call, patch
 
@@ -7,6 +8,7 @@ import pytest
 
 from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exceptions import ParserError
+from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.pointer import Pointer
 from dissect.cstruct.types.structure import Field, Structure, StructureMetaType
@@ -27,6 +29,7 @@ def test_structure(TestStruct: type[Structure]) -> None:
     assert len(TestStruct.fields) == 2
     assert TestStruct.fields["a"].name == "a"
     assert TestStruct.fields["b"].name == "b"
+    assert repr(TestStruct.fields["a"]) == "<Field a uint32>"
 
     assert TestStruct.size == 8
     assert TestStruct.alignment == 4
@@ -43,7 +46,7 @@ def test_structure(TestStruct: type[Structure]) -> None:
 
     obj = TestStruct(a=1)
     assert obj.a == 1
-    assert obj.b is None
+    assert obj.b == 0
     assert len(obj) == 8
 
     # Test hashing of values
@@ -72,6 +75,10 @@ def test_structure_write(TestStruct: type[Structure]) -> None:
     assert obj.dumps() == b"\x01\x00\x00\x00\x00\x00\x00\x00"
 
     obj = TestStruct()
+    assert obj.a == 0
+    assert obj.dumps() == b"\x00\x00\x00\x00\x00\x00\x00\x00"
+
+    obj.a = None
     assert obj.dumps() == b"\x00\x00\x00\x00\x00\x00\x00\x00"
 
 
@@ -521,6 +528,17 @@ def test_structure_field_discard(cs: cstruct, compiled: bool) -> None:
         mock_char_new.assert_has_calls([call(cs.char, b"a"), call(cs.char, b"b")])
 
 
+def test_structure_field_duplicate(cs: cstruct) -> None:
+    cdef = """
+    struct test {
+        uint8 a;
+        uint8 a;
+    };
+    """
+    with pytest.raises(ValueError, match="Duplicate field name: a"):
+        cs.load(cdef)
+
+
 def test_structure_definition_self(cs: cstruct) -> None:
     cdef = """
     struct test {
@@ -540,3 +558,206 @@ def test_align_struct_in_struct(cs: cstruct) -> None:
 
         _, kwargs = update_fields.call_args
         assert kwargs["align"]
+
+
+def test_structure_default(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    enum Enum {
+        a = 0,
+        b = 1
+    };
+
+    flag Flag {
+        a = 0,
+        b = 1
+    };
+
+    struct test {
+        uint32  t_int;
+        uint32  t_int_array[2];
+        uint24  t_bytesint;
+        uint24  t_bytesint_array[2];
+        char    t_char;
+        char    t_char_array[2];
+        wchar   t_wchar;
+        wchar   t_wchar_array[2];
+        Enum    t_enum;
+        Enum    t_enum_array[2];
+        Flag    t_flag;
+        Flag    t_flag_array[2];
+        uint8   *t_pointer;
+        uint8   *t_pointer_array[2];
+    };
+
+    struct test_nested {
+        test    t_struct;
+        test    t_struct_array[2];
+    };
+    """
+    cs.pointer = cs.uint8
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    assert cs.test() == cs.test.default()
+
+    obj = cs.test.default()
+    assert obj.t_int == 0
+    assert obj.t_int_array == [0, 0]
+    assert obj.t_bytesint == 0
+    assert obj.t_bytesint_array == [0, 0]
+    assert obj.t_char == b"\x00"
+    assert obj.t_char_array == b"\x00\x00"
+    assert obj.t_wchar == "\x00"
+    assert obj.t_wchar_array == "\x00\x00"
+    assert obj.t_enum == cs.Enum(0)
+    assert obj.t_enum_array == [cs.Enum(0), cs.Enum(0)]
+    assert obj.t_flag == cs.Flag(0)
+    assert obj.t_flag_array == [cs.Flag(0), cs.Flag(0)]
+    assert obj.t_pointer == 0
+    assert isinstance(obj.t_pointer, Pointer)
+    assert obj.t_pointer_array == [0, 0]
+    assert isinstance(obj.t_pointer_array[0], Pointer)
+    assert isinstance(obj.t_pointer_array[1], Pointer)
+
+    assert obj.dumps() == b"\x00" * 57
+
+    for name in obj.fields.keys():
+        assert isinstance(getattr(obj, name), BaseType)
+
+    assert cs.test_nested() == cs.test_nested.default()
+
+    obj = cs.test_nested.default()
+    assert obj.t_struct == cs.test.default()
+    assert obj.t_struct_array == [cs.test.default(), cs.test.default()]
+
+    assert obj.dumps() == b"\x00" * 171
+
+    for name in obj.fields.keys():
+        assert isinstance(getattr(obj, name), BaseType)
+
+
+def test_structure_default_dynamic(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    enum Enum {
+        a = 0,
+        b = 1
+    };
+
+    flag Flag {
+        a = 0,
+        b = 1
+    };
+
+    struct test {
+        uint8   x;
+        uint32  t_int_array_n[];
+        uint32  t_int_array_d[x];
+        uint24  t_bytesint_array_n[];
+        uint24  t_bytesint_array_d[x];
+        char    t_char_array_n[];
+        char    t_char_array_d[x];
+        wchar   t_wchar_array_n[];
+        wchar   t_wchar_array_d[x];
+        Enum    t_enum_array_n[];
+        Enum    t_enum_array_d[x];
+        Flag    t_flag_array_n[];
+        Flag    t_flag_array_d[x];
+        uint8   *t_pointer_n[];
+        uint8   *t_pointer_d[x];
+    };
+
+    struct test_nested {
+        uint8   x;
+        test    t_struct_n[];
+        test    t_struct_array_d[x];
+    };
+    """
+    cs.pointer = cs.uint8
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    assert cs.test() == cs.test.default()
+
+    obj = cs.test()
+    assert obj.t_int_array_n == obj.t_int_array_d == []
+    assert obj.t_bytesint_array_n == obj.t_bytesint_array_d == []
+    assert obj.t_char_array_n == obj.t_char_array_d == b""
+    assert obj.t_wchar_array_n == obj.t_wchar_array_d == ""
+    assert obj.t_enum_array_n == obj.t_enum_array_d == []
+    assert obj.t_flag_array_n == obj.t_flag_array_d == []
+    assert obj.t_pointer_n == obj.t_pointer_d == []
+
+    assert obj.dumps() == b"\x00" * 20
+
+    for name in obj.fields.keys():
+        assert isinstance(getattr(obj, name), BaseType)
+
+    assert cs.test_nested() == cs.test_nested.default()
+
+    obj = cs.test_nested.default()
+    assert obj.t_struct_n == obj.t_struct_array_d == []
+
+    assert obj.dumps() == b"\x00" * 21
+
+    for name in obj.fields.keys():
+        assert isinstance(getattr(obj, name), BaseType)
+
+
+def test_structure_partial_initialization(cs: cstruct) -> None:
+    cdef = """
+    struct test {
+        uint8 a;
+        uint8 b;
+    };
+    """
+    cs.load(cdef)
+
+    obj = cs.test()
+    assert obj.a == 0
+    assert obj.b == 0
+    assert str(obj) == "<test a=0x0 b=0x0>"
+
+    obj = cs.test(1, 1)
+    assert obj.a == 1
+    assert obj.b == 1
+    assert str(obj) == "<test a=0x1 b=0x1>"
+
+    obj = cs.test(1)
+    assert obj.a == 1
+    assert obj.b == 0
+    assert str(obj) == "<test a=0x1 b=0x0>"
+
+    obj = cs.test(a=1)
+    assert obj.a == 1
+    assert obj.b == 0
+    assert str(obj) == "<test a=0x1 b=0x0>"
+
+    obj = cs.test(b=1)
+    assert obj.a == 0
+    assert obj.b == 1
+    assert str(obj) == "<test a=0x0 b=0x1>"
+
+
+def test_codegen_make_init() -> None:
+    _make__init__ = structure._make_structure__init__.__wrapped__.__wrapped__
+
+    result = _make__init__([f"_{n}" for n in range(5)])
+    expected = """
+    def __init__(self, _0 = None, _1 = None, _2 = None, _3 = None, _4 = None):
+     self._0 = _0 if _0 is not None else 0
+     self._1 = _1 if _1 is not None else 1
+     self._2 = _2 if _2 is not None else 2
+     self._3 = _3 if _3 is not None else 3
+     self._4 = _4 if _4 is not None else 4
+    """
+    assert result == dedent(expected[1:].rstrip())
+
+    structure._make_structure__init__.cache_clear()
+    assert structure._make_structure__init__.cache_info() == (0, 0, 128, 0)
+    result = structure._make_structure__init__(5)
+    assert structure._make_structure__init__.cache_info() == (0, 1, 128, 1)
+    cached = structure._make_structure__init__(5)
+    assert structure._make_structure__init__.cache_info() == (1, 1, 128, 1)
+    assert result is cached

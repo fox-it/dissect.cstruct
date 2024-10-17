@@ -9,7 +9,7 @@ class CharArray(bytes, BaseType, metaclass=ArrayMetaType):
     """Character array type for reading and writing byte strings."""
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> CharArray:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> CharArray:
         return type.__call__(cls, ArrayMetaType._read(cls, stream, context))
 
     @classmethod
@@ -35,11 +35,11 @@ class Char(bytes, BaseType):
     ArrayType = CharArray
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Char:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Char:
         return cls._read_array(stream, 1, context)
 
     @classmethod
-    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> Char:
+    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> Char:
         if count == 0:
             return type.__call__(cls, b"")
 
@@ -50,7 +50,7 @@ class Char(bytes, BaseType):
         return type.__call__(cls, data)
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Char:
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Char:
         buf = []
         while True:
             byte = stream.read(1)

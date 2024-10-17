@@ -13,9 +13,10 @@ def test_pointer(cs: cstruct) -> None:
     cs.pointer = cs.uint8
 
     ptr = cs._make_pointer(cs.uint8)
+    assert issubclass(ptr, Pointer)
     assert ptr.__name__ == "uint8*"
 
-    obj = ptr(b"\x01\xFF")
+    obj = ptr(b"\x01\xff")
     assert repr(obj) == "<uint8* @ 0x1>"
 
     assert obj == 1
@@ -45,7 +46,7 @@ def test_pointer_operator(cs: cstruct) -> None:
     cs.pointer = cs.uint8
 
     ptr = cs._make_pointer(cs.uint8)
-    obj = ptr(b"\x01\x00\xFF")
+    obj = ptr(b"\x01\x00\xff")
 
     assert obj == 1
     assert obj.dumps() == b"\x01"
@@ -235,3 +236,16 @@ def test_pointer_of_pointer(cs: cstruct, compiled: bool) -> None:
     assert obj.ptr == 1
     assert obj.ptr.dereference() == 2
     assert obj.ptr.dereference().dereference() == 0x41414141
+
+
+def test_pointer_default(cs: cstruct) -> None:
+    cs.pointer = cs.uint8
+
+    ptr = cs._make_pointer(cs.uint8)
+    assert isinstance(ptr.default(), Pointer)
+    assert ptr.default() == 0
+    assert ptr[1].default() == [0]
+    assert ptr[None].default() == []
+
+    with pytest.raises(NullPointerDereference):
+        ptr.default().dereference()

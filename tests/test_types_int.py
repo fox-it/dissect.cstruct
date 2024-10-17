@@ -233,7 +233,7 @@ def test_int_eof(cs: cstruct) -> None:
         cs.int24[None](b"\x01\x00\x00")
 
 
-def test_bytesinteger_range(cs: cstruct) -> None:
+def test_int_range(cs: cstruct) -> None:
     int8 = cs._make_int_type("int8", 1, True)
     uint8 = cs._make_int_type("uint9", 1, False)
     int16 = cs._make_int_type("int16", 2, True)
@@ -336,7 +336,7 @@ def test_int_struct_unsigned(cs: cstruct, compiled: bool) -> None:
     assert obj.dumps() == buf
 
 
-def test_bytesinteger_struct_signed_be(cs: cstruct, compiled: bool) -> None:
+def test_int_struct_signed_be(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         int24   a;
@@ -370,7 +370,7 @@ def test_bytesinteger_struct_signed_be(cs: cstruct, compiled: bool) -> None:
     assert obj.dumps() == buf
 
 
-def test_bytesinteger_struct_unsigned_be(cs: cstruct, compiled: bool) -> None:
+def test_int_struct_unsigned_be(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint24  a;
@@ -400,3 +400,13 @@ def test_bytesinteger_struct_unsigned_be(cs: cstruct, compiled: bool) -> None:
     assert obj.d == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     assert obj.e == [0x4141, 0x4242]
     assert obj.dumps() == buf
+
+
+def test_int_default(cs: cstruct) -> None:
+    assert cs.int24.default() == 0
+    assert cs.uint24.default() == 0
+    assert cs.int128.default() == 0
+    assert cs.uint128.default() == 0
+
+    assert cs.int24[1].default() == [0]
+    assert cs.int24[None].default() == []
