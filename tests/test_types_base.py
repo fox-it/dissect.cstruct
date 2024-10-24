@@ -98,7 +98,7 @@ def test_custom_array_type(cs: cstruct, compiled: bool) -> None:
 
         class ArrayType(BaseType, metaclass=ArrayMetaType):
             @classmethod
-            def default(cls) -> CustomType:
+            def __default__(cls) -> CustomType:
                 return cls.type()
 
             @classmethod

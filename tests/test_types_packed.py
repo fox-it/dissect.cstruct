@@ -172,17 +172,17 @@ def test_packed_float_struct_be(cs: cstruct, compiled: bool) -> None:
 
 
 def test_packed_default(cs: cstruct) -> None:
-    assert cs.int8.default() == 0
-    assert cs.uint8.default() == 0
-    assert cs.int16.default() == 0
-    assert cs.uint16.default() == 0
-    assert cs.int32.default() == 0
-    assert cs.uint32.default() == 0
-    assert cs.int64.default() == 0
-    assert cs.uint64.default() == 0
-    assert cs.float16.default() == 0.0
-    assert cs.float.default() == 0.0
-    assert cs.double.default() == 0.0
+    assert cs.int8.__default__() == 0
+    assert cs.uint8.__default__() == 0
+    assert cs.int16.__default__() == 0
+    assert cs.uint16.__default__() == 0
+    assert cs.int32.__default__() == 0
+    assert cs.uint32.__default__() == 0
+    assert cs.int64.__default__() == 0
+    assert cs.uint64.__default__() == 0
+    assert cs.float16.__default__() == 0.0
+    assert cs.float.__default__() == 0.0
+    assert cs.double.__default__() == 0.0
 
-    assert cs.int8[2].default() == [0, 0]
-    assert cs.int8[None].default() == []
+    assert cs.int8[2].__default__() == [0, 0]
+    assert cs.int8[None].__default__() == []

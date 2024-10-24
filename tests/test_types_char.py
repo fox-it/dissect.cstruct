@@ -46,6 +46,6 @@ def test_char_eof(cs: cstruct) -> None:
 
 
 def test_char_default(cs: cstruct) -> None:
-    assert cs.char.default() == b"\x00"
-    assert cs.char[4].default() == b"\x00\x00\x00\x00"
-    assert cs.char[None].default() == b""
+    assert cs.char.__default__() == b"\x00"
+    assert cs.char[4].__default__() == b"\x00\x00\x00\x00"
+    assert cs.char[None].__default__() == b""

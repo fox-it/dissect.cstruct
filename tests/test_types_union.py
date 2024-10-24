@@ -414,7 +414,7 @@ def test_union_default(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert cs.test() == cs.test.default()
+    assert cs.test() == cs.test.__default__()
 
     obj = cs.test()
     assert obj.a == 0
@@ -425,11 +425,11 @@ def test_union_default(cs: cstruct) -> None:
     for name in obj.fields.keys():
         assert isinstance(getattr(obj, name), BaseType)
 
-    assert cs.test_nested() == cs.test_nested.default()
+    assert cs.test_nested() == cs.test_nested.__default__()
 
-    obj = cs.test_nested.default()
-    assert obj.t_union == cs.test.default()
-    assert obj.t_union_array == [cs.test.default(), cs.test.default()]
+    obj = cs.test_nested.__default__()
+    assert obj.t_union == cs.test.__default__()
+    assert obj.t_union_array == [cs.test.__default__(), cs.test.__default__()]
 
     assert obj.dumps() == b"\x00" * 24
 

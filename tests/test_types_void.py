@@ -33,12 +33,12 @@ def test_void_array_write(cs: cstruct) -> None:
 
 
 def test_void_default(cs: cstruct) -> None:
-    assert cs.void() == cs.void.default()
+    assert cs.void() == cs.void.__default__()
     assert not cs.void()
-    assert not cs.void.default()
+    assert not cs.void.__default__()
 
-    assert cs.void[1].default() == [cs.void()]
-    assert cs.void[None].default() == []
+    assert cs.void[1].__default__() == [cs.void()]
+    assert cs.void[None].__default__() == []
 
 
 def test_void_struct(cs: cstruct, compiled: bool) -> None:

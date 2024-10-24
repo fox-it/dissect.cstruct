@@ -59,7 +59,7 @@ class MetaType(type):
 
         return cls.size
 
-    def default(cls) -> BaseType:
+    def __default__(cls) -> BaseType:
         """Return the default value of this type."""
         return cls()
 
@@ -179,7 +179,7 @@ class MetaType(type):
             stream: The stream to read from.
             array: The array to write.
         """
-        return cls._write_array(stream, array + [cls.default()])
+        return cls._write_array(stream, array + [cls.__default__()])
 
 
 class _overload:
@@ -225,8 +225,10 @@ class ArrayMetaType(MetaType):
     num_entries: int | Expression | None
     null_terminated: bool
 
-    def default(cls) -> BaseType:
-        return type.__call__(cls, [cls.type.default()] * (cls.num_entries if isinstance(cls.num_entries, int) else 0))
+    def __default__(cls) -> BaseType:
+        return type.__call__(
+            cls, [cls.type.__default__()] * (cls.num_entries if isinstance(cls.num_entries, int) else 0)
+        )
 
     def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Array:
         if cls.null_terminated:

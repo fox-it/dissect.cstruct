@@ -403,10 +403,10 @@ def test_int_struct_unsigned_be(cs: cstruct, compiled: bool) -> None:
 
 
 def test_int_default(cs: cstruct) -> None:
-    assert cs.int24.default() == 0
-    assert cs.uint24.default() == 0
-    assert cs.int128.default() == 0
-    assert cs.uint128.default() == 0
+    assert cs.int24.__default__() == 0
+    assert cs.uint24.__default__() == 0
+    assert cs.int128.__default__() == 0
+    assert cs.uint128.__default__() == 0
 
-    assert cs.int24[1].default() == [0]
-    assert cs.int24[None].default() == []
+    assert cs.int24[1].__default__() == [0]
+    assert cs.int24[None].__default__() == []
