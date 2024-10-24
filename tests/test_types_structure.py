@@ -599,9 +599,9 @@ def test_structure_default(cs: cstruct, compiled: bool) -> None:
 
     assert verify_compiled(cs.test, compiled)
 
-    assert cs.test() == cs.test.default()
+    assert cs.test() == cs.test.__default__()
 
-    obj = cs.test.default()
+    obj = cs.test.__default__()
     assert obj.t_int == 0
     assert obj.t_int_array == [0, 0]
     assert obj.t_bytesint == 0
@@ -625,11 +625,11 @@ def test_structure_default(cs: cstruct, compiled: bool) -> None:
     for name in obj.fields.keys():
         assert isinstance(getattr(obj, name), BaseType)
 
-    assert cs.test_nested() == cs.test_nested.default()
+    assert cs.test_nested() == cs.test_nested.__default__()
 
-    obj = cs.test_nested.default()
-    assert obj.t_struct == cs.test.default()
-    assert obj.t_struct_array == [cs.test.default(), cs.test.default()]
+    obj = cs.test_nested.__default__()
+    assert obj.t_struct == cs.test.__default__()
+    assert obj.t_struct_array == [cs.test.__default__(), cs.test.__default__()]
 
     assert obj.dumps() == b"\x00" * 171
 
@@ -678,7 +678,7 @@ def test_structure_default_dynamic(cs: cstruct, compiled: bool) -> None:
 
     assert verify_compiled(cs.test, compiled)
 
-    assert cs.test() == cs.test.default()
+    assert cs.test() == cs.test.__default__()
 
     obj = cs.test()
     assert obj.t_int_array_n == obj.t_int_array_d == []
@@ -694,9 +694,9 @@ def test_structure_default_dynamic(cs: cstruct, compiled: bool) -> None:
     for name in obj.fields.keys():
         assert isinstance(getattr(obj, name), BaseType)
 
-    assert cs.test_nested() == cs.test_nested.default()
+    assert cs.test_nested() == cs.test_nested.__default__()
 
-    obj = cs.test_nested.default()
+    obj = cs.test_nested.__default__()
     assert obj.t_struct_n == obj.t_struct_array_d == []
 
     assert obj.dumps() == b"\x00" * 21

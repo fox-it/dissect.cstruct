@@ -266,6 +266,6 @@ def test_flag_default(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert cs.test.default() == cs.test(0)
-    assert cs.test[1].default() == [cs.test(0)]
-    assert cs.test[None].default() == []
+    assert cs.test.__default__() == cs.test(0)
+    assert cs.test[1].__default__() == [cs.test(0)]
+    assert cs.test[None].__default__() == []

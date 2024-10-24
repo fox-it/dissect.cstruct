@@ -242,10 +242,10 @@ def test_pointer_default(cs: cstruct) -> None:
     cs.pointer = cs.uint8
 
     ptr = cs._make_pointer(cs.uint8)
-    assert isinstance(ptr.default(), Pointer)
-    assert ptr.default() == 0
-    assert ptr[1].default() == [0]
-    assert ptr[None].default() == []
+    assert isinstance(ptr.__default__(), Pointer)
+    assert ptr.__default__() == 0
+    assert ptr[1].__default__() == [0]
+    assert ptr[None].__default__() == []
 
     with pytest.raises(NullPointerDereference):
-        ptr.default().dereference()
+        ptr.__default__().dereference()

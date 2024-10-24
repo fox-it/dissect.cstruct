@@ -325,7 +325,7 @@ class StructureMetaType(MetaType):
 
             value = getattr(data, field.name, None)
             if value is None:
-                value = field_type.default()
+                value = field_type.__default__()
 
             if field.bits:
                 if isinstance(field_type, EnumMetaType):
@@ -560,7 +560,7 @@ class Union(Structure, metaclass=UnionMetaType):
             buf.seek(field.offset)
 
         if (value := getattr(self, attr)) is None:
-            value = field.type.default()
+            value = field.type.__default__()
 
         field.type._write(buf, value)
 
@@ -774,7 +774,7 @@ def _generate_structure__init__(fields: list[Field]) -> FunctionType:
     template: FunctionType = _make_structure__init__(len(field_names))
     return type(template)(
         template.__code__.replace(
-            co_consts=(None, *[field.type.default() for field in fields]),
+            co_consts=(None, *[field.type.__default__() for field in fields]),
             co_names=(*field_names,),
             co_varnames=("self", *field_names),
         ),
@@ -794,7 +794,7 @@ def _generate_union__init__(fields: list[Field]) -> FunctionType:
     template: FunctionType = _make_union__init__(len(field_names))
     return type(template)(
         template.__code__.replace(
-            co_consts=(None, *sum([(field.name, field.type.default()) for field in fields], ())),
+            co_consts=(None, *sum([(field.name, field.type.__default__()) for field in fields], ())),
             co_varnames=("self", *field_names),
         ),
         template.__globals__,

@@ -20,7 +20,7 @@ class WcharArray(str, BaseType, metaclass=ArrayMetaType):
         return stream.write(data.encode(Wchar.__encoding_map__[cls.cs.endian]))
 
     @classmethod
-    def default(cls) -> WcharArray:
+    def __default__(cls) -> WcharArray:
         return type.__call__(cls, "\x00" * (0 if cls.dynamic or cls.null_terminated else cls.num_entries))
 
 
@@ -75,5 +75,5 @@ class Wchar(str, BaseType):
         return stream.write(data.encode(cls.__encoding_map__[cls.cs.endian]))
 
     @classmethod
-    def default(cls) -> Wchar:
+    def __default__(cls) -> Wchar:
         return type.__call__(cls, "\x00")

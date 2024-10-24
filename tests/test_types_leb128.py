@@ -192,8 +192,8 @@ def test_leb128_unsigned_write_amount_written(cs: cstruct) -> None:
 
 
 def test_leb128_default(cs: cstruct) -> None:
-    assert cs.uleb128.default() == 0
-    assert cs.ileb128.default() == 0
+    assert cs.uleb128.__default__() == 0
+    assert cs.ileb128.__default__() == 0
 
-    assert cs.uleb128[1].default() == [0]
-    assert cs.uleb128[None].default() == []
+    assert cs.uleb128[1].__default__() == [0]
+    assert cs.uleb128[None].__default__() == []

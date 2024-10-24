@@ -25,7 +25,7 @@ class CharArray(bytes, BaseType, metaclass=ArrayMetaType):
         return stream.write(data)
 
     @classmethod
-    def default(cls) -> CharArray:
+    def __default__(cls) -> CharArray:
         return type.__call__(cls, b"\x00" * (0 if cls.dynamic or cls.null_terminated else cls.num_entries))
 
 
@@ -75,5 +75,5 @@ class Char(bytes, BaseType):
         return stream.write(data)
 
     @classmethod
-    def default(cls) -> Char:
+    def __default__(cls) -> Char:
         return type.__call__(cls, b"\x00")

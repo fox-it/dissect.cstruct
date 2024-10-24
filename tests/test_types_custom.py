@@ -13,8 +13,8 @@ class EtwPointer(BaseType):
     size: int | None
 
     @classmethod
-    def default(cls) -> int:
-        return cls.cs.uint64.default()
+    def __default__(cls) -> int:
+        return cls.cs.uint64.__default__()
 
     @classmethod
     def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> BaseType:
@@ -82,10 +82,10 @@ def test_custom_default(cs: cstruct) -> None:
     cs.add_custom_type("EtwPointer", EtwPointer)
 
     cs.EtwPointer.as_64bit()
-    assert cs.EtwPointer.default() == 0
+    assert cs.EtwPointer.__default__() == 0
 
     cs.EtwPointer.as_32bit()
-    assert cs.EtwPointer.default() == 0
+    assert cs.EtwPointer.__default__() == 0
 
-    assert cs.EtwPointer[1].default() == [0]
-    assert cs.EtwPointer[None].default() == []
+    assert cs.EtwPointer[1].__default__() == [0]
+    assert cs.EtwPointer[None].__default__() == []

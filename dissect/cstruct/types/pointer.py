@@ -66,8 +66,8 @@ class Pointer(int, BaseType):
         return type.__call__(self.__class__, int.__or__(self, other), self._stream, self._context)
 
     @classmethod
-    def default(cls) -> Pointer:
-        return cls.__new__(cls, cls.cs.pointer.default(), None, None)
+    def __default__(cls) -> Pointer:
+        return cls.__new__(cls, cls.cs.pointer.__default__(), None, None)
 
     @classmethod
     def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Pointer:

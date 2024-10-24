@@ -418,6 +418,21 @@ def test_enum_default(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert cs.test.default() == cs.test.A == cs.test(0)
-    assert cs.test[1].default() == [cs.test.A]
-    assert cs.test[None].default() == []
+    assert cs.test.__default__() == cs.test.A == cs.test(0)
+    assert cs.test[1].__default__() == [cs.test.A]
+    assert cs.test[None].__default__() == []
+
+
+def test_enum_default_default(cs: cstruct) -> None:
+    cdef = """
+    enum test {
+        default = 0,
+    };
+
+    struct test2 {
+        test a;
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test.__default__() == cs.test.default == cs.test(0)
