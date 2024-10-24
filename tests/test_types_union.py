@@ -422,7 +422,7 @@ def test_union_default(cs: cstruct) -> None:
 
     assert obj.dumps() == b"\x00" * 8
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
     assert cs.test_nested() == cs.test_nested.default()
@@ -433,7 +433,7 @@ def test_union_default(cs: cstruct) -> None:
 
     assert obj.dumps() == b"\x00" * 24
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
 

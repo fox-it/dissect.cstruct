@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from dissect.cstruct import utils
@@ -17,9 +19,10 @@ def test_hexdump(capsys: pytest.CaptureFixture) -> None:
     out = utils.hexdump(b"\x00" * 16, output="generator")
     assert next(out) == "00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00   ................"
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(
+        ValueError, match=re.escape("Invalid output argument: 'str' (should be 'print', 'generator' or 'string').")
+    ):
         utils.hexdump("b\x00", output="str")
-    assert str(excinfo.value) == "Invalid output argument: 'str' (should be 'print', 'generator' or 'string')."
 
 
 def test_dumpstruct(cs: cstruct, capsys: pytest.CaptureFixture, compiled: bool) -> None:
@@ -48,9 +51,10 @@ def test_dumpstruct(cs: cstruct, capsys: pytest.CaptureFixture, compiled: bool) 
 
     assert out_1 == out_2
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(
+        ValueError, match=re.escape("Invalid output argument: 'generator' (should be 'print' or 'string').")
+    ):
         utils.dumpstruct(obj, output="generator")
-    assert str(excinfo.value) == "Invalid output argument: 'generator' (should be 'print' or 'string')."
 
 
 def test_dumpstruct_anonymous(cs: cstruct, capsys: pytest.CaptureFixture, compiled: bool) -> None:
@@ -81,9 +85,10 @@ def test_dumpstruct_anonymous(cs: cstruct, capsys: pytest.CaptureFixture, compil
 
     assert out_1 == out_2
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(
+        ValueError, match=re.escape("Invalid output argument: 'generator' (should be 'print' or 'string').")
+    ):
         utils.dumpstruct(obj, output="generator")
-    assert str(excinfo.value) == "Invalid output argument: 'generator' (should be 'print' or 'string')."
 
 
 def test_dumpstruct_enum(cs: cstruct, compiled: bool) -> None:

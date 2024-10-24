@@ -4,10 +4,13 @@ import pprint
 import string
 import sys
 from enum import Enum
-from typing import Iterator
+from typing import TYPE_CHECKING
 
 from dissect.cstruct.types.pointer import Pointer
 from dissect.cstruct.types.structure import Structure
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 COLOR_RED = "\033[1;31m"
 COLOR_GREEN = "\033[1;32m"
@@ -95,9 +98,8 @@ def _hexdump(data: bytes, palette: Palette | None = None, offset: int = 0, prefi
                     if palette is not None:
                         values += COLOR_NORMAL
 
-                if j == 15:
-                    if palette is not None:
-                        values += COLOR_NORMAL
+                if j == 15 and palette is not None:
+                    values += COLOR_NORMAL
 
             values += " "
             if j == 7:
@@ -122,12 +124,12 @@ def hexdump(
     generator = _hexdump(data, palette, offset, prefix)
     if output == "print":
         print("\n".join(generator))
-    elif output == "generator":
+        return None
+    if output == "generator":
         return generator
-    elif output == "string":
+    if output == "string":
         return "\n".join(list(generator))
-    else:
-        raise ValueError(f"Invalid output argument: {output!r} (should be 'print', 'generator' or 'string').")
+    raise ValueError(f"Invalid output argument: {output!r} (should be 'print', 'generator' or 'string').")
 
 
 def _dumpstruct(
@@ -183,6 +185,7 @@ def _dumpstruct(
         print(out)
     elif output == "string":
         return "\n".join(["", hexdump(data, palette, offset=offset, output="string"), "", out])
+    return None
 
 
 def dumpstruct(
@@ -207,13 +210,12 @@ def dumpstruct(
 
     if isinstance(obj, Structure):
         return _dumpstruct(obj, obj.dumps(), offset, color, output)
-    elif issubclass(obj, Structure) and data:
+    if issubclass(obj, Structure) and data:
         return _dumpstruct(obj(data), data, offset, color, output)
-    else:
-        raise ValueError("Invalid arguments")
+    raise ValueError("Invalid arguments")
 
 
-def pack(value: int, size: int = None, endian: str = "little") -> bytes:
+def pack(value: int, size: int | None = None, endian: str = "little") -> bytes:
     """Pack an integer value to a given bit size, endianness.
 
     Arguments:
@@ -225,7 +227,7 @@ def pack(value: int, size: int = None, endian: str = "little") -> bytes:
     return value.to_bytes(size, ENDIANNESS_MAP.get(endian, endian), signed=value < 0)
 
 
-def unpack(value: bytes, size: int = None, endian: str = "little", sign: bool = False) -> int:
+def unpack(value: bytes, size: int | None = None, endian: str = "little", sign: bool = False) -> int:
     """Unpack an integer value from a given bit size, endianness and sign.
 
     Arguments:
@@ -323,7 +325,7 @@ def u64(value: bytes, endian: str = "little", sign: bool = False) -> int:
     return unpack(value, 64, endian, sign)
 
 
-def swap(value: int, size: int):
+def swap(value: int, size: int) -> int:
     """Swap the endianness of an integer with a given bit size.
 
     Arguments:

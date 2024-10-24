@@ -4,7 +4,8 @@ import ctypes as _ctypes
 import struct
 import sys
 import types
-from typing import Any, BinaryIO, Iterator
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.exceptions import ResolveError
 from dissect.cstruct.expression import Expression
@@ -26,6 +27,9 @@ from dissect.cstruct.types import (
     Void,
     Wchar,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 class cstruct:
@@ -134,7 +138,6 @@ class cstruct:
             "unsigned __int32": "uint32",
             "unsigned __int64": "uint64",
             "unsigned __int128": "uint128",
-            "unsigned __int128": "uint128",
 
             "wchar_t": "wchar",
 
@@ -233,7 +236,7 @@ class cstruct:
         """
         self.add_type(name, self._make_type(name, (type_,), size, alignment=alignment, attrs=kwargs))
 
-    def load(self, definition: str, deftype: int = None, **kwargs) -> cstruct:
+    def load(self, definition: str, deftype: int | None = None, **kwargs) -> cstruct:
         """Parse structures from the given definitions using the given definition type.
 
         Definitions can be parsed using different parsers. Currently, there's
@@ -259,7 +262,7 @@ class cstruct:
 
         return self
 
-    def loadfile(self, path: str, deftype: int = None, **kwargs) -> None:
+    def loadfile(self, path: str, deftype: int | None = None, **kwargs) -> None:
         """Load structure definitions from a file.
 
         The given path will be read and parsed using the .load() function.
@@ -269,7 +272,7 @@ class cstruct:
             deftype: The definition type to parse the definitions with.
             **kwargs: Keyword arguments for parsers.
         """
-        with open(path) as fh:
+        with Path(path).open() as fh:
             self.load(fh.read(), deftype, **kwargs)
 
     def read(self, name: str, stream: BinaryIO) -> Any:
@@ -354,10 +357,10 @@ class cstruct:
 
         return self._make_type(name, bases, size, alignment=type_.alignment, attrs=attrs)
 
-    def _make_int_type(self, name: str, size: int, signed: bool, *, alignment: int = None) -> type[Int]:
+    def _make_int_type(self, name: str, size: int, signed: bool, *, alignment: int | None = None) -> type[Int]:
         return self._make_type(name, (Int,), size, alignment=alignment, attrs={"signed": signed})
 
-    def _make_packed_type(self, name: str, packchar: str, base: type, *, alignment: int = None) -> type[Packed]:
+    def _make_packed_type(self, name: str, packchar: str, base: type, *, alignment: int | None = None) -> type[Packed]:
         return self._make_type(
             name,
             (base, Packed),
@@ -414,8 +417,7 @@ def ctypes(structure: Structure) -> _ctypes.Structure:
         t = ctypes_type(field.type)
         fields.append((field.name, t))
 
-    tt = type(structure.name, (_ctypes.Structure,), {"_fields_": fields})
-    return tt
+    return type(structure.name, (_ctypes.Structure,), {"_fields_": fields})
 
 
 def ctypes_type(type_: MetaType) -> Any:

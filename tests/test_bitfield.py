@@ -157,10 +157,8 @@ def test_bitfield_straddle(cs: cstruct, compiled: bool) -> None:
     };
     """
 
-    with pytest.raises(ValueError) as exc:
+    with pytest.raises(ValueError, match="Straddled bit fields are unsupported"):
         cs.load(cdef, compiled=compiled)
-
-    assert str(exc.value) == "Straddled bit fields are unsupported"
 
 
 def test_bitfield_write(cs: cstruct, compiled: bool) -> None:
@@ -285,7 +283,7 @@ def test_bitfield_dynamic(cs: cstruct, compiled: bool) -> None:
     cs.load(cdef, compiled=compiled)
     assert verify_compiled(cs.test, compiled)
 
-    buf = io.BytesIO(b"\x00\x00\xF4\x00help")
+    buf = io.BytesIO(b"\x00\x00\xf4\x00help")
     buf.seek(2)
     obj = cs.test(buf)
 

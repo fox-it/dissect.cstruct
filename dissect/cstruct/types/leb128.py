@@ -28,9 +28,8 @@ class LEB128(int, BaseType):
             if (b & 0x80) == 0:
                 break
 
-        if cls.signed:
-            if b & 0x40 != 0:
-                result |= ~0 << shift
+        if cls.signed and b & 0x40 != 0:
+            result |= ~0 << shift
 
         return cls.__new__(cls, result)
 
