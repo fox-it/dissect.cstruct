@@ -255,3 +255,17 @@ def test_flag_anonymous_struct(cs: cstruct, compiled: bool) -> None:
 
     t = test(b"\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00")
     assert t.arr == [255, 0, 0, 10]
+
+
+def test_flag_default(cs: cstruct) -> None:
+    cdef = """
+    flag test {
+        A,
+        B,
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test.default() == cs.test(0)
+    assert cs.test[1].default() == [cs.test(0)]
+    assert cs.test[None].default() == []

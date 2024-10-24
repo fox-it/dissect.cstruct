@@ -27,7 +27,7 @@ class EnumMetaType(EnumMeta, MetaType):
     ) -> EnumMetaType:
         if name is None:
             if value is None:
-                value = cls.type()
+                value = cls.type.default()
 
             if not isinstance(value, int):
                 # value is a parsable value
@@ -64,13 +64,13 @@ class EnumMetaType(EnumMeta, MetaType):
                 return True
             return value in cls._value2member_map_
 
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Enum:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Enum:
         return cls(cls.type._read(stream, context))
 
-    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> list[Enum]:
+    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Enum]:
         return list(map(cls, cls.type._read_array(stream, count, context)))
 
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] = None) -> list[Enum]:
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Enum]:
         return list(map(cls, cls.type._read_0(stream, context)))
 
     def _write(cls, stream: BinaryIO, data: Enum) -> int:
@@ -82,7 +82,7 @@ class EnumMetaType(EnumMeta, MetaType):
 
     def _write_0(cls, stream: BinaryIO, array: list[BaseType]) -> int:
         data = [entry.value if isinstance(entry, Enum) else entry for entry in array]
-        return cls._write_array(stream, data + [cls.type()])
+        return cls._write_array(stream, data + [cls.type.default()])
 
 
 def _fix_alias_members(cls: type[Enum]) -> None:

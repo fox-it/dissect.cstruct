@@ -3,8 +3,8 @@ import inspect
 import pytest
 
 from dissect.cstruct.cstruct import cstruct
-from dissect.cstruct.types.base import Array
-from dissect.cstruct.types.structure import Field, Union
+from dissect.cstruct.types.base import Array, BaseType
+from dissect.cstruct.types.structure import Field, Union, UnionProxy
 
 from .utils import verify_compiled
 
@@ -33,12 +33,17 @@ def test_union(TestUnion: type[Union]) -> None:
     obj = TestUnion(1, 2)
     assert isinstance(obj, TestUnion)
     assert obj.a == 1
-    assert obj.b == 2
+    assert obj.b == 1
     assert len(obj) == 4
 
     obj = TestUnion(a=1)
     assert obj.a == 1
-    assert obj.b is None
+    assert obj.b == 1
+    assert len(obj) == 4
+
+    obj = TestUnion(b=1)
+    assert obj.a == 1
+    assert obj.b == 1
     assert len(obj) == 4
 
     assert hash((obj.a, obj.b)) == hash(obj)
@@ -50,6 +55,20 @@ def test_union_read(TestUnion: type[Union]) -> None:
     assert isinstance(obj, TestUnion)
     assert obj.a == 1
     assert obj.b == 1
+
+
+def test_union_read_offset(cs: cstruct, TestUnion: type[Union]) -> None:
+    TestUnion.add_field("c", cs.uint8, offset=3)
+
+    obj = TestUnion(b"\x01\x00\x00\x02")
+    assert obj.a == 0x02000001
+    assert obj.b == 0x0001
+    assert obj.c == 0x02
+
+    obj = TestUnion(1)
+    assert obj.a == 1
+    assert obj.b == 1
+    assert obj.c == 0
 
 
 def test_union_write(TestUnion: type[Union]) -> None:
@@ -67,6 +86,35 @@ def test_union_write(TestUnion: type[Union]) -> None:
 
     obj = TestUnion()
     assert obj.dumps() == b"\x00\x00\x00\x00"
+
+    obj = TestUnion(5, 1)
+    assert obj.dumps() == b"\x05\x00\x00\x00"
+    obj.a = None
+    assert obj.a == 0
+    assert obj.dumps() == b"\x00\x00\x00\x00"
+
+    obj = TestUnion(None, 1)
+    assert obj.a == 0
+    assert obj.dumps() == b"\x00\x00\x00\x00"
+
+    obj = TestUnion(1, None)
+    assert obj.b == 1
+    assert obj.dumps() == b"\x01\x00\x00\x00"
+
+
+def test_union_write_anonymous(cs: cstruct) -> None:
+    cdef = """
+    union test {
+        struct {
+            uint32 a;
+        };
+    };
+    """
+    cs.load(cdef)
+
+    obj = cs.test(b"\x01\x00\x00\x00")
+    assert obj.a == 1
+    assert obj.dumps() == b"\x01\x00\x00\x00"
 
 
 def test_union_array_read(TestUnion: type[Union]) -> None:
@@ -155,7 +203,7 @@ def test_union_cmp(TestUnion: type[Union]) -> None:
 
 def test_union_repr(TestUnion: type[Union]) -> None:
     obj = TestUnion(1, 2)
-    assert repr(obj) == f"<{TestUnion.__name__} a=0x1 b=0x2>"
+    assert repr(obj) == f"<{TestUnion.__name__} a=0x1 b=0x1>"
 
 
 def test_union_eof(TestUnion: type[Union]) -> None:
@@ -213,6 +261,11 @@ def test_union_definition_nested(cs: cstruct, compiled: bool) -> None:
 
     buf = b"zomgholybeef"
     obj = cs.test(buf)
+
+    assert isinstance(obj.c.a, UnionProxy)
+    assert len(obj.c.a) == 8
+    assert bytes(obj.c.a) == b"holybeef"
+    assert repr(obj.c.a) == "<a a=0x796c6f68 b=0x66656562>"
 
     assert obj.magic == b"zomg"
     assert obj.c.a.a == 0x796C6F68
@@ -273,6 +326,9 @@ def test_union_definition_dynamic(cs: cstruct) -> None:
     assert obj.a.data == b"aaaaaaaaa"
     assert obj.b == 0x6161616161616109
 
+    with pytest.raises(NotImplementedError, match="Writing dynamic unions is not yet supported"):
+        obj.dumps()
+
 
 def test_union_update(cs: cstruct) -> None:
     cdef = """
@@ -317,6 +373,10 @@ def test_union_nested_update(cs: cstruct) -> None:
     assert obj.c.a.b == 0x48474645
     assert obj.dumps() == b"1337ABCDEFGH"
 
+    obj.c.b.b = b"AAAAAAAA"
+    assert obj.c.a.a == 0x41414141
+    assert obj.dumps() == b"1337AAAAAAAA"
+
 
 def test_union_anonymous_update(cs: cstruct) -> None:
     cdef = """
@@ -338,3 +398,135 @@ def test_union_anonymous_update(cs: cstruct) -> None:
     obj = cs.test()
     obj.a = 0x41414141
     assert obj.b == b"AAA"
+
+
+def test_union_default(cs: cstruct) -> None:
+    cdef = """
+    union test {
+        uint32 a;
+        char   b[8];
+    };
+
+    struct test_nested {
+        test   t_union;
+        test   t_union_array[2];
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test() == cs.test.default()
+
+    obj = cs.test()
+    assert obj.a == 0
+    assert obj.b == b"\x00\x00\x00\x00\x00\x00\x00\x00"
+
+    assert obj.dumps() == b"\x00" * 8
+
+    for name in obj.fields.keys():
+        assert isinstance(getattr(obj, name), BaseType)
+
+    assert cs.test_nested() == cs.test_nested.default()
+
+    obj = cs.test_nested.default()
+    assert obj.t_union == cs.test.default()
+    assert obj.t_union_array == [cs.test.default(), cs.test.default()]
+
+    assert obj.dumps() == b"\x00" * 24
+
+    for name in obj.fields.keys():
+        assert isinstance(getattr(obj, name), BaseType)
+
+
+def test_union_default_dynamic(cs: cstruct) -> None:
+    """initialization of a dynamic union is not yet supported"""
+    cdef = """
+    union test {
+        uint8  x;
+        char   b_n[];
+        char   b_d[x];
+    };
+
+    struct test_nested {
+        uint8  x;
+        test   t_union_n[];
+        test   t_union_d[x];
+    };
+    """
+    cs.load(cdef)
+
+    obj = cs.test()
+    assert obj.x == 0
+    assert obj.b_n == b""
+    assert obj.b_d == b""
+
+    obj = cs.test_nested()
+    assert obj.x == 0
+    assert obj.t_union_n == []
+    assert obj.t_union_d == []
+
+
+def test_union_partial_initialization(cs: cstruct) -> None:
+    """partial initialization of a union should fill in the rest with appropriate values"""
+    cdef = """
+    union test {
+        uint8 a;
+        uint8 b;
+    };
+    """
+    cs.load(cdef)
+
+    obj = cs.test()
+    assert obj.a == 0
+    assert obj.b == 0
+    assert str(obj) == "<test a=0x0 b=0x0>"
+
+    obj = cs.test(1, 1)
+    assert obj.a == 1
+    assert obj.b == 1
+    assert str(obj) == "<test a=0x1 b=0x1>"
+
+    obj = cs.test(1)
+    assert obj.a == 1
+    assert obj.b == 1
+    assert str(obj) == "<test a=0x1 b=0x1>"
+
+    obj = cs.test(a=1)
+    assert obj.a == 1
+    assert obj.b == 1
+    assert str(obj) == "<test a=0x1 b=0x1>"
+
+    obj = cs.test(b=1)
+    assert obj.a == 1
+    assert obj.b == 1
+    assert str(obj) == "<test a=0x1 b=0x1>"
+
+    obj = cs.test(a=1, b=2)
+    assert obj.a == 1
+    assert obj.b == 1
+    assert str(obj) == "<test a=0x1 b=0x1>"
+
+    obj = cs.test(b=2, a=1)
+    assert obj.a == 2
+    assert obj.b == 2
+    assert str(obj) == "<test a=0x2 b=0x2>"
+
+
+def test_union_partial_initialization_dynamic(cs: cstruct) -> None:
+    """partial initialization of a dynamic union should fill in the rest with appropriate values"""
+    cdef = """
+    union test {
+        uint8  x;
+        char   b_n[];
+        char   b_d[x];
+    };
+    """
+    cs.load(cdef)
+
+    # Default initialization should already work
+    cs.test()
+
+    with pytest.raises(NotImplementedError, match="Initializing a dynamic union is not yet supported"):
+        cs.test(1)
+
+    with pytest.raises(NotImplementedError, match="Initializing a dynamic union is not yet supported"):
+        cs.test(x=1)

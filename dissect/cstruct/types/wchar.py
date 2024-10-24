@@ -10,7 +10,7 @@ class WcharArray(str, BaseType, metaclass=ArrayMetaType):
     """Wide-character array type for reading and writing UTF-16 strings."""
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> WcharArray:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> WcharArray:
         return type.__call__(cls, ArrayMetaType._read(cls, stream, context))
 
     @classmethod
@@ -38,11 +38,11 @@ class Wchar(str, BaseType):
     }
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Wchar:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Wchar:
         return cls._read_array(stream, 1, context)
 
     @classmethod
-    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] = None) -> Wchar:
+    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> Wchar:
         if count == 0:
             return type.__call__(cls, "")
 
@@ -56,7 +56,7 @@ class Wchar(str, BaseType):
         return type.__call__(cls, data.decode(cls.__encoding_map__[cls.cs.endian]))
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Wchar:
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Wchar:
         buf = []
         while True:
             point = stream.read(2)

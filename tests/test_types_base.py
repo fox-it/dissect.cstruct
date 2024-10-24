@@ -87,7 +87,7 @@ def test_eof(cs: cstruct, compiled: bool) -> None:
 
 def test_custom_array_type(cs: cstruct, compiled: bool) -> None:
     class CustomType(BaseType):
-        def __init__(self, value):
+        def __init__(self, value: bytes = b""):
             self.value = value.upper()
 
         @classmethod
@@ -98,7 +98,11 @@ def test_custom_array_type(cs: cstruct, compiled: bool) -> None:
 
         class ArrayType(BaseType, metaclass=ArrayMetaType):
             @classmethod
-            def _read(cls, stream: BinaryIO, context: dict | None = None) -> CustomType.ArrayType:
+            def default(cls) -> CustomType:
+                return cls.type()
+
+            @classmethod
+            def _read(cls, stream: BinaryIO, context: dict | None = None) -> CustomType:
                 value = cls.type._read(stream, context)
                 if str(cls.num_entries) == "lower":
                     value.value = value.value.lower()
@@ -123,7 +127,7 @@ def test_custom_array_type(cs: cstruct, compiled: bool) -> None:
     """
     cs.load(cdef, compiled=compiled)
 
-    # We just don't want to compiler to blow up with a custom type
+    # We don't want the compiler to blow up with a custom type
     assert not cs.test.__compiled__
 
     result = cs.test(b"\x04asdf\x04asdf")

@@ -4,13 +4,19 @@ import io
 from contextlib import contextmanager
 from enum import Enum
 from functools import lru_cache
+from itertools import chain
 from operator import attrgetter
 from textwrap import dedent
 from types import FunctionType
-from typing import Any, BinaryIO, Callable, ContextManager
+from typing import Any, BinaryIO, Callable, Iterator
 
 from dissect.cstruct.bitbuffer import BitBuffer
-from dissect.cstruct.types.base import BaseType, MetaType
+from dissect.cstruct.types.base import (
+    BaseType,
+    MetaType,
+    _is_buffer_type,
+    _is_readable_type,
+)
 from dissect.cstruct.types.enum import EnumMetaType
 from dissect.cstruct.types.pointer import Pointer
 
@@ -65,7 +71,7 @@ class StructureMetaType(MetaType):
             # Shortcut for single char/bytes type
             return type.__call__(cls, *args, **kwargs)
         elif not args and not kwargs:
-            obj = cls(**{field.name: field.type.default() for field in cls.__fields__})
+            obj = type.__call__(cls)
             object.__setattr__(obj, "_values", {})
             object.__setattr__(obj, "_sizes", {})
             return obj
@@ -77,7 +83,6 @@ class StructureMetaType(MetaType):
 
         lookup = {}
         raw_lookup = {}
-        init_names = []
         field_names = []
         for field in fields:
             if field.name in lookup and field.name != "_":
@@ -94,25 +99,21 @@ class StructureMetaType(MetaType):
 
             raw_lookup[field.name] = field
 
-        num_fields = len(lookup)
         field_names = lookup.keys()
-        init_names = raw_lookup.keys()
         classdict["fields"] = lookup
         classdict["lookup"] = raw_lookup
         classdict["__fields__"] = fields
-        classdict["__bool__"] = _patch_attributes(_make__bool__(num_fields), field_names, 1)
+        classdict["__bool__"] = _generate__bool__(field_names)
 
         if issubclass(cls, UnionMetaType) or isinstance(cls, UnionMetaType):
-            classdict["__init__"] = _patch_setattr_args_and_attributes(
-                _make_setattr__init__(len(init_names)), init_names
-            )
+            classdict["__init__"] = _generate_union__init__(raw_lookup.values())
             # Not a great way to do this but it works for now
             classdict["__eq__"] = Union.__eq__
         else:
-            classdict["__init__"] = _patch_args_and_attributes(_make__init__(len(init_names)), init_names)
-            classdict["__eq__"] = _patch_attributes(_make__eq__(num_fields), field_names, 1)
+            classdict["__init__"] = _generate_structure__init__(raw_lookup.values())
+            classdict["__eq__"] = _generate__eq__(field_names)
 
-        classdict["__hash__"] = _patch_attributes(_make__hash__(num_fields), field_names, 1)
+        classdict["__hash__"] = _generate__hash__(field_names)
 
         # If we're calling this as a class method or a function on the metaclass
         if issubclass(cls, type):
@@ -229,7 +230,7 @@ class StructureMetaType(MetaType):
         # The structure size is whatever the currently calculated offset is
         return offset, alignment
 
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Structure:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Structure:
         bit_buffer = BitBuffer(stream, cls.cs.endian)
         struct_start = stream.tell()
 
@@ -271,12 +272,14 @@ class StructureMetaType(MetaType):
             # Align the stream
             stream.seek(-stream.tell() & (cls.alignment - 1), io.SEEK_CUR)
 
-        obj = cls(**result)
+        # Using type.__call__ directly calls the __init__ method of the class
+        # This is faster than calling cls() and bypasses the metaclass __call__ method
+        obj = type.__call__(cls, **result)
         obj._sizes = sizes
         obj._values = result
         return obj
 
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] = None) -> list[Structure]:
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Structure]:
         result = []
 
         while obj := cls._read(stream, context):
@@ -322,7 +325,7 @@ class StructureMetaType(MetaType):
 
             value = getattr(data, field.name, None)
             if value is None:
-                value = field_type()
+                value = field_type.default()
 
             if field.bits:
                 if isinstance(field_type, EnumMetaType):
@@ -350,7 +353,7 @@ class StructureMetaType(MetaType):
             cls.commit()
 
     @contextmanager
-    def start_update(cls) -> ContextManager:
+    def start_update(cls) -> Iterator[None]:
         try:
             cls.__updating__ = True
             yield
@@ -397,11 +400,27 @@ class UnionMetaType(StructureMetaType):
     """Base metaclass for cstruct union type classes."""
 
     def __call__(cls, *args, **kwargs) -> Union:
-        obj = super().__call__(*args, **kwargs)
-        if kwargs:
-            # Calling with kwargs means we are initializing with values
-            # Proxify all values
+        obj: Union = super().__call__(*args, **kwargs)
+
+        # Calling with non-stream args or kwargs means we are initializing with values
+        if (args and not (len(args) == 1 and (_is_readable_type(args[0]) or _is_buffer_type(args[0])))) or kwargs:
+            # We don't support user initialization of dynamic unions yet
+            if cls.dynamic:
+                raise NotImplementedError("Initializing a dynamic union is not yet supported")
+
+            # User (partial) initialization, rebuild the union
+            # First user-provided field is the one used to rebuild the union
+            arg_fields = (field.name for _, field in zip(args, cls.__fields__))
+            kwarg_fields = (name for name in kwargs if name in cls.lookup)
+            if (first_field := next(chain(arg_fields, kwarg_fields), None)) is not None:
+                obj._rebuild(first_field)
+        elif not args and not kwargs:
+            # Initialized with default values
+            # Note that we proxify here in case we have a default initialization (cls())
+            # We don't proxify in case we read from a stream, as we do that later on in _read at a more appropriate time
+            # Same with (partial) user initialization, we do that after rebuilding the union
             obj._proxify()
+
         return obj
 
     def _calculate_size_and_offsets(cls, fields: list[Field], align: bool = False) -> tuple[int | None, int]:
@@ -425,7 +444,9 @@ class UnionMetaType(StructureMetaType):
 
         return size, alignment
 
-    def _read_fields(cls, stream: BinaryIO, context: dict[str, Any] = None) -> tuple[dict[str, Any], dict[str, int]]:
+    def _read_fields(
+        cls, stream: BinaryIO, context: dict[str, Any] | None = None
+    ) -> tuple[dict[str, Any], dict[str, int]]:
         result = {}
         sizes = {}
 
@@ -451,7 +472,7 @@ class UnionMetaType(StructureMetaType):
 
         return result, sizes
 
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Union:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Union:
         if cls.size is None:
             start = stream.tell()
             result, sizes = cls._read_fields(stream, context)
@@ -463,7 +484,12 @@ class UnionMetaType(StructureMetaType):
             sizes = {}
             buf = stream.read(cls.size)
 
-        obj: Union = cls(**result)
+        # Create the object and set the values
+        # Using type.__call__ directly calls the __init__ method of the class
+        # This is faster than calling cls() and bypasses the metaclass __call__ method
+        # It also makes it easier to differentiate between user-initialization of the class
+        # and initialization from a stream read
+        obj: Union = type.__call__(cls, **result)
         object.__setattr__(obj, "_values", result)
         object.__setattr__(obj, "_sizes", sizes)
         object.__setattr__(obj, "_buf", buf)
@@ -471,14 +497,20 @@ class UnionMetaType(StructureMetaType):
         if cls.size is not None:
             obj._update()
 
+        # Proxify any nested structures
+        obj._proxify()
+
         return obj
 
     def _write(cls, stream: BinaryIO, data: Union) -> int:
+        if cls.dynamic:
+            raise NotImplementedError("Writing dynamic unions is not yet supported")
+
         offset = stream.tell()
         expected_offset = offset + len(cls)
 
         # Sort by largest field
-        fields = sorted(cls.__fields__, key=lambda e: len(e.type), reverse=True)
+        fields = sorted(cls.__fields__, key=lambda e: e.type.size or 0, reverse=True)
         anonymous_struct = False
 
         # Try to write by largest field
@@ -488,12 +520,8 @@ class UnionMetaType(StructureMetaType):
                 anonymous_struct = field.type
                 continue
 
-            # Skip empty values
-            if (value := getattr(data, field.name)) is None:
-                continue
-
-            # We have a value, write it
-            field.type._write(stream, value)
+            # Write the value
+            field.type._write(stream, getattr(data, field.name))
             break
 
         # If we haven't written anything yet and we initially skipped an anonymous struct, write it now
@@ -527,13 +555,20 @@ class Union(Structure, metaclass=UnionMetaType):
             cur_buf = b"\x00" * self.__class__.size
 
         buf = io.BytesIO(cur_buf)
-        field = self.__class__.fields[attr]
+        field = self.__class__.lookup[attr]
         if field.offset:
             buf.seek(field.offset)
-        field.type._write(buf, getattr(self, attr))
+
+        if (value := getattr(self, attr)) is None:
+            value = field.type.default()
+
+        field.type._write(buf, value)
 
         object.__setattr__(self, "_buf", buf.getvalue())
         self._update()
+
+        # (Re-)proxify all values
+        self._proxify()
 
     def _update(self) -> None:
         result, sizes = self.__class__._read_fields(io.BytesIO(self._buf))
@@ -596,65 +631,71 @@ def attrsetter(path: str) -> Callable[[Any], Any]:
 
 
 def _codegen(func: FunctionType) -> FunctionType:
-    # Inspired by https://github.com/dabeaz/dataklasses
-    @lru_cache
+    """Decorator that generates a template function with a specified number of fields.
+
+    This code is a little complex but allows use to cache generated functions for a specific number of fields.
+    For example, if we generate a structure with 10 fields, we can cache the generated code for that structure.
+    We can then reuse that code and patch it with the correct field names when we create a new structure with 10 fields.
+
+    The functions that are decorated with this decorator should take a list of field names and return a string of code.
+    The decorated function is needs to be called with the number of fields, instead of the field names.
+    The confusing part is that that the original function takes field names, but you then call it with
+    the number of fields instead.
+
+    Inspired by https://github.com/dabeaz/dataklasses.
+
+    Args:
+        func: The decorated function that takes a list of field names and returns a string of code.
+
+    Returns:
+        A cached function that generates the desired function code, to be called with the number of fields.
+    """
+
     def make_func_code(num_fields: int) -> FunctionType:
-        names = [f"_{n}" for n in range(num_fields)]
-        exec(func(names), {}, d := {})
+        exec(func([f"_{n}" for n in range(num_fields)]), {}, d := {})
         return d.popitem()[1]
 
-    return make_func_code
-
-
-def _patch_args_and_attributes(func: FunctionType, fields: list[str], start: int = 0) -> FunctionType:
-    return type(func)(
-        func.__code__.replace(
-            co_names=(*func.__code__.co_names[:start], *fields),
-            co_varnames=("self", *fields),
-        ),
-        func.__globals__,
-        argdefs=func.__defaults__,
-    )
-
-
-def _patch_setattr_args_and_attributes(func: FunctionType, fields: list[str], start: int = 0) -> FunctionType:
-    return type(func)(
-        func.__code__.replace(
-            co_consts=(None, *fields),
-            co_varnames=("self", *fields),
-        ),
-        func.__globals__,
-        argdefs=func.__defaults__,
-    )
-
-
-def _patch_attributes(func: FunctionType, fields: list[str], start: int = 0) -> FunctionType:
-    return type(func)(
-        func.__code__.replace(co_names=(*func.__code__.co_names[:start], *fields)),
-        func.__globals__,
-    )
+    make_func_code.__wrapped__ = func
+    return lru_cache(make_func_code)
 
 
 @_codegen
-def _make__init__(fields: list[str]) -> str:
-    field_args = ", ".join(f"{field} = None" for field in fields)
-    field_init = "\n".join(f" self.{name} = {name}" for name in fields)
+def _make_structure__init__(fields: list[str]) -> str:
+    """Generates an ``__init__`` method for a structure with the specified fields.
 
-    code = f"def __init__(self{', ' + field_args if field_args else ''}):\n"
+    Args:
+        fields: List of field names.
+    """
+    field_args = ", ".join(f"{field} = None" for field in fields)
+    field_init = "\n".join(f" self.{name} = {name} if {name} is not None else {i}" for i, name in enumerate(fields))
+
+    code = f"def __init__(self{', ' + field_args or ''}):\n"
     return code + (field_init or " pass")
 
 
 @_codegen
-def _make_setattr__init__(fields: list[str]) -> str:
-    field_args = ", ".join(f"{field} = None" for field in fields)
-    field_init = "\n".join(f" object.__setattr__(self, {name!r}, {name})" for name in fields)
+def _make_union__init__(fields: list[str]) -> str:
+    """Generates an ``__init__`` method for a class with the specified fields using setattr.
 
-    code = f"def __init__(self{', ' + field_args if field_args else ''}):\n"
+    Args:
+        fields: List of field names.
+    """
+    field_args = ", ".join(f"{field} = None" for field in fields)
+    field_init = "\n".join(
+        f" object.__setattr__(self, '{name}', {name} if {name} is not None else {i})" for i, name in enumerate(fields)
+    )
+
+    code = f"def __init__(self{', ' + field_args or ''}):\n"
     return code + (field_init or " pass")
 
 
 @_codegen
 def _make__eq__(fields: list[str]) -> str:
+    """Generates an ``__eq__`` method for a class with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
     self_vals = ",".join(f"self.{name}" for name in fields)
     other_vals = ",".join(f"other.{name}" for name in fields)
 
@@ -676,6 +717,11 @@ def _make__eq__(fields: list[str]) -> str:
 
 @_codegen
 def _make__bool__(fields: list[str]) -> str:
+    """Generates a ``__bool__`` method for a class with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
     vals = ", ".join(f"self.{name}" for name in fields)
 
     code = f"""
@@ -688,6 +734,11 @@ def _make__bool__(fields: list[str]) -> str:
 
 @_codegen
 def _make__hash__(fields: list[str]) -> str:
+    """Generates a ``__hash__`` method for a class with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
     vals = ", ".join(f"self.{name}" for name in fields)
 
     code = f"""
@@ -696,3 +747,83 @@ def _make__hash__(fields: list[str]) -> str:
     """
 
     return dedent(code)
+
+
+def _patch_attributes(func: FunctionType, fields: list[str], start: int = 0) -> FunctionType:
+    """Patches a function's attributes.
+
+    Args:
+        func: The function to patch.
+        fields: List of field names to add.
+        start: The starting index for patching. Defaults to 0.
+    """
+    return type(func)(
+        func.__code__.replace(co_names=(*func.__code__.co_names[:start], *fields)),
+        func.__globals__,
+    )
+
+
+def _generate_structure__init__(fields: list[Field]) -> FunctionType:
+    """Generates an ``__init__`` method for a structure with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    field_names = [field.name for field in fields]
+
+    template: FunctionType = _make_structure__init__(len(field_names))
+    return type(template)(
+        template.__code__.replace(
+            co_consts=(None, *[field.type.default() for field in fields]),
+            co_names=(*field_names,),
+            co_varnames=("self", *field_names),
+        ),
+        template.__globals__,
+        argdefs=template.__defaults__,
+    )
+
+
+def _generate_union__init__(fields: list[Field]) -> FunctionType:
+    """Generates an ``__init__`` method for a union with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    field_names = [field.name for field in fields]
+
+    template: FunctionType = _make_union__init__(len(field_names))
+    return type(template)(
+        template.__code__.replace(
+            co_consts=(None, *sum([(field.name, field.type.default()) for field in fields], ())),
+            co_varnames=("self", *field_names),
+        ),
+        template.__globals__,
+        argdefs=template.__defaults__,
+    )
+
+
+def _generate__eq__(fields: list[str]) -> FunctionType:
+    """Generates an ``__eq__`` method for a class with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    return _patch_attributes(_make__eq__(len(fields)), fields, 1)
+
+
+def _generate__bool__(fields: list[str]) -> FunctionType:
+    """Generates a ``__bool__`` method for a class with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    return _patch_attributes(_make__bool__(len(fields)), fields, 1)
+
+
+def _generate__hash__(fields: list[str]) -> FunctionType:
+    """Generates a ``__hash__`` method for a class with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    return _patch_attributes(_make__hash__(len(fields)), fields, 1)

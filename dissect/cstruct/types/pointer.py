@@ -12,11 +12,11 @@ class Pointer(int, BaseType):
     """Pointer to some other type."""
 
     type: MetaType
-    _stream: BinaryIO
-    _context: dict[str, Any]
+    _stream: BinaryIO | None
+    _context: dict[str, Any] | None
     _value: BaseType
 
-    def __new__(cls, value: int, stream: BinaryIO, context: dict[str, Any] = None) -> Pointer:
+    def __new__(cls, value: int, stream: BinaryIO | None, context: dict[str, Any] | None = None) -> Pointer:
         obj = super().__new__(cls, value)
         obj._stream = stream
         obj._context = context
@@ -66,7 +66,11 @@ class Pointer(int, BaseType):
         return type.__call__(self.__class__, int.__or__(self, other), self._stream, self._context)
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] = None) -> Pointer:
+    def default(cls) -> Pointer:
+        return cls.__new__(cls, cls.cs.pointer.default(), None, None)
+
+    @classmethod
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Pointer:
         return cls.__new__(cls, cls.cs.pointer._read(stream, context), stream, context)
 
     @classmethod
@@ -74,7 +78,7 @@ class Pointer(int, BaseType):
         return cls.cs.pointer._write(stream, data)
 
     def dereference(self) -> Any:
-        if self == 0:
+        if self == 0 or self._stream is None:
             raise NullPointerDereference()
 
         if self._value is None and not issubclass(self.type, Void):

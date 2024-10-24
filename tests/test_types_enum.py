@@ -407,3 +407,17 @@ def test_enum_reference_own_member(cs: cstruct, compiled: bool) -> None:
     assert cs.test.A == 0
     assert cs.test.B == 3
     assert cs.test.C == 4
+
+
+def test_enum_default(cs: cstruct) -> None:
+    cdef = """
+    enum test {
+        A,
+        B,
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test.default() == cs.test.A == cs.test(0)
+    assert cs.test[1].default() == [cs.test.A]
+    assert cs.test[None].default() == []

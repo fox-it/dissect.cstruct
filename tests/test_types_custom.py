@@ -13,6 +13,10 @@ class EtwPointer(BaseType):
     size: int | None
 
     @classmethod
+    def default(cls) -> int:
+        return cls.cs.uint64.default()
+
+    @classmethod
     def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> BaseType:
         return cls.type._read(stream, context)
 
@@ -41,12 +45,12 @@ def test_adding_custom_type(cs: cstruct) -> None:
     cs.EtwPointer.as_64bit()
     assert cs.EtwPointer.type is cs.uint64
     assert len(cs.EtwPointer) == 8
-    assert cs.EtwPointer(b"\xDE\xAD\xBE\xEF" * 2).dumps() == b"\xDE\xAD\xBE\xEF" * 2
+    assert cs.EtwPointer(b"\xde\xad\xbe\xef" * 2).dumps() == b"\xde\xad\xbe\xef" * 2
 
     cs.EtwPointer.as_32bit()
     assert cs.EtwPointer.type is cs.uint32
     assert len(cs.EtwPointer) == 4
-    assert cs.EtwPointer(b"\xDE\xAD\xBE\xEF" * 2).dumps() == b"\xDE\xAD\xBE\xEF"
+    assert cs.EtwPointer(b"\xde\xad\xbe\xef" * 2).dumps() == b"\xde\xad\xbe\xef"
 
 
 def test_using_type_in_struct(cs: cstruct) -> None:
@@ -62,13 +66,26 @@ def test_using_type_in_struct(cs: cstruct) -> None:
     cs.load(struct_definition)
 
     cs.EtwPointer.as_64bit()
-    assert len(cs.test().data) == 8
-
     with pytest.raises(EOFError):
         # Input too small
-        cs.test(b"\xDE\xAD\xBE\xEF" * 3)
+        cs.test(b"\xde\xad\xbe\xef" * 3)
 
     cs.EtwPointer.as_32bit()
-    assert len(cs.test().data) == 4
 
-    assert cs.test(b"\xDE\xAD\xBE\xEF" * 3).data.dumps() == b"\xDE\xAD\xBE\xEF"
+    obj = cs.test(b"\xde\xad\xbe\xef" * 3)
+    assert obj.data == 0xEFBEADDE
+    assert obj.data2 == 0xEFBEADDEEFBEADDE
+    assert obj.data.dumps() == b"\xde\xad\xbe\xef"
+
+
+def test_custom_default(cs: cstruct) -> None:
+    cs.add_custom_type("EtwPointer", EtwPointer)
+
+    cs.EtwPointer.as_64bit()
+    assert cs.EtwPointer.default() == 0
+
+    cs.EtwPointer.as_32bit()
+    assert cs.EtwPointer.default() == 0
+
+    assert cs.EtwPointer[1].default() == [0]
+    assert cs.EtwPointer[None].default() == []
