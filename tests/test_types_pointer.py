@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from unittest.mock import patch
 
 import pytest
@@ -180,7 +182,7 @@ def test_pointer_struct_pointer(cs: cstruct, compiled: bool) -> None:
     assert obj.dumps() == b"\x02\x00"
 
     with pytest.raises(NullPointerDereference):
-        cs.ptrtest(b"\x00\x00\x00\x00").ptr.magic
+        cs.ptrtest(b"\x00\x00\x00\x00").ptr.magic  # noqa: B018
 
 
 def test_pointer_array(cs: cstruct, compiled: bool) -> None:

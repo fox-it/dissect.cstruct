@@ -1,8 +1,13 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pytest
 
-from dissect.cstruct.cstruct import cstruct
-
 from .utils import verify_compiled
+
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import cstruct
 
 
 def test_packed_read(cs: cstruct) -> None:
@@ -125,7 +130,7 @@ def test_packed_eof(cs: cstruct) -> None:
         cs.uint32[None](b"\x00\x00\x00\x01")
 
 
-def test_packed_range(cs) -> None:
+def test_packed_range(cs: cstruct) -> None:
     cs.float16(-65519.999999999996).dumps()
     cs.float16(65519.999999999996).dumps()
     with pytest.raises(OverflowError):

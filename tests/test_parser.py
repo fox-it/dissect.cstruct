@@ -1,11 +1,16 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 import pytest
 
-from dissect.cstruct import cstruct
 from dissect.cstruct.exceptions import ParserError
 from dissect.cstruct.parser import TokenParser
 from dissect.cstruct.types import ArrayMetaType, Pointer
+
+if TYPE_CHECKING:
+    from dissect.cstruct import cstruct
 
 
 def test_nested_structs(cs: cstruct, compiled: bool) -> None:
@@ -20,7 +25,7 @@ def test_nested_structs(cs: cstruct, compiled: bool) -> None:
     cs.load(cdef, compiled=compiled)
     data = b"\x00\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00"
     obj = cs.nest(data)
-    for i in range(0, 4):
+    for i in range(4):
         assert obj.a[i].b == i
 
 

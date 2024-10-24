@@ -11,6 +11,7 @@ from dissect.cstruct.types.void import Void
 from dissect.cstruct.types.wchar import Wchar, WcharArray
 
 __all__ = [
+    "LEB128",
     "Array",
     "ArrayMetaType",
     "BaseType",
@@ -20,7 +21,6 @@ __all__ = [
     "Field",
     "Flag",
     "Int",
-    "LEB128",
     "MetaType",
     "Packed",
     "Pointer",

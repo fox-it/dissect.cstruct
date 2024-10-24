@@ -122,7 +122,7 @@ class MetaType(type):
             stream: The stream to read from.
             context: Optional reading context.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[BaseType]:
         """Internal function for reading array values.
@@ -136,11 +136,8 @@ class MetaType(type):
         """
         if count == EOF:
             result = []
-            while True:
-                try:
-                    result.append(cls._read(stream, context))
-                except EOFError:
-                    break
+            while not _is_eof(stream):
+                result.append(cls._read(stream, context))
             return result
 
         return [cls._read(stream, context) for _ in range(count)]
@@ -154,10 +151,10 @@ class MetaType(type):
             stream: The stream to read from.
             context: Optional reading context.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def _write(cls, stream: BinaryIO, data: Any) -> int:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def _write_array(cls, stream: BinaryIO, array: list[BaseType]) -> int:
         """Internal function for writing arrays.
@@ -179,7 +176,7 @@ class MetaType(type):
             stream: The stream to read from.
             array: The array to write.
         """
-        return cls._write_array(stream, array + [cls.__default__()])
+        return cls._write_array(stream, [*array, cls.__default__()])
 
 
 class _overload:
@@ -200,8 +197,7 @@ class _overload:
     def __get__(self, instance: BaseType | None, owner: MetaType) -> Callable[[Any], bytes]:
         if instance is None:
             return functools.partial(self.func, owner)
-        else:
-            return functools.partial(self.func, instance.__class__, value=instance)
+        return functools.partial(self.func, instance.__class__, value=instance)
 
 
 class BaseType(metaclass=MetaType):
@@ -281,6 +277,18 @@ def _is_readable_type(value: Any) -> bool:
 
 def _is_buffer_type(value: Any) -> bool:
     return isinstance(value, (bytes, memoryview, bytearray))
+
+
+def _is_eof(stream: BinaryIO) -> bool:
+    """Check if the stream has reached EOF."""
+    pos = stream.tell()
+    stream.read(1)
+
+    if stream.tell() == pos:
+        return True
+
+    stream.seek(pos)
+    return False
 
 
 # As mentioned in the BaseType class, we correctly set the type here

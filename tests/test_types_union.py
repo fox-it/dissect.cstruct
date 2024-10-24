@@ -1,12 +1,17 @@
+from __future__ import annotations
+
 import inspect
+from typing import TYPE_CHECKING
 
 import pytest
 
-from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.structure import Field, Union, UnionProxy
 
 from .utils import verify_compiled
+
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import cstruct
 
 
 @pytest.fixture
@@ -422,7 +427,7 @@ def test_union_default(cs: cstruct) -> None:
 
     assert obj.dumps() == b"\x00" * 8
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
     assert cs.test_nested() == cs.test_nested.__default__()
@@ -433,7 +438,7 @@ def test_union_default(cs: cstruct) -> None:
 
     assert obj.dumps() == b"\x00" * 24
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
 
