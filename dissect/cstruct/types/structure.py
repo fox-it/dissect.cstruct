@@ -7,8 +7,7 @@ from functools import lru_cache
 from itertools import chain
 from operator import attrgetter
 from textwrap import dedent
-from types import FunctionType
-from typing import Any, BinaryIO, Callable, Iterator
+from typing import TYPE_CHECKING, Any, BinaryIO, Callable
 
 from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.types.base import (
@@ -20,11 +19,15 @@ from dissect.cstruct.types.base import (
 from dissect.cstruct.types.enum import EnumMetaType
 from dissect.cstruct.types.pointer import Pointer
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from types import FunctionType
+
 
 class Field:
     """Structure field."""
 
-    def __init__(self, name: str, type_: MetaType, bits: int = None, offset: int = None):
+    def __init__(self, name: str, type_: MetaType, bits: int | None = None, offset: int | None = None):
         self.name = name
         self.type = type_
         self.bits = bits
@@ -70,7 +73,7 @@ class StructureMetaType(MetaType):
         ):
             # Shortcut for single char/bytes type
             return type.__call__(cls, *args, **kwargs)
-        elif not args and not kwargs:
+        if not args and not kwargs:
             obj = type.__call__(cls)
             object.__setattr__(obj, "_values", {})
             object.__setattr__(obj, "_sizes", {})
@@ -259,8 +262,7 @@ class StructureMetaType(MetaType):
                 if field.name:
                     result[field.name] = value
                 continue
-            else:
-                bit_buffer.reset()
+            bit_buffer.reset()
 
             value = field_type._read(stream, result)
 
@@ -540,7 +542,7 @@ class Union(Structure, metaclass=UnionMetaType):
 
     _buf: bytes
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         return self.__class__ is other.__class__ and bytes(self) == bytes(other)
 
     def __setattr__(self, attr: str, value: Any) -> None:

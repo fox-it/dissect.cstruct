@@ -12,7 +12,7 @@ DUMMY_CSTRUCT = cstruct()
 
 
 @pytest.mark.parametrize(
-    "input, expected",
+    ("input", "expected"),
     [
         (DUMMY_CSTRUCT.int8, _ctypes.c_int8),
         (DUMMY_CSTRUCT.char, _ctypes.c_char),

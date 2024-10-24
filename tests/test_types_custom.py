@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 import pytest
 
-from dissect.cstruct import cstruct
 from dissect.cstruct.types import BaseType, MetaType
+
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import cstruct
 
 
 class EtwPointer(BaseType):

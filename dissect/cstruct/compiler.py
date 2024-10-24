@@ -6,8 +6,7 @@ import io
 import logging
 from enum import Enum
 from textwrap import dedent, indent
-from types import MethodType
-from typing import TYPE_CHECKING, Iterator
+from typing import TYPE_CHECKING
 
 from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.types import (
@@ -30,6 +29,9 @@ from dissect.cstruct.types.enum import EnumMetaType
 from dissect.cstruct.types.packed import _struct
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from types import MethodType
+
     from dissect.cstruct.cstruct import cstruct
     from dissect.cstruct.types.structure import Field
 
@@ -127,8 +129,7 @@ class _ReadSourceGenerator:
 
         code = indent(dedent(preamble).lstrip() + read_code + dedent(outro), "    ")
 
-        template = f"def _read(cls, stream, context=None):\n{code}"
-        return template
+        return f"def _read(cls, stream, context=None):\n{code}"
 
     def _generate_fields(self) -> Iterator[str]:
         current_offset = 0
@@ -210,10 +211,9 @@ class _ReadSourceGenerator:
             else:
                 current_block.append(field)
 
-            if current_offset is not None and size is not None:
-                if not field.bits or (field.bits and bits_rollover):
-                    current_offset += size
-                    bits_rollover = False
+            if current_offset is not None and size is not None and (not field.bits or bits_rollover):
+                current_offset += size
+                bits_rollover = False
 
         yield from flush()
 

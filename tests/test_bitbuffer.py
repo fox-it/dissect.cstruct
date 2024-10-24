@@ -27,9 +27,8 @@ def test_bitbuffer_read(cs: cstruct) -> None:
     assert bb.read(cs.uint16, 4) == 0b1111
 
     bb = BitBuffer(BytesIO(b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"), "<")
-    with pytest.raises(ValueError) as exc:
+    with pytest.raises(ValueError, match="Reading straddled bits is unsupported"):
         assert bb.read(cs.uint32, 160)
-    assert str(exc.value) == "Reading straddled bits is unsupported"
 
     assert bb.read(cs.uint32, 30) == 0b111111111111111111111111111111
     assert bb.read(cs.uint32, 2) == 0b11

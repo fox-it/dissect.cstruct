@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-import os
 from io import BytesIO
-from typing import BinaryIO
+from pathlib import Path
+from typing import TYPE_CHECKING, BinaryIO
 
 import pytest
 
-from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exceptions import ArraySizeError, ParserError, ResolveError
 from dissect.cstruct.types import BaseType
 
 from .utils import verify_compiled
+
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import cstruct
 
 
 def test_duplicate_type(cs: cstruct, compiled: bool) -> None:
@@ -21,35 +23,33 @@ def test_duplicate_type(cs: cstruct, compiled: bool) -> None:
     """
     cs.load(cdef, compiled=compiled)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Duplicate type"):
         cs.load(cdef)
 
 
 def test_load_file(cs: cstruct, compiled: bool) -> None:
-    path = os.path.join(os.path.dirname(__file__), "data/testdef.txt")
+    path = Path(__file__).parent / "data/testdef.txt"
 
     cs.loadfile(path, compiled=compiled)
     assert "test" in cs.typedefs
 
 
 def test_read_type_name(cs: cstruct) -> None:
-    cs.read("uint32", b"\x01\x00\x00\x00") == 1
+    assert cs.read("uint32", b"\x01\x00\x00\x00") == 1
 
 
 def test_type_resolve(cs: cstruct) -> None:
     assert cs.resolve("BYTE") == cs.uint8
 
-    with pytest.raises(ResolveError) as excinfo:
+    with pytest.raises(ResolveError, match="Unknown type"):
         cs.resolve("fake")
-    assert "Unknown type" in str(excinfo.value)
 
     cs.add_type("ref0", "uint32")
     for i in range(1, 15):  # Recursion limit is currently 10
         cs.add_type(f"ref{i}", f"ref{i - 1}")
 
-    with pytest.raises(ResolveError) as excinfo:
+    with pytest.raises(ResolveError, match="Recursion limit exceeded"):
         cs.resolve("ref14")
-    assert "Recursion limit exceeded" in str(excinfo.value)
 
 
 def test_constants(cs: cstruct) -> None:
@@ -76,9 +76,8 @@ def test_duplicate_types(cs: cstruct) -> None:
     cs.load(cdef)
     assert cs.A
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValueError, match="Duplicate type"):
         cs.load(cdef)
-    assert "Duplicate type" in str(excinfo.value)
 
     cs.load("""typedef uint32 Test;""")
     assert cs.Test is cs.uint32
@@ -86,9 +85,8 @@ def test_duplicate_types(cs: cstruct) -> None:
     cs.load("""typedef uint32 Test;""")
     assert cs.Test is cs.uint32
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValueError, match="Duplicate type"):
         cs.load("""typedef uint64 Test;""")
-    assert "Duplicate type" in str(excinfo.value)
 
 
 def test_typedef(cs: cstruct) -> None:
@@ -238,24 +236,22 @@ def test_multipart_type_name(cs: cstruct) -> None:
     assert cs.test.__fields__[0].type == cs.resolve("unsigned int")
     assert cs.test.__fields__[1].type == cs.resolve("unsigned long long")
 
-    with pytest.raises(ResolveError) as exc:
-        cdef = """
-        struct test1 {
-            unsigned long long unsigned a;
-        };
-        """
+    cdef = """
+    struct test1 {
+        unsigned long long unsigned a;
+    };
+    """
+    with pytest.raises(ResolveError, match="Unknown type unsigned long long unsigned"):
         cs.load(cdef)
 
-    with pytest.raises(ResolveError) as exc:
-        cdef = """
-        enum TestEnum : unsigned int and more {
-            A = 0,
-            B = 1
-        };
-        """
+    cdef = """
+    enum TestEnum : unsigned int and more {
+        A = 0,
+        B = 1
+    };
+    """
+    with pytest.raises(ResolveError, match="Unknown type unsigned int and more"):
         cs.load(cdef)
-
-    assert str(exc.value) == "Unknown type unsigned int and more"
 
 
 def test_dunder_bytes(cs: cstruct) -> None:
@@ -292,16 +288,14 @@ def test_array_of_null_terminated_strings(cs: cstruct, compiled: bool) -> None:
     assert obj.argv[0] == b"hello"
     assert obj.argv[1] == b"world"
 
-    with pytest.raises(ParserError) as exc:
-        cdef = """
-        struct args2 {
-            uint32 argc;
-            char   argv[][argc];
-        }
-        """
+    cdef = """
+    struct args2 {
+        uint32 argc;
+        char   argv[][argc];
+    }
+    """
+    with pytest.raises(ParserError, match="Depth required for multi-dimensional array"):
         cs.load(cdef)
-
-    assert str(exc.value) == "Depth required for multi-dimensional array"
 
 
 def test_array_of_size_limited_strings(cs: cstruct, compiled: bool) -> None:

@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from typing import BinaryIO
+from typing import TYPE_CHECKING, BinaryIO
 
 import pytest
 
-from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exceptions import ArraySizeError
 from dissect.cstruct.types.base import ArrayMetaType, BaseType
 
 from .utils import verify_compiled
+
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import cstruct
 
 
 def test_array_size_mismatch(cs: cstruct) -> None:

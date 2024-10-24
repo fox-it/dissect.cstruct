@@ -125,7 +125,7 @@ def test_packed_eof(cs: cstruct) -> None:
         cs.uint32[None](b"\x00\x00\x00\x01")
 
 
-def test_packed_range(cs) -> None:
+def test_packed_range(cs: cstruct) -> None:
     cs.float16(-65519.999999999996).dumps()
     cs.float16(65519.999999999996).dumps()
     with pytest.raises(OverflowError):

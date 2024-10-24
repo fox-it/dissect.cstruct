@@ -20,7 +20,7 @@ def test_nested_structs(cs: cstruct, compiled: bool) -> None:
     cs.load(cdef, compiled=compiled)
     data = b"\x00\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00"
     obj = cs.nest(data)
-    for i in range(0, 4):
+    for i in range(4):
         assert obj.a[i].b == i
 
 

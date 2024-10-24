@@ -9,5 +9,5 @@ def cs() -> cstruct:
 
 
 @pytest.fixture(params=[True, False])
-def compiled(request):
+def compiled(request: pytest.FixtureRequest) -> bool:
     return request.param
