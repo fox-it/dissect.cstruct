@@ -769,7 +769,8 @@ def test_structure_definition_newline(cs: cstruct, compiled: bool) -> None:
         char    magic[4
         ];
 
-        wchar   wmagic[4];
+        wchar   wmagic[4
+        ];
         uint8   a;
         uint16  b;
         uint32  c;
