@@ -761,3 +761,36 @@ def test_codegen_make_init() -> None:
     cached = structure._make_structure__init__(5)
     assert structure._make_structure__init__.cache_info() == (1, 1, 128, 1)
     assert result is cached
+
+
+def test_structure_definition_newline(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    struct test {
+        char    magic[4
+        ];
+
+        wchar   wmagic[4];
+        uint8   a;
+        uint16  b;
+        uint32  c;
+        char    string[];
+        wchar   wstring[];
+    };
+    """
+    cs.endian = ">"
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"test\x00t\x00e\x00s\x00t\x01\x02\x03\x04\x05\x06\x07lalala\x00\x00t\x00e\x00s\x00t\x00\x00"
+
+    obj = cs.test()
+    obj.magic = "test"
+    obj.wmagic = "test"
+    obj.a = 0x01
+    obj.b = 0x0203
+    obj.c = 0x04050607
+    obj.string = b"lalala"
+    obj.wstring = "test"
+
+    assert obj.dumps() == buf
