@@ -1,8 +1,12 @@
-import io
+from __future__ import annotations
 
-from dissect.cstruct.cstruct import cstruct
+import io
+from typing import TYPE_CHECKING
 
 from .utils import verify_compiled
+
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import cstruct
 
 
 def test_void_read(cs: cstruct) -> None:

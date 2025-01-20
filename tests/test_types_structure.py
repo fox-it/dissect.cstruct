@@ -1,12 +1,14 @@
+from __future__ import annotations
+
 import inspect
 from io import BytesIO
 from textwrap import dedent
 from types import MethodType
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exceptions import ParserError
 from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
@@ -14,6 +16,9 @@ from dissect.cstruct.types.pointer import Pointer
 from dissect.cstruct.types.structure import Field, Structure, StructureMetaType
 
 from .utils import verify_compiled
+
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import cstruct
 
 
 @pytest.fixture
@@ -220,12 +225,12 @@ def test_structure_definitions(cs: cstruct, compiled: bool) -> None:
     assert "a" in cs.test.fields
     assert "b" in cs.test.fields
 
+    cdef = """
+    struct {
+        uint32  a;
+    };
+    """
     with pytest.raises(ParserError):
-        cdef = """
-        struct {
-            uint32  a;
-        };
-        """
         cs.load(cdef)
 
 
@@ -258,7 +263,7 @@ def test_structure_definition_simple(cs: cstruct, compiled: bool) -> None:
     assert obj.wstring == "test"
 
     with pytest.raises(AttributeError):
-        obj.nope
+        obj.nope  # noqa: B018
 
     assert obj._sizes["magic"] == 4
     assert len(obj) == len(buf)
@@ -300,7 +305,7 @@ def test_structure_definition_simple_be(cs: cstruct, compiled: bool) -> None:
     assert obj.wstring == "test"
     assert obj.dumps() == buf
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
 
@@ -358,9 +363,8 @@ def test_structure_definition_sizes(cs: cstruct, compiled: bool) -> None:
     assert obj.another == 2
     assert obj.atoffset == 3
 
-    with pytest.raises(TypeError) as excinfo:
+    with pytest.raises(TypeError, match="Dynamic size"):
         len(cs.dynamic)
-    assert str(excinfo.value) == "Dynamic size"
 
 
 def test_structure_definition_nested(cs: cstruct, compiled: bool) -> None:
@@ -438,7 +442,7 @@ def test_structure_definition_write(cs: cstruct, compiled: bool) -> None:
     obj.wstring = "test"
 
     with pytest.raises(AttributeError):
-        obj.nope
+        obj.nope  # noqa: B018
 
     assert obj.dumps() == buf
 
@@ -622,7 +626,7 @@ def test_structure_default(cs: cstruct, compiled: bool) -> None:
 
     assert obj.dumps() == b"\x00" * 57
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
     assert cs.test_nested() == cs.test_nested.__default__()
@@ -633,7 +637,7 @@ def test_structure_default(cs: cstruct, compiled: bool) -> None:
 
     assert obj.dumps() == b"\x00" * 171
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
 
@@ -691,7 +695,7 @@ def test_structure_default_dynamic(cs: cstruct, compiled: bool) -> None:
 
     assert obj.dumps() == b"\x00" * 20
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
     assert cs.test_nested() == cs.test_nested.__default__()
@@ -701,7 +705,7 @@ def test_structure_default_dynamic(cs: cstruct, compiled: bool) -> None:
 
     assert obj.dumps() == b"\x00" * 21
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
 

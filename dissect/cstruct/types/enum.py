@@ -82,7 +82,7 @@ class EnumMetaType(EnumMeta, MetaType):
 
     def _write_0(cls, stream: BinaryIO, array: list[BaseType]) -> int:
         data = [entry.value if isinstance(entry, Enum) else entry for entry in array]
-        return cls._write_array(stream, data + [cls.type.__default__()])
+        return cls._write_array(stream, [*data, cls.type.__default__()])
 
 
 def _fix_alias_members(cls: type[Enum]) -> None:

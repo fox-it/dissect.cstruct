@@ -1,7 +1,12 @@
-from io import BytesIO
+from __future__ import annotations
 
-from dissect.cstruct import cstruct
+from io import BytesIO
+from typing import TYPE_CHECKING
+
 from tests.utils import verify_compiled
+
+if TYPE_CHECKING:
+    from dissect.cstruct import cstruct
 
 
 def test_align_struct(cs: cstruct, compiled: bool) -> None:

@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import sys
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, ClassVar
 
 from dissect.cstruct.types.base import EOF, ArrayMetaType, BaseType
 
 
 class WcharArray(str, BaseType, metaclass=ArrayMetaType):
     """Wide-character array type for reading and writing UTF-16 strings."""
+
+    __slots__ = ()
 
     @classmethod
     def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> WcharArray:
@@ -29,7 +31,8 @@ class Wchar(str, BaseType):
 
     ArrayType = WcharArray
 
-    __encoding_map__ = {
+    __slots__ = ()
+    __encoding_map__: ClassVar[dict[str, str]] = {
         "@": f"utf-16-{sys.byteorder[0]}e",
         "=": f"utf-16-{sys.byteorder[0]}e",
         "<": "utf-16-le",

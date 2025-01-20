@@ -28,9 +28,8 @@ class LEB128(int, BaseType):
             if (b & 0x80) == 0:
                 break
 
-        if cls.signed:
-            if b & 0x40 != 0:
-                result |= ~0 << shift
+        if cls.signed and b & 0x40 != 0:
+            result |= ~0 << shift
 
         return cls.__new__(cls, result)
 
@@ -60,7 +59,7 @@ class LEB128(int, BaseType):
 
             # function works similar for signed- and unsigned integers, except for the check when to stop
             # the encoding process.
-            if (cls.signed and (data == 0 and byte & 0x40 == 0) or (data == -1 and byte & 0x40 != 0)) or (
+            if ((cls.signed and (data == 0 and byte & 0x40 == 0)) or (data == -1 and byte & 0x40 != 0)) or (
                 not cls.signed and data == 0
             ):
                 result.append(byte)

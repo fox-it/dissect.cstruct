@@ -2,16 +2,20 @@ from __future__ import annotations
 
 from operator import itemgetter
 from textwrap import dedent
-from typing import Iterator
+from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 import pytest
 
 from dissect.cstruct import compiler
-from dissect.cstruct.cstruct import cstruct
-from dissect.cstruct.types.base import MetaType
-from dissect.cstruct.types.enum import Enum
 from dissect.cstruct.types.structure import Field
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from dissect.cstruct.cstruct import cstruct
+    from dissect.cstruct.types.base import MetaType
+    from dissect.cstruct.types.enum import Enum
 
 
 def f(field_type: MetaType, offset: int | None = 0, name: str = "") -> Field:
@@ -79,7 +83,7 @@ def test_generate_struct_info_offsets(cs: cstruct) -> None:
 
 
 @pytest.mark.parametrize(
-    "fields, fmt",
+    ("fields", "fmt"),
     [
         ([(None, 1, "B"), (None, 3, "B")], "4B"),
         ([(None, 1, "B"), (None, 3, "B"), (None, 2, "H")], "4B2H"),

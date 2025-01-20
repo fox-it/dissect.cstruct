@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import string
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, ClassVar
 
 from dissect.cstruct.exceptions import ExpressionParserError, ExpressionTokenizerError
 
@@ -21,8 +21,7 @@ class ExpressionTokenizer:
     def equal(self, token: str, expected: str | set[str]) -> bool:
         if isinstance(expected, set):
             return token in expected
-        else:
-            return token == expected
+        return token == expected
 
     def alnum(self, token: str) -> bool:
         return token.isalnum()
@@ -88,7 +87,7 @@ class ExpressionTokenizer:
                 continue
 
             # If token is a single digit, keep looping over expression and build the number
-            elif self.match(self.digit, consume=False, append=False):
+            if self.match(self.digit, consume=False, append=False):
                 token += self.get_token()
                 self.consume()
 
@@ -154,7 +153,7 @@ class ExpressionTokenizer:
 class Expression:
     """Expression parser for calculations in definitions."""
 
-    binary_operators = {
+    binary_operators: ClassVar[dict[str, Callable[[int, int], int]]] = {
         "|": lambda a, b: a | b,
         "^": lambda a, b: a ^ b,
         "&": lambda a, b: a & b,
@@ -167,12 +166,12 @@ class Expression:
         "%": lambda a, b: a % b,
     }
 
-    unary_operators = {
+    unary_operators: ClassVar[dict[str, Callable[[int], int]]] = {
         "u": lambda a: -a,
         "~": lambda a: ~a,
     }
 
-    precedence_levels = {
+    precedence_levels: ClassVar[dict[str, int]] = {
         "|": 0,
         "^": 1,
         "&": 2,
