@@ -80,29 +80,38 @@ def generate_cstruct_stub(cs: cstruct, module_prefix: str = "", cls_name: str = 
 
     defined_names = set()
 
+    # Then types
+    for name, type_ in cs.types.items():
+        if name in empty_cs.types:
+            continue
+
+        if type_.__name__ in empty_cs.types:
+            stub = f"{name}: TypeAlias = {cs_prefix}{type_.__name__}"
+        elif type_.__name__ in defined_names:
+            # Create an alias to the type if we have already seen it before.
+            stub = f"{name}: TypeAlias = {type_.__name__}"
+        elif issubclass(type_, (types.Enum, types.Flag)):
+            stub = generate_enum_stub(type_, cs_prefix=cs_prefix, module_prefix=module_prefix)
+        elif issubclass(type_, types.Structure):
+            stub = generate_structure_stub(type_, cs_prefix=cs_prefix, module_prefix=module_prefix)
+        elif issubclass(type_, types.BaseType):
+            stub = generate_generic_stub(type_, cs_prefix=cs_prefix, module_prefix=module_prefix)
+        else:
+            raise TypeError(f"Unknown type: {type_}")
+
+        defined_names.add(type_.__name__)
+
+        body.append(textwrap.indent(stub, prefix=indent))
+
     # Then typedefs
     for name, typedef in cs.typedefs.items():
         if name in empty_cs.typedefs:
             continue
 
-        if typedef.__name__ in empty_cs.typedefs:
-            stub = f"{name}: TypeAlias = {cs_prefix}{typedef.__name__}"
-        elif typedef.__name__ in defined_names:
-            # Create an alias to the type if we have already seen it before.
-            stub = f"{name}: TypeAlias = {typedef.__name__}"
-        elif issubclass(typedef, (types.Enum, types.Flag)):
-            stub = generate_enum_stub(typedef, cs_prefix=cs_prefix, module_prefix=module_prefix)
-        elif issubclass(typedef, types.Structure):
-            stub = generate_structure_stub(typedef, cs_prefix=cs_prefix, module_prefix=module_prefix)
-        elif issubclass(typedef, types.BaseType):
-            stub = generate_generic_stub(typedef, cs_prefix=cs_prefix, module_prefix=module_prefix)
-        elif isinstance(typedef, str):
-            stub = f"{name}: TypeAlias = {typedef}"
-        else:
-            raise TypeError(f"Unknown typedef: {typedef}")
+        if not isinstance(typedef, str):
+            raise TypeError(f"Expected typedef to be a string, got {type(typedef)} for {name}")
 
-        defined_names.add(typedef.__name__)
-
+        stub = f"{name}: TypeAlias = {cs_prefix}{typedef}"
         body.append(textwrap.indent(stub, prefix=indent))
 
     if not body:

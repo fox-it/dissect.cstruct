@@ -306,7 +306,7 @@ class StructureMetaType(MetaType):
         num = 0
 
         for field in cls.__fields__:
-            field_type = cls.cs.resolve(field.type)
+            field_type = field.type
 
             bit_field_type = (
                 (field_type.type if isinstance(field_type, EnumMetaType) else field_type) if field.bits else None
@@ -515,7 +515,7 @@ class UnionMetaType(StructureMetaType):
             buf = io.BytesIO(stream.read(cls.size))
 
         for field in cls.__fields__:
-            field_type = cls.cs.resolve(field.type)
+            field_type = field.type
 
             start = 0
             if field.offset is not None:
