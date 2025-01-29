@@ -288,9 +288,6 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
             """,
             """
             class cstruct(cstruct):
-                __fs16: TypeAlias = cstruct.uint16
-                __fs32: TypeAlias = cstruct.uint32
-                __fs64: TypeAlias = cstruct.uint64
                 class Test(Structure):
                     a: cstruct.uint16
                     b: cstruct.uint32
@@ -300,6 +297,9 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                     @overload
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
+                __fs16: TypeAlias = cstruct.__u16
+                __fs32: TypeAlias = cstruct.__u32
+                __fs64: TypeAlias = cstruct.__u64
             """,  # noqa: E501
             id="typedef stub",
         ),
