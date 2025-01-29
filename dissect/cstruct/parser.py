@@ -15,6 +15,7 @@ from dissect.cstruct.types import ArrayMetaType, Field, MetaType
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
+    from dissect.cstruct.types.structure import Structure
 
 
 class Parser:
@@ -96,7 +97,7 @@ class TokenParser(Parser):
             except (ExpressionParserError, ExpressionTokenizerError):
                 pass
 
-        self.cstruct.consts[match["name"]] = value
+        self.cstruct.add_const(match["name"], value)
 
     def _enum(self, tokens: TokenConsumer) -> None:
         # We cheat with enums because the entire enum is in the token
@@ -137,7 +138,8 @@ class TokenParser(Parser):
 
         enum = factory(d["name"] or "", self.cstruct.resolve(d["type"]), values)
         if not enum.__name__:
-            self.cstruct.consts.update(enum.__members__)
+            for k, v in enum.__members__.items():
+                self.cstruct.add_const(k, v)
         else:
             self.cstruct.add_type(enum.__name__, enum)
 
@@ -145,10 +147,12 @@ class TokenParser(Parser):
 
     def _typedef(self, tokens: TokenConsumer) -> None:
         tokens.consume()
+        type_name = None
         type_ = None
 
         if tokens.next == self.TOK.IDENTIFIER:
-            type_ = self.cstruct.resolve(self._identifier(tokens))
+            type_name = self._identifier(tokens)
+            type_ = self.cstruct.resolve(type_name)
         elif tokens.next == self.TOK.STRUCT:
             # The register thing is a bit dirty
             # Basically consumes all NAME tokens and
@@ -157,12 +161,15 @@ class TokenParser(Parser):
 
         names = self._names(tokens)
         for name in names:
-            type_, name, bits = self._parse_field_type(type_, name)
+            new_type, name, bits = self._parse_field_type(type_, name)
             if bits is not None:
                 raise ParserError(f"line {self._lineno(tokens.previous)}: typedefs cannot have bitfields")
-            self.cstruct.add_type(name, type_)
+            if type_name is None or new_type is not type_:
+                self.cstruct.add_type(name, new_type)
+            else:
+                self.cstruct.add_typedef(name, type_name)
 
-    def _struct(self, tokens: TokenConsumer, register: bool = False) -> None:
+    def _struct(self, tokens: TokenConsumer, register: bool = False) -> type[Structure]:
         stype = tokens.consume()
 
         factory = self.cstruct._make_union if stype.value.startswith("union") else self.cstruct._make_struct
@@ -399,7 +406,7 @@ class CStyleParser(Parser):
             except (ValueError, SyntaxError):
                 pass
 
-            self.cstruct.consts[d["name"]] = v
+            self.cstruct.add_const(d["name"], v)
 
     def _enums(self, data: str) -> None:
         r = re.finditer(
@@ -481,7 +488,7 @@ class CStyleParser(Parser):
             if d["defs"]:
                 for td in d["defs"].strip().split(","):
                     td = td.strip()
-                    self.cstruct.add_type(td, st)
+                    self.cstruct.add_typedef(td, st)
 
     def _parse_fields(self, data: str) -> None:
         fields = re.finditer(

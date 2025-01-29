@@ -241,7 +241,7 @@ class StructureMetaType(MetaType):
         sizes = {}
         for field in cls.__fields__:
             offset = stream.tell()
-            field_type = cls.cs.resolve(field.type)
+            field_type = field.type
 
             if field.offset is not None and offset != struct_start + field.offset:
                 # Field is at a specific offset, either alligned or added that way
@@ -295,7 +295,7 @@ class StructureMetaType(MetaType):
         num = 0
 
         for field in cls.__fields__:
-            field_type = cls.cs.resolve(field.type)
+            field_type = field.type
 
             bit_field_type = (
                 (field_type.type if isinstance(field_type, EnumMetaType) else field_type) if field.bits else None
@@ -460,7 +460,7 @@ class UnionMetaType(StructureMetaType):
             buf = io.BytesIO(stream.read(cls.size))
 
         for field in cls.__fields__:
-            field_type = cls.cs.resolve(field.type)
+            field_type = field.type
 
             start = 0
             if field.offset is not None:
