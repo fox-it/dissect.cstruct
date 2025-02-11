@@ -74,6 +74,7 @@ def stubify_cstruct(c_structure: cstruct, name: str = "", ignore_type_defs: Iter
     if name:
         result.append(f"class {name}(cstruct):")
         indentation = " " * 4
+        c_structure.__type_def_name__ = name
 
     prev_length = len(result)
     for const, value in c_structure.consts.items():

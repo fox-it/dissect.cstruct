@@ -182,7 +182,12 @@ class MetaType(type):
         return f"class {cls.__name__}({cls.__base__.__name__}):"
 
     def _type_stub(cls, name: str = "") -> str:
-        return f"{name}: {cls.__name__}"
+        cls_name = cls.__name__
+
+        if cls.__name__ in cls.cs.typedefs and cls.__module__ != "types":
+            cls_name = f"{getattr(cls.cs, '__type_def_name__', '')}.{cls_name}"
+
+        return f"{name}: {cls_name}"
 
     def to_type_stub(cls, name: str) -> str:
         return ""
