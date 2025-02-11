@@ -39,8 +39,8 @@ class Field:
         bits_str = f" : {self.bits}" if self.bits else ""
         return f"<Field {self.name} {self.type.__name__}{bits_str}>"
 
-    def type_stub(self):
-        return self.type._type_stub(self.name)
+    def type_stub(self, underscore: bool = False) -> str:
+        return self.type._type_stub(self.name, underscore)
 
 
 class StructureMetaType(MetaType):
@@ -373,17 +373,18 @@ class StructureMetaType(MetaType):
         for key, value in classdict.items():
             setattr(cls, key, value)
 
-    def to_type_stub(cls, name: str = "") -> str:
-        result = [f"class {cls.__name__}({cls.__base__.__name__}):"]
+    def to_type_stub(cls, name: str = "", underscore: bool = False) -> str:
+        result = [f"class {'_' if underscore else ''}{cls.__name__}({cls.__base__.__name__}):"]
         args = ["self"]
         for field_name, field in cls.fields.items():
+            _underscore = field_name == field.type.__name__
             already_defined = field.type.__name__ in cls.cs.typedefs
 
             if isinstance(field.type, StructureMetaType) and not already_defined:
-                result.append(indent(field.type.to_type_stub(), prefix=" " * 4))
+                result.append(indent(field.type.to_type_stub(underscore=_underscore), prefix=" " * 4))
 
-            result.append(f"    {field.type_stub()}")
-            args.append(f"{field.type_stub()} = ...")
+            result.append(f"    {field.type_stub(_underscore)}")
+            args.append(f"{field.type_stub(_underscore)} = ...")
 
         result.append(indent(f"def __init__({', '.join(args)}): ...", prefix=" " * 4))
 
