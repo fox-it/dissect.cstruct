@@ -108,21 +108,18 @@ def stubify_typedefs(c_structure: cstruct, ignore_type_defs: list[str] = None, i
 
 
 def setup_logger(verbosity: int) -> None:
-    if verbosity == 0:
-        log.setLevel(level=logging.WARNING)
-    elif verbosity == 1:
-        log.setLevel(level=logging.INFO)
-    elif verbosity > 1:
-        log.setLevel(level=logging.DEBUG)
+    level = logging.INFO
+    if verbosity >= 1:
+        level = logging.DEBUG
+
+    logging.basicConfig(level=level)
 
 
 def main() -> None:
     description = """
         Create stub files for cstruct definitions.
     
-        These stub files are in a `.pyi` format and provides `type` information to cstruct definitions.
-        This in turn gives a developer insight into the elements inside the definition and 
-        parameter completion when dealing with cstructs.
+        These stub files are in a `.pyi` format and provides type information to cstruct definitions.
     """
 
     parser = ArgumentParser("stubify", description=description)
@@ -145,7 +142,7 @@ def main() -> None:
                 continue
 
             with file.with_suffix(".pyi").open("wt") as output_file:
-                log.info("Writing stub of file %s to %s", file, output_file)
+                log.info("Writing stub of file %s to %s", file, output_file.name)
                 output_file.write(stub)
 
 
