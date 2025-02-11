@@ -9,7 +9,7 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
 @pytest.mark.parametrize(
     "definition, name, expected_stub",
     [
-        (
+        pytest.param(
             """
             struct Test {
                 int a;
@@ -21,10 +21,10 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
             class Test(Structure):
                 a: int32
                 b: int32
-                def __init__(self, a: int32=..., b: int32=...): ...
+                def __init__(self, a: int32 = ..., b: int32 = ...): ...
             """,
-        ),
-        (
+        id="standard structure"),
+        pytest.param(
             """
             struct Test {
                 int a[];
@@ -34,10 +34,10 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
             """
             class Test(Structure):
                 a: Array[int32]
-                def __init__(self, a: Array[int32]=...): ...
+                def __init__(self, a: Array[int32] = ...): ...
             """,
-        ),
-        (
+        id = "array"),
+        pytest.param(
             """
             #define a 1
             #define b b"data"
@@ -45,12 +45,12 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
             """,
             None,
             """
-            a: int=...
-            b: bytes=...
-            c: str=...
+            a: int = ...
+            b: bytes = ...
+            c: str = ...
             """,
-        ),
-        (
+        id="definitions"),
+        pytest.param(
             """
             struct Test {
                 int *a;
@@ -60,10 +60,10 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
             """
             class Test(Structure):
                 a: Pointer[int32]
-                def __init__(self, a: Pointer[int32]=...): ...
+                def __init__(self, a: Pointer[int32] = ...): ...
             """,
-        ),
-        (
+        id="pointers"),
+        pytest.param(
             """
             enum Test {
                 A = 1,
@@ -78,8 +78,8 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
                 B = ...
                 C = ...
             """,
-        ),
-        (
+        id="enums"),
+        pytest.param(
             """
             flag Test {
                 A = 0x00001,
@@ -94,8 +94,8 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
                 B = ...
                 C = ...
             """,
-        ),
-        (
+        id="flags"),
+        pytest.param(
             """
             struct Test{
                 union {
@@ -111,9 +111,8 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
                 b: CharArray
                 def __init__(self): ...
             """,
-        ),
+        id="unions"),
     ],
-    ids=["standard structure", "array", "definitions", "pointers", "enums", "flags", "unions"],
 )
 def test_to_type_stub(definition: str, name: str, expected_stub: str) -> None:
     structure = cstruct()
