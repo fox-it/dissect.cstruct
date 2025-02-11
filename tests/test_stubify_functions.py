@@ -1,9 +1,11 @@
 import textwrap
+from pathlib import Path
 
 import pytest
 
 from dissect.cstruct import cstruct
-from dissect.cstruct.tools.stubify import stubify_cstruct
+from dissect.cstruct.tools.stubify import stubify_cstruct, stubify_file, stubify_typedefs
+from tests.utils import absolute_path
 
 
 @pytest.mark.parametrize(
@@ -131,6 +133,7 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
             """,
             id="unions",
         ),
+        pytest.param("""""", "", "...", id="empty"),
     ],
 )
 def test_to_type_stub(definition: str, name: str, expected_stub: str) -> None:
@@ -145,3 +148,50 @@ def test_to_type_stub(definition: str, name: str, expected_stub: str) -> None:
     expected_stub = textwrap.dedent(expected_stub).strip()
 
     assert expected_stub == stubify_cstruct(generated_stub, ignore_type_defs=ignore_list).strip()
+
+
+def test_to_type_stub_empty() -> None:
+    structure = cstruct()
+    ignore_list = list(structure.typedefs.keys())
+    structure.load("")
+
+    assert "class test(cstruct):\n    ..." == stubify_cstruct(structure, "test", ignore_type_defs=ignore_list)
+
+
+def test_stubify_file() -> None:
+    stub_file = absolute_path("data/stub_file.py")
+
+    output = stubify_file(stub_file, stub_file.parent)
+
+    assert output == absolute_path("data/stub_file.pyi").read_text()
+
+
+def test_stubify_file_unknown_file(tmp_path: Path) -> None:
+    assert stubify_file(tmp_path.joinpath("unknown_file.py"), tmp_path) == ""
+
+    new_file = tmp_path.joinpath("new_file.py")
+    new_file.touch()
+    assert stubify_file(new_file, tmp_path) == ""
+
+
+def test_stubify_typedef() -> None:
+    structure = cstruct()
+    expected_output = [
+        "int8: TypeAlias = Packed[int]",
+        "uint8: TypeAlias = Packed[int]",
+        "int16: TypeAlias = Packed[int]",
+        "uint16: TypeAlias = Packed[int]",
+        "int32: TypeAlias = Packed[int]",
+        "uint32: TypeAlias = Packed[int]",
+        "int64: TypeAlias = Packed[int]",
+        "uint64: TypeAlias = Packed[int]",
+        "float16: TypeAlias = Packed[float]",
+        "float: TypeAlias = Packed[float]",
+        "double: TypeAlias = Packed[float]",
+    ]
+
+    assert stubify_typedefs(structure) == "\n".join(expected_output)
+    assert stubify_typedefs(structure, ["int8"]) == "\n".join(expected_output[1:])
+    assert stubify_typedefs(structure, ["int8", "double"]) == "\n".join(expected_output[1:-1])
+    assert "float16: TypeAlias = Packed[float]" not in stubify_typedefs(structure, ["float16"])
+    assert stubify_typedefs(structure, structure.typedefs.keys()) == ""
