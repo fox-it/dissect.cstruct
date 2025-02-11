@@ -389,8 +389,10 @@ class StructureMetaType(MetaType):
             if field_name in cls.lookup.keys():
                 args.append(f"{field.type_stub(_underscore)} = ...")
 
+        result.append(indent("@overload", prefix=" " * 4))
         result.append(indent(f"def __init__({', '.join(args)}): ...", prefix=" " * 4))
-
+        result.append(indent("@overload", prefix=" " * 4))
+        result.append(indent("def __init__(self, fh: bytes | bytearray | BinaryIO, /): ...", prefix=" " * 4))
         return "\n".join(result)
 
 
