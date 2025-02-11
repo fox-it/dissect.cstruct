@@ -43,9 +43,10 @@ def stubify_file(path: Path, base_path: Path) -> str:
     cstruct_types = ", ".join(all_types)
     result = [
         "from __future__ import annotations\n",
-        "from typing_extensions import TypeAlias",
+        "from typing import overload, BinaryIO\n",
         "from dissect.cstruct import cstruct",
-        f"from dissect.cstruct.types import {cstruct_types}\n",
+        f"from dissect.cstruct.types import ({cstruct_types})",
+        "from typing_extensions import TypeAlias\n",
     ]
 
     empty_cstruct = cstruct()
