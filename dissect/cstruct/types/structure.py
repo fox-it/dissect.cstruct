@@ -377,7 +377,9 @@ class StructureMetaType(MetaType):
         result = [f"class {cls.__name__}({cls.__base__.__name__}):"]
         args = ["self"]
         for field_name, field in cls.fields.items():
-            if isinstance(field.type, StructureMetaType):
+            already_defined = field.type.__name__ in cls.cs.typedefs
+
+            if isinstance(field.type, StructureMetaType) and not already_defined:
                 result.append(indent(field.type.to_type_stub(), prefix=" " * 4))
 
             result.append(f"    {field.type_stub()}")
