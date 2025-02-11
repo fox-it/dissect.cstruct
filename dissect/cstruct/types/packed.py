@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from struct import Struct
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Generic, TypeVar
 
 from dissect.cstruct.types.base import EOF, BaseType
 
@@ -12,17 +12,20 @@ def _struct(endian: str, packchar: str) -> Struct:
     return Struct(f"{endian}{packchar}")
 
 
-class Packed(BaseType):
+T = TypeVar("T", int, float)
+
+
+class Packed(BaseType, Generic[T]):
     """Packed type for Python struct (un)packing."""
 
     packchar: str
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Packed:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Packed[T]:
         return cls._read_array(stream, 1, context)[0]
 
     @classmethod
-    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Packed]:
+    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Packed[T]]:
         if count == EOF:
             data = stream.read()
             length = len(data)
@@ -39,7 +42,7 @@ class Packed(BaseType):
         return [cls.__new__(cls, value) for value in fmt.unpack(data)]
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Packed:
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Packed[T]:
         result = []
 
         fmt = _struct(cls.cs.endian, cls.packchar)
@@ -57,11 +60,11 @@ class Packed(BaseType):
         return result
 
     @classmethod
-    def _write(cls, stream: BinaryIO, data: Packed) -> int:
+    def _write(cls, stream: BinaryIO, data: Packed[T]) -> int:
         return stream.write(_struct(cls.cs.endian, cls.packchar).pack(data))
 
     @classmethod
-    def _write_array(cls, stream: BinaryIO, data: list[Packed]) -> int:
+    def _write_array(cls, stream: BinaryIO, data: list[Packed[T]]) -> int:
         return stream.write(_struct(cls.cs.endian, f"{len(data)}{cls.packchar}").pack(*data))
 
     @classmethod
