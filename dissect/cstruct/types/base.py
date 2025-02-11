@@ -186,8 +186,8 @@ class MetaType(type):
         if underscore:
             cls_name = f"_{cls_name}"
 
-        if cls.__name__ in cls.cs.typedefs and cls.__module__ != "types":
-            cls_name = f"{getattr(cls.cs, '__type_def_name__', '')}.{cls_name}"
+        if cls.__name__ in cls.cs.typedefs and (cs_name := getattr(cls.cs, "__type_def_name__", "")):
+            cls_name = f"{cs_name}.{cls_name}"
 
         return f"{name}: {cls_name}"
 
@@ -296,7 +296,12 @@ class Array(list, BaseType, metaclass=ArrayMetaType):
 
     @classmethod
     def _type_stub(cls, name: str = "", underscore: bool = False) -> str:
-        return f"{name}: {cls.__base__.__name__}[{cls.type.__name__}]"
+        cls_name = cls.type.__name__
+
+        if cls_name in cls.cs.typedefs and (cs_name := getattr(cls.cs, "__type_def_name__", "")):
+            cls_name = f"{cs_name}.{cls_name}"
+
+        return f"{name}: {cls.__base__.__name__}[{cls_name}]"
 
 
 def _is_readable_type(value: Any) -> bool:
