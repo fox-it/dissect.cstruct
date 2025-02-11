@@ -21,9 +21,13 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
             class Test(Structure):
                 a: int32
                 b: int32
+                @overload
                 def __init__(self, a: int32 = ..., b: int32 = ...): ...
+                @overload
+                def __init__(self, fh: bytes | bytearray | BinaryIO, /): ...
             """,
-        id="standard structure"),
+            id="standard structure",
+        ),
         pytest.param(
             """
             struct Test {
@@ -34,9 +38,13 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
             """
             class Test(Structure):
                 a: Array[int32]
+                @overload
                 def __init__(self, a: Array[int32] = ...): ...
+                @overload
+                def __init__(self, fh: bytes | bytearray | BinaryIO, /): ...
             """,
-        id = "array"),
+            id="array",
+        ),
         pytest.param(
             """
             #define a 1
@@ -49,7 +57,8 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
             b: bytes = ...
             c: str = ...
             """,
-        id="definitions"),
+            id="definitions",
+        ),
         pytest.param(
             """
             struct Test {
@@ -60,9 +69,13 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
             """
             class Test(Structure):
                 a: Pointer[int32]
+                @overload
                 def __init__(self, a: Pointer[int32] = ...): ...
+                @overload
+                def __init__(self, fh: bytes | bytearray | BinaryIO, /): ...
             """,
-        id="pointers"),
+            id="pointers",
+        ),
         pytest.param(
             """
             enum Test {
@@ -78,7 +91,8 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
                 B = ...
                 C = ...
             """,
-        id="enums"),
+            id="enums",
+        ),
         pytest.param(
             """
             flag Test {
@@ -94,7 +108,8 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
                 B = ...
                 C = ...
             """,
-        id="flags"),
+            id="flags",
+        ),
         pytest.param(
             """
             struct Test{
@@ -109,9 +124,13 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
             class Test(Structure):
                 a: WcharArray
                 b: CharArray
+                @overload
                 def __init__(self): ...
+                @overload
+                def __init__(self, fh: bytes | bytearray | BinaryIO, /): ...
             """,
-        id="unions"),
+            id="unions",
+        ),
     ],
 )
 def test_to_type_stub(definition: str, name: str, expected_stub: str) -> None:
@@ -125,5 +144,4 @@ def test_to_type_stub(definition: str, name: str, expected_stub: str) -> None:
         generated_stub = structure
     expected_stub = textwrap.dedent(expected_stub).strip()
 
-
-    assert expected_stub in stubify_cstruct(generated_stub, ignore_type_defs=ignore_list).strip()
+    assert expected_stub == stubify_cstruct(generated_stub, ignore_type_defs=ignore_list).strip()
