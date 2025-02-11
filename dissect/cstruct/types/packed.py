@@ -66,5 +66,4 @@ class Packed(BaseType):
 
     @classmethod
     def to_type_stub(cls, name: str) -> str:
-        types = ", ".join([x.__name__ for x in cls.__bases__])
-        return f"{name} = type[{types}]"
+        return f"{name}: TypeAlias = Packed[{cls.__base__.__name__}]"

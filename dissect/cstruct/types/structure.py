@@ -374,25 +374,18 @@ class StructureMetaType(MetaType):
             setattr(cls, key, value)
 
     def to_type_stub(cls, name: str = "") -> str:
-        buffer = io.StringIO()
-        buffer.write(f"class {cls.__name__}({cls.__base__.__name__}):\n")
-        call_args = ["self"]
-        for key, field in cls.lookup.items():
+        result = [f"class {cls.__name__}({cls.__base__.__name__}):"]
+        args = ["self"]
+        for field_name, field in cls.fields.items():
             if isinstance(field.type, StructureMetaType):
-                class_info = field.type.to_type_stub()
-                buffer.write(indent(class_info, prefix=" " * 4))
-            call_args.append(f"{field.type_stub()}=...")
+                result.append(indent(field.type.to_type_stub(), prefix=" " * 4))
 
-        for field in cls.fields.values():
-            type_info = field.type_stub()
-            buffer.write(indent(f"{type_info}\n", prefix=" " * 4))
+            result.append(f"    {field.type_stub()}")
+            args.append(f"{field.type_stub()} = ...")
 
-        call = ", ".join(call_args)
-        buffer.write(indent(f"def __init__({call}): ...\n", prefix=" " * 4))
+        result.append(indent(f"def __init__({', '.join(args)}): ...", prefix=" " * 4))
 
-        output = buffer.getvalue()
-        buffer.close()
-        return output
+        return "\n".join(result)
 
 
 class Structure(BaseType, metaclass=StructureMetaType):
