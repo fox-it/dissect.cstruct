@@ -181,8 +181,10 @@ class MetaType(type):
     def _class_stub(cls) -> str:
         return f"class {cls.__name__}({cls.__base__.__name__}):"
 
-    def _type_stub(cls, name: str = "") -> str:
+    def _type_stub(cls, name: str = "", underscore: bool = False) -> str:
         cls_name = cls.__name__
+        if underscore:
+            cls_name = f"_{cls_name}"
 
         if cls.__name__ in cls.cs.typedefs and cls.__module__ != "types":
             cls_name = f"{getattr(cls.cs, '__type_def_name__', '')}.{cls_name}"
@@ -263,7 +265,7 @@ class ArrayMetaType(MetaType):
             cls, [cls.type.default() for _ in range(0 if cls.dynamic or cls.null_terminated else cls.num_entries)]
         )
 
-    def _type_stub(cls, name: str = "") -> str:
+    def _type_stub(cls, name: str = "", underscore: bool = False) -> str:
         return f"{name}: {cls.__base__.__name__}"
 
 
@@ -293,7 +295,7 @@ class Array(list, BaseType, metaclass=ArrayMetaType):
         return cls.type._write_array(stream, data)
 
     @classmethod
-    def _type_stub(cls, name: str = "") -> str:
+    def _type_stub(cls, name: str = "", underscore: bool = False) -> str:
         return f"{name}: {cls.__base__.__name__}[{cls.type.__name__}]"
 
 
