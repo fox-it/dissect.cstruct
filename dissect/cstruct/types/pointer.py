@@ -18,7 +18,7 @@ class Pointer(int, BaseType, Generic[T]):
     _context: dict[str, Any] | None
     _value: BaseType
 
-    def __new__(cls, value: int, stream: BinaryIO | None, context: dict[str, Any] | None = None) -> Pointer:  # noqa: PYI034
+    def __new__(cls, value: int, stream: BinaryIO | None, context: dict[str, Any] | None = None) -> Pointer[T]:  # noqa: PYI034
         obj = super().__new__(cls, value)
         obj._stream = stream
         obj._context = context
@@ -72,7 +72,7 @@ class Pointer(int, BaseType, Generic[T]):
         return cls.__new__(cls, cls.cs.pointer.__default__(), None, None)
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Pointer:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Pointer[T]:
         return cls.__new__(cls, cls.cs.pointer._read(stream, context), stream, context)
 
     @classmethod
