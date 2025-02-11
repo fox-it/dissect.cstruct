@@ -179,7 +179,7 @@ class MetaType(type):
         return cls._write_array(stream, [*array, cls.__default__()])
 
     def _class_stub(cls) -> str:
-        return f"class {cls.__name__}({cls.__base__.__name__}):\n"
+        return f"class {cls.__name__}({cls.__base__.__name__}):"
 
     def _type_stub(cls, name: str = "") -> str:
         return f"{name}: {cls.__name__}"

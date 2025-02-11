@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-import io
 import logging
 from argparse import ArgumentParser
 from pathlib import Path
 from textwrap import indent
 from types import ModuleType
+from typing import Iterable
 
 import dissect.cstruct.types as types
 from dissect.cstruct import cstruct
@@ -15,7 +15,7 @@ from dissect.cstruct import cstruct
 log = logging.getLogger(__name__)
 
 
-def load_module(path: Path, base_path: Path) -> ModuleType:
+def load_module(path: Path, base_path: Path) -> ModuleType | None:
     module = None
     try:
         relative_path = path.relative_to(base_path)
@@ -37,74 +37,70 @@ def stubify_file(path: Path, base_path: Path) -> str:
     if not hasattr(tmp_module, "cstruct"):
         return ""
 
-    buffer = io.StringIO()
     all_types = types.__all__.copy()
     all_types.sort()
 
     cstruct_types = ", ".join(all_types)
-    buffer.write("from __future__ import annotations\n\n")
-    buffer.write("from dissect.cstruct import cstruct\n")
-    buffer.write(f"from dissect.cstruct.types import {cstruct_types}\n\n")
+    result = [
+        "from __future__ import annotations\n",
+        "from typing_extensions import TypeAlias",
+        "from dissect.cstruct import cstruct",
+        f"from dissect.cstruct.types import {cstruct_types}\n",
+    ]
 
     empty_cstruct = cstruct()
 
-    buffer.write(stubify_typedefs(empty_cstruct))
-    buffer.write("\n")
-
-    prev_offset = buffer.tell()
+    result.append(stubify_typedefs(empty_cstruct))
+    prev_entries = len(result)
 
     for name, variable in tmp_module.__dict__.items():
         if name.startswith("__"):
             continue
 
         if isinstance(variable, cstruct):
-            buffer.write(stubify_cstruct(variable, name, empty_cstruct.typedefs.keys()))
+            result.append(stubify_cstruct(variable, name, empty_cstruct.typedefs.keys()))
 
-    output = buffer.getvalue()
-    if buffer.tell() == prev_offset:
-        output = ""
+    if prev_entries == len(result):
+        return ""
 
-    buffer.close()
-
-    return output
+    return "\n".join(result)
 
 
-def stubify_cstruct(c_structure: cstruct, name: str = "", ignore_type_defs: list[str] | None = None) -> str:
+def stubify_cstruct(c_structure: cstruct, name: str = "", ignore_type_defs: Iterable[str] | None = None) -> str:
     ignore_type_defs = ignore_type_defs or []
 
-    buffer = io.StringIO()
+    result = []
     indentation = ""
     if name:
-        buffer.write(f"class {name}(cstruct):\n")
+        result.append(f"class {name}(cstruct):")
         indentation = " " * 4
 
-    prev_offset = buffer.tell()
+    prev_length = len(result)
     for const, value in c_structure.consts.items():
-        buffer.write(indent(f"{const}: {type(value).__name__}=...\n", prefix=indentation))
+        result.append(indent(f"{const}: {type(value).__name__} = ...", prefix=indentation))
 
-    buffer.write(stubify_typedefs(c_structure, ignore_type_defs, indentation))
+    if type_defs := stubify_typedefs(c_structure, ignore_type_defs, indentation):
+        result.append(type_defs)
 
-    if prev_offset == buffer.tell():
-        buffer.write(indent("...", prefix=indentation))
+    if prev_length == len(result):
+        # an empty definition, add elipses
+        result.append(indent("...", prefix=indentation))
 
-    output_value = buffer.getvalue()
-    buffer.close()
-    return output_value
+    return "\n".join(result)
 
 
-def stubify_typedefs(c_structure: cstruct, ignore_type_defs: list[str] = None, indentation: str = "") -> str:
+def stubify_typedefs(c_structure: cstruct, ignore_type_defs: Iterable[str] | None = None, indentation: str = "") -> str:
     ignore_type_defs = ignore_type_defs or []
-    buffer = io.StringIO()
+
+    result = []
     for name, type_def in c_structure.typedefs.items():
         if name in ignore_type_defs:
             continue
-        if isinstance(type_def, types.MetaType) and (text := type_def.to_type_stub(name)):
-            buffer.write(indent(text, prefix=indentation))
-            buffer.write("\n")
 
-    output = buffer.getvalue()
-    buffer.close()
-    return output
+        if isinstance(type_def, types.MetaType) and (text := type_def.to_type_stub(name)):
+            result.append(indent(text, prefix=indentation))
+
+    return "\n".join(result)
 
 
 def setup_logger(verbosity: int) -> None:

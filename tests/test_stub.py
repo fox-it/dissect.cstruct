@@ -107,13 +107,9 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
             "Test",
             """
             class Test(Structure):
-                class __anonymous_0__(Union):
-                    a: WcharArray
-                    b: CharArray
-                    def __init__(self, a: WcharArray=..., b: CharArray=...): ...
                 a: WcharArray
                 b: CharArray
-                def __init__(self, __anonymous_0__: __anonymous_0__=...): ...
+                def __init__(self): ...
             """,
         ),
     ],
@@ -121,6 +117,7 @@ from dissect.cstruct.tools.stubify import stubify_cstruct
 )
 def test_to_type_stub(definition: str, name: str, expected_stub: str) -> None:
     structure = cstruct()
+    ignore_list = list(structure.typedefs.keys())
     structure.load(definition)
 
     if name:
@@ -129,4 +126,5 @@ def test_to_type_stub(definition: str, name: str, expected_stub: str) -> None:
         generated_stub = structure
     expected_stub = textwrap.dedent(expected_stub).strip()
 
-    assert expected_stub in stubify_cstruct(generated_stub)
+
+    assert expected_stub in stubify_cstruct(generated_stub, ignore_type_defs=ignore_list).strip()

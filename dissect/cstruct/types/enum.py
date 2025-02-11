@@ -86,17 +86,14 @@ class EnumMetaType(EnumMeta, MetaType):
         return cls._write_array(stream, [*data, cls.type.__default__()])
 
     def _class_stub(cls) -> str:
-        return f"class {cls.__name__}({cls.__base__.__name__}, {cls.type.__name__}):\n"
+        return f"class {cls.__name__}({cls.__base__.__name__}, {cls.type.__name__}):"
 
     def to_type_stub(cls, name: str = "") -> str:
-        output = ""
-        with io.StringIO() as buf:
-            buf.write(cls._class_stub())
-            for key in cls.__members__.keys():
-                buf.write(f"    {key} = ...\n")
-            output = buf.getvalue()
+        result = [cls._class_stub()]
+        for key in cls.__members__.keys():
+            result.append(f"    {key} = ...")
 
-        return output
+        return "\n".join(result)
 
 
 def _fix_alias_members(cls: type[Enum]) -> None:
