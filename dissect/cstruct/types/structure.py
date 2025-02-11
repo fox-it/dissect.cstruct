@@ -384,7 +384,10 @@ class StructureMetaType(MetaType):
                 result.append(indent(field.type.to_type_stub(underscore=_underscore), prefix=" " * 4))
 
             result.append(f"    {field.type_stub(_underscore)}")
-            args.append(f"{field.type_stub(_underscore)} = ...")
+
+            # Ignore field names from anonymous structures/unions
+            if field_name in cls.lookup.keys():
+                args.append(f"{field.type_stub(_underscore)} = ...")
 
         result.append(indent(f"def __init__({', '.join(args)}): ...", prefix=" " * 4))
 
