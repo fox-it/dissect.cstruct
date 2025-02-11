@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 import sys
 from enum import EnumMeta, IntEnum, IntFlag
 from typing import TYPE_CHECKING, Any, BinaryIO
