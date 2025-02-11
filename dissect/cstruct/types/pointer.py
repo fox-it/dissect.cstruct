@@ -101,5 +101,5 @@ class Pointer(int, BaseType, Generic[T]):
         return self._value
 
     @classmethod
-    def _type_stub(cls, name: str = "") -> str:
+    def _type_stub(cls, name: str = "", underscore: bool = False) -> str:
         return f"{name}: {cls.__base__.__name__}[{cls.type.__name__}]"
