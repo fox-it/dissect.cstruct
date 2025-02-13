@@ -39,19 +39,17 @@ def stubify_file(path: Path, base_path: Path) -> str:
 
     all_types = types.__all__.copy()
     all_types.sort()
+    all_types.append("")
 
-    cstruct_types = ", ".join(all_types)
+    cstruct_types = indent(",\n".join(all_types), prefix=" " * 4)
     result = [
         "from __future__ import annotations\n",
         "from typing import overload, BinaryIO\n",
-        "from dissect.cstruct import cstruct",
-        f"from dissect.cstruct.types import ({cstruct_types})",
         "from typing_extensions import TypeAlias\n",
+        "from dissect.cstruct import cstruct",
+        f"from dissect.cstruct.types import (\n{cstruct_types})\n",
     ]
 
-    empty_cstruct = cstruct()
-
-    result.append(stubify_typedefs(empty_cstruct))
     prev_entries = len(result)
 
     for name, variable in tmp_module.__dict__.items():
@@ -59,11 +57,13 @@ def stubify_file(path: Path, base_path: Path) -> str:
             continue
 
         if isinstance(variable, cstruct):
-            result.append(stubify_cstruct(variable, name, empty_cstruct.typedefs.keys()))
+            result.append(stubify_cstruct(variable, name))
 
     if prev_entries == len(result):
         return ""
 
+    # Empty line at the end of the file
+    result.append("")
     return "\n".join(result)
 
 
