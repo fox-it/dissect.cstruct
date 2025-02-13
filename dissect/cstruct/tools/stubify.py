@@ -7,7 +7,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 from textwrap import indent
 from types import FunctionType, ModuleType
-from typing import Iterable
+from typing import Any, Iterable
 
 import dissect.cstruct.types as types
 from dissect.cstruct import cstruct
@@ -27,6 +27,12 @@ def load_module(path: Path, base_path: Path) -> ModuleType | None:
     except Exception as e:
         log.error("Unable to import %s", path)
         log.debug("Error while trying to import module %s", path, exc_info=e)
+
+
+def to_type(_type: type | Any) -> type:
+    if not isinstance(_type, type):
+        _type = type(_type)
+    return _type
 
 
 def stubify_file(path: Path, base_path: Path) -> str:
@@ -65,10 +71,11 @@ def stubify_file(path: Path, base_path: Path) -> str:
         elif isinstance(variable, FunctionType):
             anno = variable.__annotations__
             _items = list(anno.items())[:-1]
-            args = ", ".join(f"{name}: {_type.__name__}" for (name, _type) in _items)
 
-            if return_value := anno.get("return"):
-                return_value = repr(return_value.__name__)
+            args = ", ".join(f"{name}: {to_type(_type).__name__}" for (name, _type) in _items)
+
+            if return_type := to_type(anno.get("return")):
+                return_value = repr(return_type.__name__)
             else:
                 return_value = "None"
 
