@@ -18,7 +18,7 @@ class Pointer(int, BaseType, Generic[T]):
     _context: dict[str, Any] | None
     _value: BaseType
 
-    def __new__(cls, value: int, stream: BinaryIO | None, context: dict[str, Any] | None = None) -> Pointer[T]:  # noqa: PYI034
+    def __new__(cls, value: int, stream: BinaryIO | None, context: dict[str, Any] | None = None) -> Pointer[T]:
         obj = super().__new__(cls, value)
         obj._stream = stream
         obj._context = context
@@ -81,7 +81,7 @@ class Pointer(int, BaseType, Generic[T]):
 
     def dereference(self) -> T:
         if self == 0:
-            raise NullPointerDereference()
+            raise NullPointerDereference
 
         if self._value is None and not issubclass(self.type, Void):
             # Read current position of file read/write pointer
