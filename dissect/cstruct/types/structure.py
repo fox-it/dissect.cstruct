@@ -386,7 +386,7 @@ class StructureMetaType(MetaType):
             result.append(f"    {field.type_stub(_underscore)}")
 
             # Ignore field names from anonymous structures/unions
-            if field_name in cls.lookup.keys():
+            if field_name in cls.lookup:
                 args.append(f"{field.type_stub(_underscore)} = ...")
 
         result.append(indent("@overload", prefix=" " * 4))

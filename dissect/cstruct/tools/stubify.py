@@ -7,10 +7,14 @@ from argparse import ArgumentParser
 from pathlib import Path
 from textwrap import indent
 from types import FunctionType, ModuleType
-from typing import Any, Iterable
+from typing import TYPE_CHECKING, Any
 
 import dissect.cstruct.types as types
 from dissect.cstruct import cstruct
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
 
 log = logging.getLogger(__name__)
 
@@ -23,10 +27,11 @@ def load_module(path: Path, base_path: Path) -> ModuleType | None:
         spec = importlib.util.spec_from_file_location(".".join(module_tuple), path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        return module
     except Exception as e:
-        log.error("Unable to import %s", path)
+        log.exception("Unable to import %s", path)
         log.debug("Error while trying to import module %s", path, exc_info=e)
+
+    return module
 
 
 def to_type(_type: type | Any) -> type:
@@ -74,11 +79,7 @@ def stubify_file(path: Path, base_path: Path) -> str:
 
             args = ", ".join(f"{name}: {to_type(_type).__name__}" for (name, _type) in _items)
 
-            if return_type := to_type(anno.get("return")):
-                return_value = repr(return_type.__name__)
-            else:
-                return_value = "None"
-
+            return_value = repr(to_type(anno.get("return")).__name__)
             signature = f"def {name}({''.join(args)}) -> {return_value}:"
             if variable.__doc__:
                 result.append(signature)
@@ -151,7 +152,7 @@ def setup_logger(verbosity: int) -> None:
 def main() -> None:
     description = """
         Create stub files for cstruct definitions.
-    
+
         These stub files are in a `.pyi` format and provides type information to cstruct definitions.
     """
 
@@ -169,7 +170,7 @@ def main() -> None:
         iterator = [file_path]
 
     for file in iterator:
-        if file.is_file() and ".py" == file.suffix:
+        if file.is_file() and file.suffix == ".py":
             stub = stubify_file(file, file_path)
             if not stub:
                 continue

@@ -89,8 +89,7 @@ class EnumMetaType(EnumMeta, MetaType):
 
     def to_type_stub(cls, name: str = "") -> str:
         result = [cls._class_stub()]
-        for key in cls.__members__.keys():
-            result.append(f"    {key} = ...")
+        result.extend(f"    {key} = ..." for key in cls.__members__)
 
         return "\n".join(result)
 
