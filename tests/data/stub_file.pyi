@@ -2,10 +2,31 @@ from __future__ import annotations
 
 from typing import overload, BinaryIO
 
-from dissect.cstruct import cstruct
-from dissect.cstruct.types import (Array, ArrayMetaType, BaseType, Char, CharArray, Enum, Field, Flag, Int, LEB128, MetaType, Packed, Pointer, Structure, Union, Void, Wchar, WcharArray)
 from typing_extensions import TypeAlias
 
+from dissect.cstruct import cstruct
+from dissect.cstruct.types import (
+    Array,
+    ArrayMetaType,
+    BaseType,
+    Char,
+    CharArray,
+    Enum,
+    Field,
+    Flag,
+    Int,
+    LEB128,
+    MetaType,
+    Packed,
+    Pointer,
+    Structure,
+    Union,
+    Void,
+    Wchar,
+    WcharArray,
+)
+
+c_def: str
 class c_structure(cstruct):
     int8: TypeAlias = Packed[int]
     uint8: TypeAlias = Packed[int]
