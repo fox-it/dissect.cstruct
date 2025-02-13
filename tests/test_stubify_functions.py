@@ -9,7 +9,7 @@ from tests.utils import absolute_path
 
 
 @pytest.mark.parametrize(
-    "definition, name, expected_stub",
+    ("definition", "name", "expected_stub"),
     [
         pytest.param(
             """
@@ -141,13 +141,10 @@ def test_to_type_stub(definition: str, name: str, expected_stub: str) -> None:
     ignore_list = list(structure.typedefs.keys())
     structure.load(definition)
 
-    if name:
-        generated_stub = getattr(structure, name).cs
-    else:
-        generated_stub = structure
+    generated_stub = getattr(structure, name).cs if name else structure
     expected_stub = textwrap.dedent(expected_stub).strip()
 
-    assert expected_stub == stubify_cstruct(generated_stub, ignore_type_defs=ignore_list).strip()
+    assert stubify_cstruct(generated_stub, ignore_type_defs=ignore_list).strip() == expected_stub
 
 
 def test_to_type_stub_empty() -> None:
@@ -155,7 +152,7 @@ def test_to_type_stub_empty() -> None:
     ignore_list = list(structure.typedefs.keys())
     structure.load("")
 
-    assert "class test(cstruct):\n    ..." == stubify_cstruct(structure, "test", ignore_type_defs=ignore_list)
+    assert stubify_cstruct(structure, "test", ignore_type_defs=ignore_list) == "class test(cstruct):\n    ..."
 
 
 def test_stubify_file() -> None:
