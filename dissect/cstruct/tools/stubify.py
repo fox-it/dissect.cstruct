@@ -6,7 +6,7 @@ import logging
 from argparse import ArgumentParser
 from pathlib import Path
 from textwrap import indent
-from types import ModuleType
+from types import FunctionType, ModuleType
 from typing import Iterable
 
 import dissect.cstruct.types as types
@@ -56,8 +56,36 @@ def stubify_file(path: Path, base_path: Path) -> str:
         if name.startswith("__"):
             continue
 
-        if isinstance(variable, cstruct):
+        if isinstance(variable, ModuleType):
+            result.append(f"import {name}")
+        elif isinstance(variable, cstruct):
             result.append(stubify_cstruct(variable, name))
+        elif isinstance(variable, (bytes, bytearray, str, int, float, dict, list, tuple)):
+            result.append(f"{name}: {type(variable).__name__}")
+        elif isinstance(variable, FunctionType):
+            anno = variable.__annotations__
+            _items = list(anno.items())[:-1]
+            args = ", ".join(f"{name}: {_type.__name__}" for (name, _type) in _items)
+
+            if return_value := anno.get("return"):
+                return_value = repr(return_value.__name__)
+            else:
+                return_value = "None"
+
+            signature = f"def {name}({''.join(args)}) -> {return_value}:"
+            if variable.__doc__:
+                result.append(signature)
+                result.append(f'    """{variable.__doc__}"""')
+                result.append("    ...")
+            else:
+                result.append(f"{signature} ...")
+        elif "dissect.cstruct" in variable.__module__:
+            if hasattr(variable, "cs"):
+                result.append(f"{name}: {variable.cs.__type_def_name__}.{variable.__name__}")
+        elif isinstance(variable, type):
+            result.append(f"from {variable.__module__} import {name}")
+        else:
+            result.append(f"{name}: {variable.__class__.__name__}")
 
     if prev_entries == len(result):
         return ""
