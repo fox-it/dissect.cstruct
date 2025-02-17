@@ -15,13 +15,13 @@ class Flag(BaseType, IntFlag, metaclass=EnumMetaType):
     Flags can be made using any integer type.
 
     Example:
-        When using the default C-style parser, the following syntax is supported:
+        When using the default C-style parser, the following syntax is supported::
 
             flag <name> [: <type>] {
                 <values>
             };
 
-        For example, a flag that has A=1, B=4 and C=8 could be written like so:
+        For example, a flag that has A=1, B=4 and C=8 could be written like so::
 
             flag Test : uint16 {
                 A, B=4, C
