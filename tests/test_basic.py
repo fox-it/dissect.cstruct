@@ -28,7 +28,7 @@ def test_duplicate_type(cs: cstruct, compiled: bool) -> None:
 
 
 def test_load_file(cs: cstruct, compiled: bool) -> None:
-    path = Path(__file__).parent / "data/testdef.txt"
+    path = Path(__file__).parent / "_data/testdef.txt"
 
     cs.loadfile(path, compiled=compiled)
     assert "test" in cs.typedefs

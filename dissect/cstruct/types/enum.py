@@ -114,13 +114,13 @@ class Enum(BaseType, IntEnum, metaclass=EnumMetaType):
     Enums can be made using any integer type.
 
     Example:
-        When using the default C-style parser, the following syntax is supported:
+        When using the default C-style parser, the following syntax is supported::
 
             enum <name> [: <type>] {
                 <values>
             };
 
-        For example, an enum that has A=1, B=5 and C=6 could be written like so:
+        For example, an enum that has A=1, B=5 and C=6 could be written like so::
 
             enum Test : uint16 {
                 A, B=5, C
