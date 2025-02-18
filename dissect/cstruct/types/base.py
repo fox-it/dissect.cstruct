@@ -178,6 +178,22 @@ class MetaType(type):
         """
         return cls._write_array(stream, [*array, cls.__default__()])
 
+    def _class_stub(cls) -> str:
+        return f"class {cls.__name__}({cls.__base__.__name__}):"
+
+    def _type_stub(cls, name: str = "", underscore: bool = False) -> str:
+        cls_name = cls.__name__
+        if underscore:
+            cls_name = f"_{cls_name}"
+
+        if cls.__name__ in cls.cs.typedefs and (cs_name := getattr(cls.cs, "__type_def_name__", "")):
+            cls_name = f"{cs_name}.{cls_name}"
+
+        return f"{name}: {cls_name}"
+
+    def to_type_stub(cls, name: str) -> str:
+        return ""
+
 
 class _overload:
     """Descriptor to use on the ``write`` and ``dumps`` methods on cstruct types.
@@ -244,6 +260,14 @@ class ArrayMetaType(MetaType):
 
         return cls.type._read_array(stream, num, context)
 
+    def default(cls) -> BaseType:
+        return type.__call__(
+            cls, [cls.type.default() for _ in range(0 if cls.dynamic or cls.null_terminated else cls.num_entries)]
+        )
+
+    def _type_stub(cls, name: str = "", underscore: bool = False) -> str:
+        return f"{name}: {cls.__base__.__name__}"
+
 
 class Array(list, BaseType, metaclass=ArrayMetaType):
     """Implements a fixed or dynamically sized array type.
@@ -269,6 +293,15 @@ class Array(list, BaseType, metaclass=ArrayMetaType):
             raise ArraySizeError(f"Expected static array size {cls.num_entries}, got {actual_size} instead.")
 
         return cls.type._write_array(stream, data)
+
+    @classmethod
+    def _type_stub(cls, name: str = "", underscore: bool = False) -> str:
+        cls_name = cls.type.__name__
+
+        if cls_name in cls.cs.typedefs and (cs_name := getattr(cls.cs, "__type_def_name__", "")):
+            cls_name = f"{cs_name}.{cls_name}"
+
+        return f"{name}: {cls.__base__.__name__}[{cls_name}]"
 
 
 def _is_readable_type(value: Any) -> bool:

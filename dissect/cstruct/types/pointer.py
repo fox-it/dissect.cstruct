@@ -1,22 +1,24 @@
 from __future__ import annotations
 
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Generic, TypeVar
 
 from dissect.cstruct.exceptions import NullPointerDereference
 from dissect.cstruct.types.base import BaseType, MetaType
 from dissect.cstruct.types.char import Char
 from dissect.cstruct.types.void import Void
 
+T = TypeVar("T", bound=MetaType)
 
-class Pointer(int, BaseType):
+
+class Pointer(int, BaseType, Generic[T]):
     """Pointer to some other type."""
 
-    type: MetaType
+    type: T
     _stream: BinaryIO | None
     _context: dict[str, Any] | None
     _value: BaseType
 
-    def __new__(cls, value: int, stream: BinaryIO | None, context: dict[str, Any] | None = None) -> Pointer:  # noqa: PYI034
+    def __new__(cls, value: int, stream: BinaryIO | None, context: dict[str, Any] | None = None) -> Pointer[T]:
         obj = super().__new__(cls, value)
         obj._stream = stream
         obj._context = context
@@ -70,15 +72,15 @@ class Pointer(int, BaseType):
         return cls.__new__(cls, cls.cs.pointer.__default__(), None, None)
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Pointer:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Pointer[T]:
         return cls.__new__(cls, cls.cs.pointer._read(stream, context), stream, context)
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: int) -> int:
         return cls.cs.pointer._write(stream, data)
 
-    def dereference(self) -> Any:
-        if self == 0 or self._stream is None:
+    def dereference(self) -> T:
+        if self == 0:
             raise NullPointerDereference
 
         if self._value is None and not issubclass(self.type, Void):
@@ -97,3 +99,7 @@ class Pointer(int, BaseType):
             self._value = value
 
         return self._value
+
+    @classmethod
+    def _type_stub(cls, name: str = "", underscore: bool = False) -> str:
+        return f"{name}: {cls.__base__.__name__}[{cls.type.__name__}]"

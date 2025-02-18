@@ -6,7 +6,8 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from operator import attrgetter
-from textwrap import dedent
+from textwrap import dedent, indent
+from types import FunctionType
 from typing import TYPE_CHECKING, Any, BinaryIO, Callable
 
 from dissect.cstruct.bitbuffer import BitBuffer
@@ -37,6 +38,9 @@ class Field:
     def __repr__(self) -> str:
         bits_str = f" : {self.bits}" if self.bits else ""
         return f"<Field {self.name} {self.type.__name__}{bits_str}>"
+
+    def type_stub(self, underscore: bool = False) -> str:
+        return self.type._type_stub(self.name, underscore)
 
 
 class StructureMetaType(MetaType):
@@ -368,6 +372,28 @@ class StructureMetaType(MetaType):
 
         for key, value in classdict.items():
             setattr(cls, key, value)
+
+    def to_type_stub(cls, name: str = "", underscore: bool = False) -> str:
+        result = [f"class {'_' if underscore else ''}{cls.__name__}({cls.__base__.__name__}):"]
+        args = ["self"]
+        for field_name, field in cls.fields.items():
+            _underscore = field_name == field.type.__name__
+            already_defined = field.type.__name__ in cls.cs.typedefs
+
+            if isinstance(field.type, StructureMetaType) and not already_defined:
+                result.append(indent(field.type.to_type_stub(underscore=_underscore), prefix=" " * 4))
+
+            result.append(f"    {field.type_stub(_underscore)}")
+
+            # Ignore field names from anonymous structures/unions
+            if field_name in cls.lookup:
+                args.append(f"{field.type_stub(_underscore)} = ...")
+
+        result.append(indent("@overload", prefix=" " * 4))
+        result.append(indent(f"def __init__({', '.join(args)}): ...", prefix=" " * 4))
+        result.append(indent("@overload", prefix=" " * 4))
+        result.append(indent("def __init__(self, fh: bytes | bytearray | BinaryIO, /): ...", prefix=" " * 4))
+        return "\n".join(result)
 
 
 class Structure(BaseType, metaclass=StructureMetaType):
