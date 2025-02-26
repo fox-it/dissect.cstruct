@@ -26,7 +26,6 @@ from dissect.cstruct.types import (
     WcharArray,
 )
 
-c_def: str
 class c_structure(cstruct):
     int8: TypeAlias = Packed[int]
     uint8: TypeAlias = Packed[int]

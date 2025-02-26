@@ -6,7 +6,7 @@ import logging
 from argparse import ArgumentParser
 from pathlib import Path
 from textwrap import indent
-from types import FunctionType, ModuleType
+from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
 import dissect.cstruct.types as types
@@ -28,7 +28,7 @@ def load_module(path: Path, base_path: Path) -> ModuleType | None:
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
     except Exception as e:
-        log.exception("Unable to import %s", path)
+        log.warning("Unable to import %s", path)
         log.debug("Error while trying to import module %s", path, exc_info=e)
 
     return module
@@ -67,33 +67,8 @@ def stubify_file(path: Path, base_path: Path) -> str:
         if name.startswith("__"):
             continue
 
-        if isinstance(variable, ModuleType):
-            result.append(f"import {name}")
-        elif isinstance(variable, cstruct):
+        if isinstance(variable, cstruct):
             result.append(stubify_cstruct(variable, name))
-        elif isinstance(variable, (bytes, bytearray, str, int, float, dict, list, tuple)):
-            result.append(f"{name}: {type(variable).__name__}")
-        elif isinstance(variable, FunctionType):
-            anno = variable.__annotations__
-            _items = list(anno.items())[:-1]
-
-            args = ", ".join(f"{name}: {to_type(_type).__name__}" for (name, _type) in _items)
-
-            return_value = repr(to_type(anno.get("return")).__name__)
-            signature = f"def {name}({''.join(args)}) -> {return_value}:"
-            if variable.__doc__:
-                result.append(signature)
-                result.append(f'    """{variable.__doc__}"""')
-                result.append("    ...")
-            else:
-                result.append(f"{signature} ...")
-        elif "dissect.cstruct" in variable.__module__:
-            if hasattr(variable, "cs"):
-                result.append(f"{name}: {variable.cs.__type_def_name__}.{variable.__name__}")
-        elif isinstance(variable, type):
-            result.append(f"from {variable.__module__} import {name}")
-        else:
-            result.append(f"{name}: {variable.__class__.__name__}")
 
     if prev_entries == len(result):
         return ""
