@@ -377,8 +377,11 @@ class StructureMetaType(MetaType):
         result = [f"class {'_' if underscore else ''}{cls.__name__}({cls.__base__.__name__}):"]
         args = ["self"]
         for field_name, field in cls.fields.items():
-            _underscore = field_name == field.type.__name__
-            already_defined = field.type.__name__ in cls.cs.typedefs
+            type_name = field.type.__name__
+
+            _underscore = field_name == type_name
+            # Check if the already defined name is the type we expect
+            already_defined = cls.cs.typedefs.get(type_name) is field.type
 
             if isinstance(field.type, StructureMetaType) and not already_defined:
                 result.append(indent(field.type.to_type_stub(underscore=_underscore), prefix=" " * 4))

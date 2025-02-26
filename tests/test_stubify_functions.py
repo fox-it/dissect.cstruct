@@ -131,7 +131,34 @@ from tests.utils import absolute_path
                 @overload
                 def __init__(self, fh: bytes | bytearray | BinaryIO, /): ...
             """,
-            id="unions",
+            id="anonymous unions",
+        ),
+        pytest.param(
+            """
+            struct Test {
+                union {
+                    wchar a[];
+                    char  b[];
+                } u1;
+            }
+            """,
+            "Test",
+            """
+            class Test(Structure):
+                class _u1(Union):
+                    a: WcharArray
+                    b: CharArray
+                    @overload
+                    def __init__(self, a: WcharArray = ..., b: CharArray = ...): ...
+                    @overload
+                    def __init__(self, fh: bytes | bytearray | BinaryIO, /): ...
+                u1: _u1
+                @overload
+                def __init__(self, u1: _u1 = ...): ...
+                @overload
+                def __init__(self, fh: bytes | bytearray | BinaryIO, /): ...
+            """,
+            id="defined union",
         ),
         pytest.param("""""", "", "...", id="empty"),
     ],

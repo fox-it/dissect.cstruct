@@ -186,7 +186,7 @@ class MetaType(type):
         if underscore:
             cls_name = f"_{cls_name}"
 
-        if cls.__name__ in cls.cs.typedefs and (cs_name := getattr(cls.cs, "__type_def_name__", "")):
+        if cls.cs.typedefs.get(cls.__name__) is cls and (cs_name := getattr(cls.cs, "__type_def_name__", "")):
             cls_name = f"{cs_name}.{cls_name}"
 
         return f"{name}: {cls_name}"
