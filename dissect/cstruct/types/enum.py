@@ -2,29 +2,39 @@ from __future__ import annotations
 
 import sys
 from enum import EnumMeta, IntEnum, IntFlag
-from typing import TYPE_CHECKING, Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO, TypeVar, overload
 
 from dissect.cstruct.types.base import Array, BaseType, MetaType
 
 if TYPE_CHECKING:
+    from typing_extensions import Self
+
     from dissect.cstruct.cstruct import cstruct
 
 
 PY_311 = sys.version_info >= (3, 11, 0)
 PY_312 = sys.version_info >= (3, 12, 0)
 
+_S = TypeVar("_S")
+
 
 class EnumMetaType(EnumMeta, MetaType):
-    type: MetaType
+    type: type[BaseType]
+
+    @overload
+    def __call__(cls, value: cstruct, name: str, type_: type[BaseType], *args, **kwargs) -> type[Enum]: ...
+
+    @overload
+    def __call__(cls: type[_S], value: int | BinaryIO | bytes) -> _S: ...
 
     def __call__(
         cls,
-        value: cstruct | int | BinaryIO | bytes = None,
+        value: cstruct | int | BinaryIO | bytes | None = None,
         name: str | None = None,
-        type_: MetaType | None = None,
+        type_: type[BaseType] | None = None,
         *args,
         **kwargs,
-    ) -> EnumMetaType:
+    ) -> Enum | type[Enum]:
         if name is None:
             if value is None:
                 value = cls.type.__default__()
@@ -35,6 +45,8 @@ class EnumMetaType(EnumMeta, MetaType):
 
             return super().__call__(value)
 
+        # We are constructing a new Enum class
+        # cs is the cstruct instance, but we can't isinstance check it due to circular imports
         cs = value
         if not issubclass(type_, int):
             raise TypeError("Enum can only be created from int type")
@@ -50,7 +62,13 @@ class EnumMetaType(EnumMeta, MetaType):
 
         return enum_cls
 
-    def __getitem__(cls, name: str | int) -> Enum | Array:
+    @overload
+    def __getitem__(cls: type[_S], name: str) -> _S: ...
+
+    @overload
+    def __getitem__(cls: type[_S], name: int) -> Array: ...
+
+    def __getitem__(cls: type[_S], name: str | int) -> _S | Array:
         if isinstance(name, str):
             return super().__getitem__(name)
         return MetaType.__getitem__(cls, name)
@@ -63,35 +81,6 @@ class EnumMetaType(EnumMeta, MetaType):
             if isinstance(value, cls):
                 return True
             return value in cls._value2member_map_
-
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Enum:
-        return cls(cls.type._read(stream, context))
-
-    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Enum]:
-        return list(map(cls, cls.type._read_array(stream, count, context)))
-
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Enum]:
-        return list(map(cls, cls.type._read_0(stream, context)))
-
-    def _write(cls, stream: BinaryIO, data: Enum) -> int:
-        return cls.type._write(stream, data.value)
-
-    def _write_array(cls, stream: BinaryIO, array: list[Enum]) -> int:
-        data = [entry.value if isinstance(entry, Enum) else entry for entry in array]
-        return cls.type._write_array(stream, data)
-
-    def _write_0(cls, stream: BinaryIO, array: list[BaseType]) -> int:
-        data = [entry.value if isinstance(entry, Enum) else entry for entry in array]
-        return cls._write_array(stream, [*data, cls.type.__default__()])
-
-    def _class_stub(cls) -> str:
-        return f"class {cls.__name__}({cls.__base__.__name__}, {cls.type.__name__}):"
-
-    def to_type_stub(cls, name: str = "") -> str:
-        result = [cls._class_stub()]
-        result.extend(f"    {key} = ..." for key in cls.__members__)
-
-        return "\n".join(result)
 
 
 def _fix_alias_members(cls: type[Enum]) -> None:
@@ -189,9 +178,35 @@ class Enum(BaseType, IntEnum, metaclass=EnumMetaType):
         return hash((self.__class__, self.name, self.value))
 
     @classmethod
-    def _missing_(cls, value: int) -> Enum:
+    def _missing_(cls, value: int) -> Self:
         # Emulate FlagBoundary.KEEP for enum (allow values other than the defined members)
         new_member = int.__new__(cls, value)
         new_member._name_ = None
         new_member._value_ = value
         return new_member
+
+    @classmethod
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
+        return cls(cls.type._read(stream, context))
+
+    @classmethod
+    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Self]:
+        return list(map(cls, cls.type._read_array(stream, count, context)))
+
+    @classmethod
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:
+        return list(map(cls, cls.type._read_0(stream, context)))
+
+    @classmethod
+    def _write(cls, stream: BinaryIO, data: Enum) -> int:
+        return cls.type._write(stream, data.value)
+
+    @classmethod
+    def _write_array(cls, stream: BinaryIO, array: list[BaseType | int]) -> int:
+        data = [entry.value if isinstance(entry, Enum) else entry for entry in array]
+        return cls.type._write_array(stream, data)
+
+    @classmethod
+    def _write_0(cls, stream: BinaryIO, array: list[BaseType | int]) -> int:
+        data = [entry.value if isinstance(entry, Enum) else entry for entry in array]
+        return cls._write_array(stream, [*data, cls.type.__default__()])

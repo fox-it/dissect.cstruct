@@ -4,14 +4,14 @@ from typing import TYPE_CHECKING, Any, BinaryIO
 
 import pytest
 
-from dissect.cstruct.types import BaseType, MetaType
+from dissect.cstruct.types import BaseType
 
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
 
 
 class EtwPointer(BaseType):
-    type: MetaType
+    type: type[BaseType]
     size: int | None
 
     @classmethod

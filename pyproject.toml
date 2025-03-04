@@ -32,7 +32,7 @@ documentation = "https://docs.dissect.tools/en/latest/projects/dissect.cstruct"
 repository = "https://github.com/fox-it/dissect.cstruct"
 
 [project.scripts]
-cstruct-stubify = "dissect.cstruct.tools.stubify:main"
+cstruct-stubgen = "dissect.cstruct.tools.stubgen:main"
 
 [tool.ruff]
 line-length = 120

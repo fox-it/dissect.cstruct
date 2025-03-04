@@ -11,7 +11,7 @@ from dissect.cstruct.exceptions import (
     ParserError,
 )
 from dissect.cstruct.expression import Expression
-from dissect.cstruct.types import ArrayMetaType, Field, MetaType
+from dissect.cstruct.types import BaseArray, BaseType, Field, Structure
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
@@ -150,10 +150,7 @@ class TokenParser(Parser):
         if tokens.next == self.TOK.IDENTIFIER:
             type_ = self.cstruct.resolve(self._identifier(tokens))
         elif tokens.next == self.TOK.STRUCT:
-            # The register thing is a bit dirty
-            # Basically consumes all NAME tokens and
-            # registers the struct
-            type_ = self._struct(tokens, register=True)
+            type_ = self._struct(tokens, register_if_name=True)
 
         names = self._names(tokens)
         for name in names:
@@ -162,7 +159,7 @@ class TokenParser(Parser):
                 raise ParserError(f"line {self._lineno(tokens.previous)}: typedefs cannot have bitfields")
             self.cstruct.add_type(name, type_)
 
-    def _struct(self, tokens: TokenConsumer, register: bool = False) -> None:
+    def _struct(self, tokens: TokenConsumer, register: bool = False, register_if_name: bool = False) -> type[Structure]:
         stype = tokens.consume()
 
         factory = self.cstruct._make_union if stype.value.startswith("union") else self.cstruct._make_struct
@@ -204,9 +201,11 @@ class TokenParser(Parser):
             field = self._parse_field(tokens)
             fields.append(field)
 
-        # All names from here on are from typedef's
-        # Parsing names consumes the EOL token
-        names.extend(self._names(tokens))
+        # If the next token is EOL, consume it
+        # Otherwise we're part of a typedef or field definition
+        if tokens.next == self.TOK.EOL:
+            tokens.eol()
+
         name = names[0] if names else None
 
         if st is None:
@@ -223,8 +222,8 @@ class TokenParser(Parser):
             st.commit()
 
         # This is pretty dirty
-        if register:
-            if not names and not registered:
+        if register or register_if_name:
+            if not register_if_name and not names and not registered:
                 raise ParserError(f"line {self._lineno(stype)}: struct has no name")
 
             for name in names:
@@ -251,8 +250,7 @@ class TokenParser(Parser):
             type_ = self._struct(tokens)
 
             if tokens.next != self.TOK.NAME:
-                type_, name, bits = self._parse_field_type(type_, type_.__name__)
-                return Field(name.strip(), type_, bits)
+                return Field(None, type_, None)
 
         if tokens.next != self.TOK.NAME:
             raise ParserError(f"line {self._lineno(tokens.next)}: expected name")
@@ -263,7 +261,7 @@ class TokenParser(Parser):
         tokens.eol()
         return Field(name.strip(), type_, bits)
 
-    def _parse_field_type(self, type_: MetaType, name: str) -> tuple[MetaType, str, int | None]:
+    def _parse_field_type(self, type_: type[BaseType], name: str) -> tuple[type[BaseType], str, int | None]:
         pattern = self.TOK.patterns[self.TOK.NAME]
         # Dirty trick because the regex expects a ; but we don't want it to be part of the value
         d = pattern.match(name + ";").groupdict()
@@ -289,7 +287,7 @@ class TokenParser(Parser):
                     except Exception:
                         pass
 
-                if isinstance(type_, ArrayMetaType) and count is None:
+                if issubclass(type_, BaseArray) and count is None:
                     raise ParserError("Depth required for multi-dimensional array")
 
                 type_ = self.cstruct._make_array(type_, count)
@@ -571,7 +569,7 @@ class TokenCollection:
 
         return object.__getattribute__(self, attr)
 
-    def add(self, regex: str, name: str) -> None:
+    def add(self, regex: str, name: str | None) -> None:
         if name is None:
             self.tokens.append((regex, None))
         else:

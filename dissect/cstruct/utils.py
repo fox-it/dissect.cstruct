@@ -11,6 +11,7 @@ from dissect.cstruct.types.structure import Structure
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from typing import Literal
 
 COLOR_RED = "\033[1;31m"
 COLOR_GREEN = "\033[1;32m"
@@ -31,7 +32,7 @@ COLOR_BG_WHITE = "\033[1;47m\033[1;30m"
 
 PRINTABLE = string.digits + string.ascii_letters + string.punctuation + " "
 
-ENDIANNESS_MAP = {
+ENDIANNESS_MAP: dict[str, Literal["big", "little"]] = {
     "@": sys.byteorder,
     "=": sys.byteorder,
     "<": "little",
@@ -40,7 +41,7 @@ ENDIANNESS_MAP = {
     "network": "big",
 }
 
-Palette = list[tuple[str, str]]
+Palette = list[tuple[int, str]]
 
 
 def _hexdump(data: bytes, palette: Palette | None = None, offset: int = 0, prefix: str = "") -> Iterator[str]:
@@ -158,10 +159,10 @@ def _dumpstruct(
 
         if color:
             foreground, background = colors[ci % len(colors)]
-            palette.append((structure._sizes[field.name], background))
+            palette.append((structure._sizes[field._name], background))
         ci += 1
 
-        value = getattr(structure, field.name)
+        value = getattr(structure, field._name)
         if isinstance(value, (str, Pointer, Enum)):
             value = repr(value)
         elif isinstance(value, int):
@@ -169,12 +170,12 @@ def _dumpstruct(
         elif isinstance(value, list):
             value = pprint.pformat(value)
             if "\n" in value:
-                value = value.replace("\n", f"\n{' ' * (len(field.name) + 4)}")
+                value = value.replace("\n", f"\n{' ' * (len(field._name) + 4)}")
 
         if color:
-            out.append(f"- {foreground}{field.name}{COLOR_NORMAL}: {value}")
+            out.append(f"- {foreground}{field._name}{COLOR_NORMAL}: {value}")
         else:
-            out.append(f"- {field.name}: {value}")
+            out.append(f"- {field._name}: {value}")
 
     out = "\n".join(out)
 
@@ -184,7 +185,7 @@ def _dumpstruct(
         print()
         print(out)
     elif output == "string":
-        return "\n".join(["", hexdump(data, palette, offset=offset, output="string"), "", out])
+        return f"\n{hexdump(data, palette, offset=offset, output='string')}\n\n{out}"
     return None
 
 
@@ -210,7 +211,7 @@ def dumpstruct(
 
     if isinstance(obj, Structure):
         return _dumpstruct(obj, obj.dumps(), offset, color, output)
-    if issubclass(obj, Structure) and data:
+    if issubclass(obj, Structure) and data is not None:
         return _dumpstruct(obj(data), data, offset, color, output)
     raise ValueError("Invalid arguments")
 

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from enum import IntFlag
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.types.base import BaseType
 from dissect.cstruct.types.enum import PY_311, EnumMetaType
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 
 class Flag(BaseType, IntFlag, metaclass=EnumMetaType):
@@ -70,3 +74,29 @@ class Flag(BaseType, IntFlag, metaclass=EnumMetaType):
 
     def __hash__(self) -> int:
         return hash((self.__class__, self.name, self.value))
+
+    @classmethod
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
+        return cls(cls.type._read(stream, context))
+
+    @classmethod
+    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Self]:
+        return list(map(cls, cls.type._read_array(stream, count, context)))
+
+    @classmethod
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:
+        return list(map(cls, cls.type._read_0(stream, context)))
+
+    @classmethod
+    def _write(cls, stream: BinaryIO, data: Flag) -> int:
+        return cls.type._write(stream, data.value)
+
+    @classmethod
+    def _write_array(cls, stream: BinaryIO, array: list[BaseType | int]) -> int:
+        data = [entry.value if isinstance(entry, Flag) else entry for entry in array]
+        return cls.type._write_array(stream, data)
+
+    @classmethod
+    def _write_0(cls, stream: BinaryIO, array: list[BaseType | int]) -> int:
+        data = [entry.value if isinstance(entry, Flag) else entry for entry in array]
+        return cls._write_array(stream, [*data, cls.type.__default__()])

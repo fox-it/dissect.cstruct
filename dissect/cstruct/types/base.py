@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import functools
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, BinaryIO, Callable
+from typing import TYPE_CHECKING, Any, BinaryIO, Callable, ClassVar, TypeVar
 
 from dissect.cstruct.exceptions import ArraySizeError
 from dissect.cstruct.expression import Expression
 
 if TYPE_CHECKING:
+    from typing_extensions import Self
+
     from dissect.cstruct.cstruct import cstruct
 
 
 EOF = -0xE0F  # Negative counts are illegal anyway, so abuse that for our EOF sentinel
+
+
+_S = TypeVar("_S")
 
 
 class MetaType(type):
@@ -27,10 +32,10 @@ class MetaType(type):
     """The alignment of the type in bytes. A value of ``None`` will be treated as 1-byte aligned."""
 
     # This must be the actual type, but since Array is a subclass of BaseType, we correct this at the bottom of the file
-    ArrayType: type[Array] = "Array"
+    ArrayType: type[BaseArray] = "Array"
     """The array type for this type class."""
 
-    def __call__(cls, *args, **kwargs) -> MetaType | BaseType:
+    def __call__(cls, *args, **kwargs) -> Self:  # type: ignore
         """Adds support for ``TypeClass(bytes | file-like object)`` parsing syntax."""
         # TODO: add support for Type(cs) API to create new bounded type classes, similar to the old API?
         if len(args) == 1 and not isinstance(args[0], cls):
@@ -48,7 +53,7 @@ class MetaType(type):
 
         return type.__call__(cls, *args, **kwargs)
 
-    def __getitem__(cls, num_entries: int | Expression | None) -> ArrayMetaType:
+    def __getitem__(cls, num_entries: int | Expression | None) -> type[BaseArray]:
         """Create a new array with the given number of entries."""
         return cls.cs._make_array(cls, num_entries)
 
@@ -59,11 +64,7 @@ class MetaType(type):
 
         return cls.size
 
-    def __default__(cls) -> BaseType:
-        """Return the default value of this type."""
-        return cls()
-
-    def reads(cls, data: bytes) -> BaseType:
+    def reads(cls, data: bytes | memoryview | bytearray) -> Self:  # type: ignore
         """Parse the given data from a bytes-like object.
 
         Args:
@@ -74,7 +75,7 @@ class MetaType(type):
         """
         return cls._read(BytesIO(data))
 
-    def read(cls, obj: BinaryIO | bytes) -> BaseType:
+    def read(cls, obj: BinaryIO | bytes | memoryview | bytearray) -> Self:  # type: ignore
         """Parse the given data.
 
         Args:
@@ -85,6 +86,9 @@ class MetaType(type):
         """
         if _is_buffer_type(obj):
             return cls.reads(obj)
+
+        if not _is_readable_type(obj):
+            raise TypeError("Invalid object type")
 
         return cls._read(obj)
 
@@ -113,86 +117,23 @@ class MetaType(type):
         cls._write(out, value)
         return out.getvalue()
 
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> BaseType:
-        """Internal function for reading value.
-
-        Must be implemented per type.
-
-        Args:
-            stream: The stream to read from.
-            context: Optional reading context.
-        """
+    def _read(cls: type[_S], stream: BinaryIO, context: dict[str, Any] | None = None) -> _S:
         raise NotImplementedError
 
-    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[BaseType]:
-        """Internal function for reading array values.
+    def _read_array(cls: type[_S], stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[_S]:
+        raise NotImplementedError
 
-        Allows type implementations to do optimized reading for their type.
-
-        Args:
-            stream: The stream to read from.
-            count: The amount of values to read.
-            context: Optional reading context.
-        """
-        if count == EOF:
-            result = []
-            while not _is_eof(stream):
-                result.append(cls._read(stream, context))
-            return result
-
-        return [cls._read(stream, context) for _ in range(count)]
-
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[BaseType]:
-        """Internal function for reading null-terminated data.
-
-        "Null" is type specific, so must be implemented per type.
-
-        Args:
-            stream: The stream to read from.
-            context: Optional reading context.
-        """
+    def _read_0(cls: type[_S], stream: BinaryIO, context: dict[str, Any] | None = None) -> list[_S]:
         raise NotImplementedError
 
     def _write(cls, stream: BinaryIO, data: Any) -> int:
         raise NotImplementedError
 
-    def _write_array(cls, stream: BinaryIO, array: list[BaseType]) -> int:
-        """Internal function for writing arrays.
+    def _write_array(cls: type[_S], stream: BinaryIO, array: list[_S]) -> int:
+        raise NotImplementedError
 
-        Allows type implementations to do optimized writing for their type.
-
-        Args:
-            stream: The stream to read from.
-            array: The array to write.
-        """
-        return sum(cls._write(stream, entry) for entry in array)
-
-    def _write_0(cls, stream: BinaryIO, array: list[BaseType]) -> int:
-        """Internal function for writing null-terminated arrays.
-
-        Allows type implementations to do optimized writing for their type.
-
-        Args:
-            stream: The stream to read from.
-            array: The array to write.
-        """
-        return cls._write_array(stream, [*array, cls.__default__()])
-
-    def _class_stub(cls) -> str:
-        return f"class {cls.__name__}({cls.__base__.__name__}):"
-
-    def _type_stub(cls, name: str = "", underscore: bool = False) -> str:
-        cls_name = cls.__name__
-        if underscore:
-            cls_name = f"_{cls_name}"
-
-        if cls.cs.typedefs.get(cls.__name__) is cls and (cs_name := getattr(cls.cs, "__type_def_name__", "")):
-            cls_name = f"{cs_name}.{cls_name}"
-
-        return f"{name}: {cls_name}"
-
-    def to_type_stub(cls, name: str) -> str:
-        return ""
+    def _write_0(cls: type[_S], stream: BinaryIO, array: list[_S]) -> int:
+        raise NotImplementedError
 
 
 class _overload:
@@ -207,10 +148,10 @@ class _overload:
         b'\\x7b\\x00\\x00\\x00'
     """
 
-    def __init__(self, func: Callable[[Any], Any]) -> None:
+    def __init__(self, func: Callable[..., Any]) -> None:
         self.func = func
 
-    def __get__(self, instance: BaseType | None, owner: MetaType) -> Callable[[Any], bytes]:
+    def __get__(self, instance: BaseType | None, owner: type[BaseType]) -> Callable[[], bytes]:
         if instance is None:
             return functools.partial(self.func, owner)
         return functools.partial(self.func, instance.__class__, value=instance)
@@ -229,20 +170,109 @@ class BaseType(metaclass=MetaType):
 
         return self.__class__.size
 
+    @classmethod
+    def __default__(cls) -> Self:
+        """Return the default value of this type."""
+        return cls()
 
-class ArrayMetaType(MetaType):
-    """Base metaclass for array-like types."""
+    @classmethod
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
+        """Internal function for reading value.
 
-    type: MetaType
-    num_entries: int | Expression | None
-    null_terminated: bool
+        Must be implemented per type.
 
+        Args:
+            stream: The stream to read from.
+            context: Optional reading context.
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Self]:
+        """Internal function for reading array values.
+
+        Allows type implementations to do optimized reading for their type.
+
+        Args:
+            stream: The stream to read from.
+            count: The amount of values to read.
+            context: Optional reading context.
+        """
+        if count == EOF:
+            result = []
+            while not _is_eof(stream):
+                result.append(cls._read(stream, context))
+            return result
+
+        return [cls._read(stream, context) for _ in range(count)]
+
+    @classmethod
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:
+        """Internal function for reading null-terminated data.
+
+        "Null" is type specific, so must be implemented per type.
+
+        Args:
+            stream: The stream to read from.
+            context: Optional reading context.
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def _write(cls, stream: BinaryIO, data: Any) -> int:
+        raise NotImplementedError
+
+    @classmethod
+    def _write_array(cls, stream: BinaryIO, array: list[Self]) -> int:
+        """Internal function for writing arrays.
+
+        Allows type implementations to do optimized writing for their type.
+
+        Args:
+            stream: The stream to read from.
+            array: The array to write.
+        """
+        return sum(cls._write(stream, entry) for entry in array)
+
+    @classmethod
+    def _write_0(cls, stream: BinaryIO, array: list[Self]) -> int:
+        """Internal function for writing null-terminated arrays.
+
+        Allows type implementations to do optimized writing for their type.
+
+        Args:
+            stream: The stream to read from.
+            array: The array to write.
+        """
+        return cls._write_array(stream, [*array, cls.__default__()])
+
+
+T = TypeVar("T", bound=BaseType)
+
+
+class BaseArray(BaseType):
+    """Implements a fixed or dynamically sized array type.
+
+    Example:
+        When using the default C-style parser, the following syntax is supported:
+
+            x[3] -> 3 -> static length.
+            x[] -> None -> null-terminated.
+            x[expr] -> expr -> dynamic length.
+    """
+
+    type: ClassVar[type[BaseType]]
+    num_entries: ClassVar[int | Expression | None]
+    null_terminated: ClassVar[bool]
+
+    @classmethod
     def __default__(cls) -> BaseType:
         return type.__call__(
             cls, [cls.type.__default__()] * (cls.num_entries if isinstance(cls.num_entries, int) else 0)
         )
 
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Array:
+    @classmethod
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[BaseType]:
         if cls.null_terminated:
             return cls.type._read_0(stream, context)
 
@@ -260,30 +290,6 @@ class ArrayMetaType(MetaType):
 
         return cls.type._read_array(stream, num, context)
 
-    def default(cls) -> BaseType:
-        return type.__call__(
-            cls, [cls.type.default() for _ in range(0 if cls.dynamic or cls.null_terminated else cls.num_entries)]
-        )
-
-    def _type_stub(cls, name: str = "", underscore: bool = False) -> str:
-        return f"{name}: {cls.__base__.__name__}"
-
-
-class Array(list, BaseType, metaclass=ArrayMetaType):
-    """Implements a fixed or dynamically sized array type.
-
-    Example:
-        When using the default C-style parser, the following syntax is supported:
-
-            x[3] -> 3 -> static length.
-            x[] -> None -> null-terminated.
-            x[expr] -> expr -> dynamic length.
-    """
-
-    @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Array:
-        return cls(ArrayMetaType._read(cls, stream, context))
-
     @classmethod
     def _write(cls, stream: BinaryIO, data: list[Any]) -> int:
         if cls.null_terminated:
@@ -294,21 +300,18 @@ class Array(list, BaseType, metaclass=ArrayMetaType):
 
         return cls.type._write_array(stream, data)
 
+
+class Array(list[T], BaseArray):
     @classmethod
-    def _type_stub(cls, name: str = "", underscore: bool = False) -> str:
-        cls_name = cls.type.__name__
-
-        if cls_name in cls.cs.typedefs and (cs_name := getattr(cls.cs, "__type_def_name__", "")):
-            cls_name = f"{cs_name}.{cls_name}"
-
-        return f"{name}: {cls.__base__.__name__}[{cls_name}]"
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[T]:
+        return cls(super()._read(stream, context))
 
 
-def _is_readable_type(value: Any) -> bool:
+def _is_readable_type(value: object) -> bool:
     return hasattr(value, "read")
 
 
-def _is_buffer_type(value: Any) -> bool:
+def _is_buffer_type(value: object) -> bool:
     return isinstance(value, (bytes, memoryview, bytearray))
 
 

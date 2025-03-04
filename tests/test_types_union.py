@@ -270,7 +270,7 @@ def test_union_definition_nested(cs: cstruct, compiled: bool) -> None:
     assert isinstance(obj.c.a, UnionProxy)
     assert len(obj.c.a) == 8
     assert bytes(obj.c.a) == b"holybeef"
-    assert repr(obj.c.a) == "<a a=0x796c6f68 b=0x66656562>"
+    assert repr(obj.c.a) == "<__anonymous_0__ a=0x796c6f68 b=0x66656562>"
 
     assert obj.magic == b"zomg"
     assert obj.c.a.a == 0x796C6F68

@@ -7,7 +7,8 @@ import pytest
 
 from dissect.cstruct.exceptions import ParserError
 from dissect.cstruct.parser import TokenParser
-from dissect.cstruct.types import ArrayMetaType, Pointer
+from dissect.cstruct.types import BaseArray, Pointer
+from tests.utils import verify_compiled
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
@@ -21,12 +22,17 @@ def test_nested_structs(cs: cstruct, compiled: bool) -> None:
         } a[4];
     };
     """
-
     cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.nest, compiled)
+
     data = b"\x00\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00"
     obj = cs.nest(data)
     for i in range(4):
         assert obj.a[i].b == i
+
+    assert cs.nest.fields["a"].type.__name__ == "__anonymous_0__[4]"
+    assert cs.nest.fields["a"].type.type.__name__ == "__anonymous_0__"
 
 
 def test_preserve_comment_newlines() -> None:
@@ -64,7 +70,7 @@ def test_typedef_types(cs: cstruct) -> None:
     cs.pointer = cs.uint8
     cs.load(cdef)
 
-    assert isinstance(cs.uuid_t, ArrayMetaType)
+    assert issubclass(cs.uuid_t, BaseArray)
     assert cs.uuid_t(b"\x01" * 16) == b"\x01" * 16
 
     assert issubclass(cs.ptr, Pointer)
@@ -81,12 +87,12 @@ def test_typedef_types(cs: cstruct) -> None:
 
 def test_dynamic_substruct_size(cs: cstruct) -> None:
     cdef = """
-    struct {
+    typedef struct {
         int32 len;
         char str[len];
     } sub;
 
-    struct {
+    typedef struct {
         sub data[1];
     } test;
     """
