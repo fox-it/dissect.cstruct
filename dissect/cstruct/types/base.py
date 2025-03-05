@@ -59,6 +59,10 @@ class MetaType(type):
 
     def __len__(cls) -> int:
         """Return the byte size of the type."""
+        # Python 3.9 compat thing for bound type vars
+        if cls is BaseType:
+            return 0
+
         if cls.size is None:
             raise TypeError("Dynamic size")
 
