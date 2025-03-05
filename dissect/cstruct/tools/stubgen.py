@@ -88,7 +88,7 @@ def generate_cstruct_stub(cs: cstruct, module_prefix: str = "", cls_name: str = 
             # Create an alias to the type if we have already seen it before.
             stub = f"{name}: {typedef.__name__}"
 
-        elif issubclass(typedef, types.Enum):
+        elif issubclass(typedef, (types.Enum, types.Flag)):
             stub = generate_enum_stub(typedef, cs_prefix=cs_prefix, module_prefix=module_prefix)
         elif issubclass(typedef, types.Structure):
             stub = generate_structure_stub(typedef, cs_prefix=cs_prefix, module_prefix=module_prefix)
@@ -135,7 +135,7 @@ def generate_generic_stub(
 
 
 def generate_enum_stub(
-    enum: type[types.Enum],
+    enum: type[types.Enum | types.Flag],
     name_prefix: str = "",
     cs_prefix: str = "",
     module_prefix: str = "",
