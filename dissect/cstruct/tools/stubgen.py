@@ -160,7 +160,7 @@ def generate_structure_stub(
 
         if issubclass(nested_type, types.Structure) and type_name not in structure.cs.typedefs:
             inlined = True
-            inline_stub = generate_structure_stub(nested_type, cs_prefix, module_prefix)
+            inline_stub = generate_structure_stub(nested_type, cs_prefix=cs_prefix, module_prefix=module_prefix)
 
             result.append(textwrap.indent(inline_stub, prefix=indent))
 
