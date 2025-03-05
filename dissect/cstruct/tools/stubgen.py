@@ -178,7 +178,7 @@ def generate_structure_stub(
         args.append(f"{field_name}: {type_hint} | None = ...")
 
     result.append(textwrap.indent("@overload", prefix=indent))
-    result.append(textwrap.indent(f"def __init__({', '.join(args)}): ...", prefix=" " * 4))
+    result.append(textwrap.indent(f"def __init__({', '.join(args)}): ...", prefix=indent))
     result.append(textwrap.indent("@overload", prefix=indent))
     result.append(
         textwrap.indent("def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...", prefix=indent)
