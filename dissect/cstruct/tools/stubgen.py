@@ -111,9 +111,9 @@ def generate_typehint(
     if issubclass(type_, types.WcharArray):
         return f"{module_prefix}WcharArray"
     if issubclass(type_, types.Pointer):
-        return f"{module_prefix}Pointer[{prefix}{generate_typehint(type_.type, prefix, module_prefix)}]"
+        return f"{module_prefix}Pointer[{generate_typehint(type_.type, prefix, module_prefix)}]"
     if issubclass(type_, types.Array):
-        return f"{module_prefix}Array[{prefix}{generate_typehint(type_.type, prefix, module_prefix)}]"
+        return f"{module_prefix}Array[{generate_typehint(type_.type, prefix, module_prefix)}]"
     return f"{prefix}{type_.__name__}"
 
 
