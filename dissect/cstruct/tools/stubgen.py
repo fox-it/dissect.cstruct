@@ -26,7 +26,7 @@ def load_module(path: Path, base: Path) -> ModuleType | None:
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
     except Exception as e:
-        log.warning("Unable to import %s", path, exc_info=True)
+        log.warning("Unable to import %s", path)
         log.debug("Error while trying to import module %s", path, exc_info=e)
 
     return module
