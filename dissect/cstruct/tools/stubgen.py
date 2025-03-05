@@ -77,12 +77,18 @@ def generate_cstruct_stub(cs: cstruct, module_prefix: str = "", cls_name: str = 
             continue
         body.append(textwrap.indent(f"{name}: {type(value).__name__} = ...", prefix=indent))
 
+    defined_names = set()
+
     # Then typedefs
     for name, typedef in cs.typedefs.items():
         if name in empty_cs.typedefs:
             continue
 
-        if issubclass(typedef, types.Enum):
+        if typedef.__name__ in defined_names:
+            # Create an alias to the type if we have already seen it before.
+            stub = f"{name}: {typedef.__name__}"
+
+        elif issubclass(typedef, types.Enum):
             stub = generate_enum_stub(typedef, cs_prefix=cs_prefix, module_prefix=module_prefix)
         elif issubclass(typedef, types.Structure):
             stub = generate_structure_stub(typedef, cs_prefix=cs_prefix, module_prefix=module_prefix)
@@ -92,6 +98,8 @@ def generate_cstruct_stub(cs: cstruct, module_prefix: str = "", cls_name: str = 
             stub = f"{name}: TypeAlias = {typedef}"
         else:
             raise TypeError(f"Unknown typedef: {typedef}")
+
+        defined_names.add(typedef.__name__)
 
         body.append(textwrap.indent(stub, prefix=indent))
 
