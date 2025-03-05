@@ -51,9 +51,9 @@ def generate_file_stub(path: Path, base: Path) -> str:
 
     for name, obj in tmp_module.__dict__.items():
         if isinstance(obj, cstruct):
-            stub = generate_cstruct_stub(obj, module_prefix="__cs__.")
+            stub = generate_cstruct_stub(obj, module_prefix="__cs__.", cls_name=f"_{name}")
             body.append(stub)
-            body.append(f"{name}: cstruct")
+            body.append(f"{name}: _{name}")
 
     if not body:
         return ""
@@ -61,11 +61,13 @@ def generate_file_stub(path: Path, base: Path) -> str:
     return "\n".join(imports + body + [""])
 
 
-def generate_cstruct_stub(cs: cstruct, module_prefix: str = "") -> str:
+def generate_cstruct_stub(cs: cstruct, module_prefix: str = "", cls_name: str = "") -> str:
+    cls_name = cls_name or "cstruct"
+
     empty_cs = cstruct()
 
-    cs_prefix = "cstruct."
-    header = [f"class cstruct({module_prefix}cstruct):"]
+    cs_prefix = f"{cls_name}."
+    header = [f"class {cls_name}({module_prefix}cstruct):"]
     body = []
     indent = " " * 4
 

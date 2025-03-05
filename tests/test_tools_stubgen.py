@@ -273,15 +273,15 @@ def test_generate_file_stub(tmp_path: Path) -> None:
         import dissect.cstruct as __cs__
 
 
-        class cstruct(__cs__.cstruct):
+        class _c_structure(__cs__.cstruct):
             class Test(__cs__.Structure):
-                a: cstruct.uint32
-                b: cstruct.uint32
+                a: _c_structure.uint32
+                b: _c_structure.uint32
                 @overload
-                def __init__(self, a: cstruct.uint32 | None = ..., b: cstruct.uint32 | None = ...): ...
+                def __init__(self, a: _c_structure.uint32 | None = ..., b: _c_structure.uint32 | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
-        c_structure: cstruct
+        c_structure: _c_structure
     """
 
     assert stubgen.generate_file_stub(test_file, tmp_path) == textwrap.dedent(expected).lstrip()
