@@ -24,6 +24,9 @@ classifiers = [
   "Topic :: Security",
   "Topic :: Utilities",
 ]
+dependencies = [
+  "typing_extensions"
+]
 dynamic = ["version"]
 
 [project.urls]
