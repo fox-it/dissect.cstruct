@@ -61,9 +61,7 @@ def generate_file_stub(path: Path, base: Path) -> str:
     return "\n".join(imports + body + [""])
 
 
-def generate_cstruct_stub(cs: cstruct, module_prefix: str = "", cls_name: str = "") -> str:
-    cls_name = cls_name or "cstruct"
-
+def generate_cstruct_stub(cs: cstruct, module_prefix: str = "", cls_name: str = "cstruct") -> str:
     empty_cs = cstruct()
 
     cs_prefix = f"{cls_name}."
