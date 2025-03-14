@@ -24,15 +24,17 @@ classifiers = [
   "Topic :: Security",
   "Topic :: Utilities",
 ]
-dependencies = [
-  "typing_extensions"
-]
 dynamic = ["version"]
 
 [project.urls]
 homepage = "https://dissect.tools"
 documentation = "https://docs.dissect.tools/en/latest/projects/dissect.cstruct"
 repository = "https://github.com/fox-it/dissect.cstruct"
+
+[project.optional-dependencies]
+dev = [
+  "typing_extensions"
+]
 
 [project.scripts]
 cstruct-stubgen = "dissect.cstruct.tools.stubgen:main"
