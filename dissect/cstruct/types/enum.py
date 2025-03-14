@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from enum import Enum as _Enum
 from enum import EnumMeta, IntEnum, IntFlag
 from typing import TYPE_CHECKING, Any, BinaryIO, TypeVar, overload
 
@@ -81,6 +82,26 @@ class EnumMetaType(EnumMeta, MetaType):
             if isinstance(value, cls):
                 return True
             return value in cls._value2member_map_
+
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
+        return cls(cls.type._read(stream, context))
+
+    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Self]:
+        return list(map(cls, cls.type._read_array(stream, count, context)))
+
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:
+        return list(map(cls, cls.type._read_0(stream, context)))
+
+    def _write(cls, stream: BinaryIO, data: Enum) -> int:
+        return cls.type._write(stream, data.value)
+
+    def _write_array(cls, stream: BinaryIO, array: list[BaseType | int]) -> int:
+        data = [entry.value if isinstance(entry, _Enum) else entry for entry in array]
+        return cls.type._write_array(stream, data)
+
+    def _write_0(cls, stream: BinaryIO, array: list[BaseType | int]) -> int:
+        data = [entry.value if isinstance(entry, _Enum) else entry for entry in array]
+        return cls._write_array(stream, [*data, cls.type.__default__()])
 
 
 def _fix_alias_members(cls: type[Enum]) -> None:
@@ -184,29 +205,3 @@ class Enum(BaseType, IntEnum, metaclass=EnumMetaType):
         new_member._name_ = None
         new_member._value_ = value
         return new_member
-
-    @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
-        return cls(cls.type._read(stream, context))
-
-    @classmethod
-    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Self]:
-        return list(map(cls, cls.type._read_array(stream, count, context)))
-
-    @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:
-        return list(map(cls, cls.type._read_0(stream, context)))
-
-    @classmethod
-    def _write(cls, stream: BinaryIO, data: Enum) -> int:
-        return cls.type._write(stream, data.value)
-
-    @classmethod
-    def _write_array(cls, stream: BinaryIO, array: list[BaseType | int]) -> int:
-        data = [entry.value if isinstance(entry, Enum) else entry for entry in array]
-        return cls.type._write_array(stream, data)
-
-    @classmethod
-    def _write_0(cls, stream: BinaryIO, array: list[BaseType | int]) -> int:
-        data = [entry.value if isinstance(entry, Enum) else entry for entry in array]
-        return cls._write_array(stream, [*data, cls.type.__default__()])

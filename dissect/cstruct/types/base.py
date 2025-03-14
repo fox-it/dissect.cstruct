@@ -16,9 +16,6 @@ if TYPE_CHECKING:
 EOF = -0xE0F  # Negative counts are illegal anyway, so abuse that for our EOF sentinel
 
 
-_S = TypeVar("_S")
-
-
 class MetaType(type):
     """Base metaclass for cstruct type classes."""
 
@@ -67,6 +64,10 @@ class MetaType(type):
             raise TypeError("Dynamic size")
 
         return cls.size
+
+    def __default__(cls) -> Self:  # type: ignore
+        """Return the default value of this type."""
+        return cls()
 
     def reads(cls, data: bytes | memoryview | bytearray) -> Self:  # type: ignore
         """Parse the given data from a bytes-like object.
@@ -121,23 +122,70 @@ class MetaType(type):
         cls._write(out, value)
         return out.getvalue()
 
-    def _read(cls: type[_S], stream: BinaryIO, context: dict[str, Any] | None = None) -> _S:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:  # type: ignore
+        """Internal function for reading value.
+
+        Must be implemented per type.
+
+        Args:
+            stream: The stream to read from.
+            context: Optional reading context.
+        """
         raise NotImplementedError
 
-    def _read_array(cls: type[_S], stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[_S]:
-        raise NotImplementedError
+    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Self]:  # type: ignore
+        """Internal function for reading array values.
 
-    def _read_0(cls: type[_S], stream: BinaryIO, context: dict[str, Any] | None = None) -> list[_S]:
+        Allows type implementations to do optimized reading for their type.
+
+        Args:
+            stream: The stream to read from.
+            count: The amount of values to read.
+            context: Optional reading context.
+        """
+        if count == EOF:
+            result = []
+            while not _is_eof(stream):
+                result.append(cls._read(stream, context))
+            return result
+
+        return [cls._read(stream, context) for _ in range(count)]
+
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:
+        """Internal function for reading null-terminated data.
+
+        "Null" is type specific, so must be implemented per type.
+
+        Args:
+            stream: The stream to read from.
+            context: Optional reading context.
+        """
         raise NotImplementedError
 
     def _write(cls, stream: BinaryIO, data: Any) -> int:
         raise NotImplementedError
 
-    def _write_array(cls: type[_S], stream: BinaryIO, array: list[_S]) -> int:
-        raise NotImplementedError
+    def _write_array(cls, stream: BinaryIO, array: list[Self]) -> int:  # type: ignore
+        """Internal function for writing arrays.
 
-    def _write_0(cls: type[_S], stream: BinaryIO, array: list[_S]) -> int:
-        raise NotImplementedError
+        Allows type implementations to do optimized writing for their type.
+
+        Args:
+            stream: The stream to read from.
+            array: The array to write.
+        """
+        return sum(cls._write(stream, entry) for entry in array)
+
+    def _write_0(cls, stream: BinaryIO, array: list[Self]) -> int:  # type: ignore
+        """Internal function for writing null-terminated arrays.
+
+        Allows type implementations to do optimized writing for their type.
+
+        Args:
+            stream: The stream to read from.
+            array: The array to write.
+        """
+        return cls._write_array(stream, [*array, cls.__default__()])
 
 
 class _overload:
@@ -173,82 +221,6 @@ class BaseType(metaclass=MetaType):
             raise TypeError("Dynamic size")
 
         return self.__class__.size
-
-    @classmethod
-    def __default__(cls) -> Self:
-        """Return the default value of this type."""
-        return cls()
-
-    @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
-        """Internal function for reading value.
-
-        Must be implemented per type.
-
-        Args:
-            stream: The stream to read from.
-            context: Optional reading context.
-        """
-        raise NotImplementedError
-
-    @classmethod
-    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Self]:
-        """Internal function for reading array values.
-
-        Allows type implementations to do optimized reading for their type.
-
-        Args:
-            stream: The stream to read from.
-            count: The amount of values to read.
-            context: Optional reading context.
-        """
-        if count == EOF:
-            result = []
-            while not _is_eof(stream):
-                result.append(cls._read(stream, context))
-            return result
-
-        return [cls._read(stream, context) for _ in range(count)]
-
-    @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:
-        """Internal function for reading null-terminated data.
-
-        "Null" is type specific, so must be implemented per type.
-
-        Args:
-            stream: The stream to read from.
-            context: Optional reading context.
-        """
-        raise NotImplementedError
-
-    @classmethod
-    def _write(cls, stream: BinaryIO, data: Any) -> int:
-        raise NotImplementedError
-
-    @classmethod
-    def _write_array(cls, stream: BinaryIO, array: list[Self]) -> int:
-        """Internal function for writing arrays.
-
-        Allows type implementations to do optimized writing for their type.
-
-        Args:
-            stream: The stream to read from.
-            array: The array to write.
-        """
-        return sum(cls._write(stream, entry) for entry in array)
-
-    @classmethod
-    def _write_0(cls, stream: BinaryIO, array: list[Self]) -> int:
-        """Internal function for writing null-terminated arrays.
-
-        Allows type implementations to do optimized writing for their type.
-
-        Args:
-            stream: The stream to read from.
-            array: The array to write.
-        """
-        return cls._write_array(stream, [*array, cls.__default__()])
 
 
 T = TypeVar("T", bound=BaseType)
