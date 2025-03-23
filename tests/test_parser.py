@@ -100,3 +100,32 @@ def test_dynamic_substruct_size(cs: cstruct) -> None:
 
     assert cs.sub.dynamic
     assert cs.test.dynamic
+
+
+def test_structure_names(cs: cstruct) -> None:
+    cdef = """
+    struct a {
+        uint32 _;
+    };
+
+    struct {
+        uint32 _;
+    } b;
+
+    struct {
+        uint32 _;
+    } c, d;
+
+    typedef struct {
+        uint32 _;
+    } e;
+    """
+    cs.load(cdef)
+
+    assert all(c in cs.typedefs for c in ("a", "b", "c", "d", "e"))
+
+    assert cs.a.__name__ == "a"
+    assert cs.b.__name__ == "b"
+    assert cs.c.__name__ == "c"
+    assert cs.d.__name__ == "c"
+    assert cs.e.__name__ == "e"

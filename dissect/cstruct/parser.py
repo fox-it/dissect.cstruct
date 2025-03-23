@@ -147,19 +147,28 @@ class TokenParser(Parser):
         tokens.consume()
         type_ = None
 
+        names = []
+
         if tokens.next == self.TOK.IDENTIFIER:
             type_ = self.cstruct.resolve(self._identifier(tokens))
         elif tokens.next == self.TOK.STRUCT:
-            type_ = self._struct(tokens, register_if_name=True)
+            type_ = self._struct(tokens)
+            if not type_.__anonymous__:
+                names.append(type_.__name__)
 
-        names = self._names(tokens)
+        names.extend(self._names(tokens))
         for name in names:
+            if issubclass(type_, Structure) and type_.__anonymous__:
+                type_.__anonymous__ = False
+                type_.__name__ = name
+                type_.__qualname__ = name
+
             type_, name, bits = self._parse_field_type(type_, name)
             if bits is not None:
                 raise ParserError(f"line {self._lineno(tokens.previous)}: typedefs cannot have bitfields")
             self.cstruct.add_type(name, type_)
 
-    def _struct(self, tokens: TokenConsumer, register: bool = False, register_if_name: bool = False) -> type[Structure]:
+    def _struct(self, tokens: TokenConsumer, register: bool = False) -> type[Structure]:
         stype = tokens.consume()
 
         factory = self.cstruct._make_union if stype.value.startswith("union") else self.cstruct._make_struct
@@ -201,6 +210,9 @@ class TokenParser(Parser):
             field = self._parse_field(tokens)
             fields.append(field)
 
+        if register:
+            names.extend(self._names(tokens))
+
         # If the next token is EOL, consume it
         # Otherwise we're part of a typedef or field definition
         if tokens.next == self.TOK.EOL:
@@ -222,8 +234,8 @@ class TokenParser(Parser):
             st.commit()
 
         # This is pretty dirty
-        if register or register_if_name:
-            if not register_if_name and not names and not registered:
+        if register:
+            if not names and not registered:
                 raise ParserError(f"line {self._lineno(stype)}: struct has no name")
 
             for name in names:

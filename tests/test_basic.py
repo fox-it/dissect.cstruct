@@ -446,12 +446,12 @@ def test_size_and_aligment(cs: cstruct) -> None:
 
 def test_dynamic_substruct_size(cs: cstruct) -> None:
     cdef = """
-    typedef struct {
+    struct {
         int32 len;
         char str[len];
     } sub;
 
-    typedef struct {
+    struct {
         sub data[1];
     } test;
     """
