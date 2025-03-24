@@ -207,34 +207,60 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
     assert stubgen.generate_structure_stub(cs.Test) == textwrap.dedent(expected).strip()
 
 
-def test_generate_cstruct_stub(cs: cstruct) -> None:
-    cdef = """
-    #define TEST 1
+@pytest.mark.parametrize(
+    ("cdef", "expected"),
+    [
+        pytest.param(
+            """
+            #define TEST 1
 
-    enum TestEnum {
-        A = 1,
-        B = 2,
-    };
+            enum TestEnum {
+                A = 1,
+                B = 2,
+            };
 
-    struct TestStruct {
-        uint8 a;
-    };
-    """
+            struct TestStruct {
+                uint8 a;
+            };
+            """,
+            """
+            class cstruct(cstruct):
+                TEST: int = ...
+                class TestEnum(Enum):
+                    A = ...
+                    B = ...
+                class TestStruct(Structure):
+                    a: cstruct.uint8
+                    @overload
+                    def __init__(self, a: cstruct.uint8 | None = ...): ...
+                    @overload
+                    def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
+            """,
+            id="cstruct stub",
+        ),
+        pytest.param(
+            """
+            typedef struct Test{
+                uint8 a;
+            } _test;
+            """,
+            """
+            class cstruct(cstruct):
+                class Test(Structure):
+                    a: cstruct.uint8
+                    @overload
+                    def __init__(self, a: cstruct.uint8 | None = ...): ...
+                    @overload
+                    def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+                _test: TypeAlias = Test
+            """,
+            id="alias stub",
+        ),
+    ],
+)
+def test_generate_cstruct_stub(cs: cstruct, cdef: str, expected: str) -> None:
     cs.load(cdef)
-
-    expected = """
-    class cstruct(cstruct):
-        TEST: int = ...
-        class TestEnum(Enum):
-            A = ...
-            B = ...
-        class TestStruct(Structure):
-            a: cstruct.uint8
-            @overload
-            def __init__(self, a: cstruct.uint8 | None = ...): ...
-            @overload
-            def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
-    """
 
     assert stubgen.generate_cstruct_stub(cs) == textwrap.dedent(expected).strip()
 
