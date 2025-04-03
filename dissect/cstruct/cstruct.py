@@ -5,21 +5,21 @@ import struct
 import sys
 import types
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO, TypeVar, cast
 
 from dissect.cstruct.exceptions import ResolveError
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.parser import CStyleParser, TokenParser
 from dissect.cstruct.types import (
     LEB128,
-    ArrayMetaType,
+    Array,
+    BaseArray,
     BaseType,
     Char,
     Enum,
     Field,
     Flag,
     Int,
-    MetaType,
     Packed,
     Pointer,
     Structure,
@@ -29,7 +29,12 @@ from dissect.cstruct.types import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterable
+
+    from typing_extensions import TypeAlias
+
+
+T = TypeVar("T", bound=BaseType)
 
 
 class cstruct:
@@ -37,7 +42,7 @@ class cstruct:
 
     Args:
         endian: The endianness to use when parsing.
-        pointer: The pointer type to use for Pointers.
+        pointer: The pointer type to use for pointers.
     """
 
     DEF_CSTYLE = 1
@@ -81,16 +86,16 @@ class cstruct:
             "signed char": "int8",
             "unsigned char": "char",
             "short": "int16",
-            "signed short": "short",
+            "signed short": "int16",
             "unsigned short": "uint16",
             "int": "int32",
-            "signed int": "int",
+            "signed int": "int32",
             "unsigned int": "uint32",
             "long": "int32",
-            "signed long": "long",
+            "signed long": "int32",
             "unsigned long": "uint32",
             "long long": "int64",
-            "signed long long": "long long",
+            "signed long long": "int64",
             "unsigned long long": "uint64",
 
             # Windows types
@@ -113,14 +118,14 @@ class cstruct:
             "ULONG64": "uint64",
             "ULONGLONG": "uint64",
 
-            "INT": "int",
+            "INT": "int32",
             "INT8": "int8",
             "INT16": "int16",
             "INT32": "int32",
             "INT64": "int64",
             "INT128": "int128",
 
-            "UINT": "uint",
+            "UINT": "uint32",
             "UINT8": "uint8",
             "UINT16": "uint16",
             "UINT32": "uint32",
@@ -172,14 +177,14 @@ class cstruct:
             "__u32": "uint32",
             "__u64": "uint64",
             "uchar": "uint8",
-            "ushort": "unsigned short",
-            "uint": "unsigned int",
-            "ulong": "unsigned long",
+            "ushort": "uint16",
+            "uint": "uint32",
+            "ulong": "uint32",
         }
         # fmt: on
 
         pointer = pointer or ("uint64" if sys.maxsize > 2**32 else "uint32")
-        self.pointer = self.resolve(pointer)
+        self.pointer: type[BaseType] = self.resolve(pointer)
         self._anonymous_count = 0
 
     def __getattr__(self, attr: str) -> Any:
@@ -200,7 +205,7 @@ class cstruct:
         self._anonymous_count += 1
         return name
 
-    def add_type(self, name: str, type_: MetaType | str, replace: bool = False) -> None:
+    def add_type(self, name: str, type_: type[BaseType] | str, replace: bool = False) -> None:
         """Add a type or type reference.
 
         Only use this method when creating type aliases or adding already bound types.
@@ -220,7 +225,7 @@ class cstruct:
     addtype = add_type
 
     def add_custom_type(
-        self, name: str, type_: MetaType, size: int | None = None, alignment: int | None = None, **kwargs
+        self, name: str, type_: type[BaseType], size: int | None = None, alignment: int | None = None, **kwargs
     ) -> None:
         """Add a custom type.
 
@@ -265,7 +270,7 @@ class cstruct:
     def loadfile(self, path: str, deftype: int | None = None, **kwargs) -> None:
         """Load structure definitions from a file.
 
-        The given path will be read and parsed using the .load() function.
+        The given path will be read and parsed using the :meth:`~cstruct.load` function.
 
         Args:
             path: The path to load definitions from.
@@ -287,7 +292,7 @@ class cstruct:
         """
         return self.resolve(name).read(stream)
 
-    def resolve(self, name: str) -> MetaType:
+    def resolve(self, name: type[BaseType] | str) -> type[BaseType]:
         """Resolve a type name to get the actual type object.
 
         Types can be referenced using different names. When we want
@@ -320,7 +325,7 @@ class cstruct:
     def _make_type(
         self,
         name: str,
-        bases: Iterator[object],
+        bases: Iterable[object],
         size: int | None,
         *,
         alignment: int | None = None,
@@ -341,10 +346,18 @@ class cstruct:
         )
         return types.new_class(name, bases, {}, lambda ns: ns.update(attrs))
 
-    def _make_array(self, type_: MetaType, num_entries: int | Expression | None) -> ArrayMetaType:
-        null_terminated = num_entries is None
-        dynamic = isinstance(num_entries, Expression) or type_.dynamic
-        size = None if (null_terminated or dynamic) else (num_entries * type_.size)
+    def _make_array(self, type_: T, num_entries: int | Expression | None) -> type[Array[T]]:
+        null_terminated = False
+        if num_entries is None:
+            null_terminated = True
+            size = None
+        elif isinstance(num_entries, Expression) or type_.dynamic:
+            size = None
+        else:
+            if type_.size is None:
+                raise ValueError(f"Cannot create array of dynamic type: {type_.__name__}")
+            size = num_entries * type_.size
+
         name = f"{type_.__name__}[]" if null_terminated else f"{type_.__name__}[{num_entries}]"
 
         bases = (type_.ArrayType,)
@@ -355,27 +368,30 @@ class cstruct:
             "null_terminated": null_terminated,
         }
 
-        return self._make_type(name, bases, size, alignment=type_.alignment, attrs=attrs)
+        return cast(type[Array], self._make_type(name, bases, size, alignment=type_.alignment, attrs=attrs))
 
     def _make_int_type(self, name: str, size: int, signed: bool, *, alignment: int | None = None) -> type[Int]:
-        return self._make_type(name, (Int,), size, alignment=alignment, attrs={"signed": signed})
+        return cast(type[Int], self._make_type(name, (Int,), size, alignment=alignment, attrs={"signed": signed}))
 
     def _make_packed_type(self, name: str, packchar: str, base: type, *, alignment: int | None = None) -> type[Packed]:
-        return self._make_type(
-            name,
-            (base, Packed),
-            struct.calcsize(packchar),
-            alignment=alignment,
-            attrs={"packchar": packchar},
+        return cast(
+            type[Packed],
+            self._make_type(
+                name,
+                (base, Packed),
+                struct.calcsize(packchar),
+                alignment=alignment,
+                attrs={"packchar": packchar},
+            ),
         )
 
-    def _make_enum(self, name: str, type_: MetaType, values: dict[str, int]) -> type[Enum]:
+    def _make_enum(self, name: str, type_: type[BaseType], values: dict[str, int]) -> type[Enum]:
         return Enum(self, name, type_, values)
 
-    def _make_flag(self, name: str, type_: MetaType, values: dict[str, int]) -> type[Flag]:
+    def _make_flag(self, name: str, type_: type[BaseType], values: dict[str, int]) -> type[Flag]:
         return Flag(self, name, type_, values)
 
-    def _make_pointer(self, target: MetaType) -> type[Pointer]:
+    def _make_pointer(self, target: type[BaseType]) -> type[Pointer]:
         return self._make_type(
             f"{target.__name__}*",
             (Pointer,),
@@ -409,18 +425,164 @@ class cstruct:
     ) -> type[Structure]:
         return self._make_struct(name, fields, align=align, anonymous=anonymous, base=Union)
 
+    Z = TYPE_CHECKING
 
-def ctypes(structure: Structure) -> _ctypes.Structure:
+    if TYPE_CHECKING:
+        A = 1
+        # ruff: noqa: PYI042
+        _int = int
+        _float = float
+
+        class int8(_int, Packed[_int]): ...
+
+        class uint8(_int, Packed[_int]): ...
+
+        class int16(_int, Packed[_int]): ...
+
+        class uint16(_int, Packed[_int]): ...
+
+        class int32(_int, Packed[_int]): ...
+
+        class uint32(_int, Packed[_int]): ...
+
+        class int64(_int, Packed[_int]): ...
+
+        class uint64(_int, Packed[_int]): ...
+
+        class float16(_float, Packed[_float]): ...
+
+        class float(_float, Packed[_float]): ...
+
+        class double(_float, Packed[_float]): ...
+
+        class char(Char): ...
+
+        class wchar(Wchar): ...
+
+        class int24(Int): ...
+
+        class uint24(Int): ...
+
+        class int48(Int): ...
+
+        class uint48(Int): ...
+
+        class int128(Int): ...
+
+        class uint128(Int): ...
+
+        class uleb128(LEB128): ...
+
+        class ileb128(LEB128): ...
+
+        class void(Void): ...
+
+        # signed char: TypeAlias = int8
+        # signed char: TypeAlias = char
+        short: TypeAlias = int16
+        # signed short: TypeAlias = int16
+        # unsigned short: TypeAlias = uint16
+        int: TypeAlias = int32
+        # signed int: TypeAlias = int32
+        # unsigned int: TypeAlias = uint32
+        long: TypeAlias = int32
+        # signed long: TypeAlias = int32
+        # unsigned long: TypeAlias = uint32
+        # long long: TypeAlias = int64
+        # signed long long: TypeAlias = int64
+        # unsigned long long: TypeAlias = uint64
+
+        BYTE: TypeAlias = uint8
+        CHAR: TypeAlias = char
+        SHORT: TypeAlias = int16
+        WORD: TypeAlias = uint16
+        DWORD: TypeAlias = uint32
+        LONG: TypeAlias = int32
+        LONG32: TypeAlias = int32
+        LONG64: TypeAlias = int64
+        LONGLONG: TypeAlias = int64
+        QWORD: TypeAlias = uint64
+        OWORD: TypeAlias = uint128
+        WCHAR: TypeAlias = wchar
+
+        UCHAR: TypeAlias = uint8
+        USHORT: TypeAlias = uint16
+        ULONG: TypeAlias = uint32
+        ULONG64: TypeAlias = uint64
+        ULONGLONG: TypeAlias = uint64
+
+        INT: TypeAlias = int32
+        INT8: TypeAlias = int8
+        INT16: TypeAlias = int16
+        INT32: TypeAlias = int32
+        INT64: TypeAlias = int64
+        INT128: TypeAlias = int128
+
+        UINT: TypeAlias = uint32
+        UINT8: TypeAlias = uint8
+        UINT16: TypeAlias = uint16
+        UINT32: TypeAlias = uint32
+        UINT64: TypeAlias = uint64
+        UINT128: TypeAlias = uint128
+
+        __int8: TypeAlias = int8
+        __int16: TypeAlias = int16
+        __int32: TypeAlias = int32
+        __int64: TypeAlias = int64
+        __int128: TypeAlias = int128
+
+        # unsigned __int8: TypeAlias = uint8
+        # unsigned __int16: TypeAlias = uint16
+        # unsigned __int32: TypeAlias = uint32
+        # unsigned __int64: TypeAlias = uint64
+        # unsigned __int128: TypeAlias = uint128
+
+        wchar_t: TypeAlias = wchar
+
+        int8_t: TypeAlias = int8
+        int16_t: TypeAlias = int16
+        int32_t: TypeAlias = int32
+        int64_t: TypeAlias = int64
+        int128_t: TypeAlias = int128
+
+        uint8_t: TypeAlias = uint8
+        uint16_t: TypeAlias = uint16
+        uint32_t: TypeAlias = uint32
+        uint64_t: TypeAlias = uint64
+        uint128_t: TypeAlias = uint128
+
+        _BYTE: TypeAlias = uint8
+        _WORD: TypeAlias = uint16
+        _DWORD: TypeAlias = uint32
+        _QWORD: TypeAlias = uint64
+        _OWORD: TypeAlias = uint128
+
+        u1: TypeAlias = uint8
+        u2: TypeAlias = uint16
+        u4: TypeAlias = uint32
+        u8: TypeAlias = uint64
+        u16: TypeAlias = uint128
+        __u8: TypeAlias = uint8
+        __u16: TypeAlias = uint16
+        __u32: TypeAlias = uint32
+        __u64: TypeAlias = uint64
+        uchar: TypeAlias = uint8
+        ushort: TypeAlias = uint16
+        uint: TypeAlias = uint32
+        ulong: TypeAlias = uint32
+
+
+def ctypes(structure: type[Structure]) -> type[_ctypes.Structure]:
     """Create ctypes structures from cstruct structures."""
     fields = []
     for field in structure.__fields__:
         t = ctypes_type(field.type)
-        fields.append((field.name, t))
+        fields.append((field._name, t))
 
-    return type(structure.name, (_ctypes.Structure,), {"_fields_": fields})
+    return type(structure.__name__, (_ctypes.Structure,), {"_fields_": fields})
 
 
-def ctypes_type(type_: MetaType) -> Any:
+def ctypes_type(type_: type[BaseType]) -> Any:
     mapping = {
         "b": _ctypes.c_int8,
         "B": _ctypes.c_uint8,
@@ -443,7 +605,7 @@ def ctypes_type(type_: MetaType) -> Any:
     if issubclass(type_, Wchar):
         return _ctypes.c_wchar
 
-    if isinstance(type_, ArrayMetaType):
+    if issubclass(type_, BaseArray):
         subtype = ctypes_type(type_.type)
         return subtype * type_.num_entries
 

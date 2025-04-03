@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.types.base import BaseType
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 
 class LEB128(int, BaseType):
@@ -14,7 +17,7 @@ class LEB128(int, BaseType):
     signed: bool
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> LEB128:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
         result = 0
         shift = 0
         while True:
@@ -34,7 +37,7 @@ class LEB128(int, BaseType):
         return cls.__new__(cls, result)
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> LEB128:
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:
         result = []
 
         while True:

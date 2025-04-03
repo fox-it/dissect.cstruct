@@ -230,7 +230,7 @@ def test_structure_definitions(cs: cstruct, compiled: bool) -> None:
         uint32  a;
     };
     """
-    with pytest.raises(ParserError):
+    with pytest.raises(ParserError, match="struct has no name"):
         cs.load(cdef)
 
 

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import functools
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, BinaryIO, Callable
+from typing import TYPE_CHECKING, Any, BinaryIO, Callable, ClassVar, TypeVar
 
 from dissect.cstruct.exceptions import ArraySizeError
 from dissect.cstruct.expression import Expression
 
 if TYPE_CHECKING:
+    from typing_extensions import Self
+
     from dissect.cstruct.cstruct import cstruct
 
 
@@ -27,10 +29,10 @@ class MetaType(type):
     """The alignment of the type in bytes. A value of ``None`` will be treated as 1-byte aligned."""
 
     # This must be the actual type, but since Array is a subclass of BaseType, we correct this at the bottom of the file
-    ArrayType: type[Array] = "Array"
+    ArrayType: type[BaseArray] = "Array"
     """The array type for this type class."""
 
-    def __call__(cls, *args, **kwargs) -> MetaType | BaseType:
+    def __call__(cls, *args, **kwargs) -> Self:  # type: ignore
         """Adds support for ``TypeClass(bytes | file-like object)`` parsing syntax."""
         # TODO: add support for Type(cs) API to create new bounded type classes, similar to the old API?
         if len(args) == 1 and not isinstance(args[0], cls):
@@ -48,22 +50,26 @@ class MetaType(type):
 
         return type.__call__(cls, *args, **kwargs)
 
-    def __getitem__(cls, num_entries: int | Expression | None) -> ArrayMetaType:
+    def __getitem__(cls, num_entries: int | Expression | None) -> type[BaseArray]:
         """Create a new array with the given number of entries."""
         return cls.cs._make_array(cls, num_entries)
 
     def __len__(cls) -> int:
         """Return the byte size of the type."""
+        # Python 3.9 compat thing for bound type vars
+        if cls is BaseType:
+            return 0
+
         if cls.size is None:
             raise TypeError("Dynamic size")
 
         return cls.size
 
-    def __default__(cls) -> BaseType:
+    def __default__(cls) -> Self:  # type: ignore
         """Return the default value of this type."""
         return cls()
 
-    def reads(cls, data: bytes) -> BaseType:
+    def reads(cls, data: bytes | memoryview | bytearray) -> Self:  # type: ignore
         """Parse the given data from a bytes-like object.
 
         Args:
@@ -74,7 +80,7 @@ class MetaType(type):
         """
         return cls._read(BytesIO(data))
 
-    def read(cls, obj: BinaryIO | bytes) -> BaseType:
+    def read(cls, obj: BinaryIO | bytes | memoryview | bytearray) -> Self:  # type: ignore
         """Parse the given data.
 
         Args:
@@ -85,6 +91,9 @@ class MetaType(type):
         """
         if _is_buffer_type(obj):
             return cls.reads(obj)
+
+        if not _is_readable_type(obj):
+            raise TypeError("Invalid object type")
 
         return cls._read(obj)
 
@@ -113,7 +122,7 @@ class MetaType(type):
         cls._write(out, value)
         return out.getvalue()
 
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> BaseType:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:  # type: ignore
         """Internal function for reading value.
 
         Must be implemented per type.
@@ -124,7 +133,7 @@ class MetaType(type):
         """
         raise NotImplementedError
 
-    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[BaseType]:
+    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Self]:  # type: ignore
         """Internal function for reading array values.
 
         Allows type implementations to do optimized reading for their type.
@@ -142,7 +151,7 @@ class MetaType(type):
 
         return [cls._read(stream, context) for _ in range(count)]
 
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[BaseType]:
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:
         """Internal function for reading null-terminated data.
 
         "Null" is type specific, so must be implemented per type.
@@ -156,7 +165,7 @@ class MetaType(type):
     def _write(cls, stream: BinaryIO, data: Any) -> int:
         raise NotImplementedError
 
-    def _write_array(cls, stream: BinaryIO, array: list[BaseType]) -> int:
+    def _write_array(cls, stream: BinaryIO, array: list[Self]) -> int:  # type: ignore
         """Internal function for writing arrays.
 
         Allows type implementations to do optimized writing for their type.
@@ -167,7 +176,7 @@ class MetaType(type):
         """
         return sum(cls._write(stream, entry) for entry in array)
 
-    def _write_0(cls, stream: BinaryIO, array: list[BaseType]) -> int:
+    def _write_0(cls, stream: BinaryIO, array: list[Self]) -> int:  # type: ignore
         """Internal function for writing null-terminated arrays.
 
         Allows type implementations to do optimized writing for their type.
@@ -191,10 +200,10 @@ class _overload:
         b'\\x7b\\x00\\x00\\x00'
     """
 
-    def __init__(self, func: Callable[[Any], Any]) -> None:
+    def __init__(self, func: Callable[..., Any]) -> None:
         self.func = func
 
-    def __get__(self, instance: BaseType | None, owner: MetaType) -> Callable[[Any], bytes]:
+    def __get__(self, instance: BaseType | None, owner: type[BaseType]) -> Callable[[], bytes]:
         if instance is None:
             return functools.partial(self.func, owner)
         return functools.partial(self.func, instance.__class__, value=instance)
@@ -214,19 +223,32 @@ class BaseType(metaclass=MetaType):
         return self.__class__.size
 
 
-class ArrayMetaType(MetaType):
-    """Base metaclass for array-like types."""
+T = TypeVar("T", bound=BaseType)
 
-    type: MetaType
-    num_entries: int | Expression | None
-    null_terminated: bool
 
+class BaseArray(BaseType):
+    """Implements a fixed or dynamically sized array type.
+
+    Example:
+        When using the default C-style parser, the following syntax is supported:
+
+            x[3] -> 3 -> static length.
+            x[] -> None -> null-terminated.
+            x[expr] -> expr -> dynamic length.
+    """
+
+    type: ClassVar[type[BaseType]]
+    num_entries: ClassVar[int | Expression | None]
+    null_terminated: ClassVar[bool]
+
+    @classmethod
     def __default__(cls) -> BaseType:
         return type.__call__(
             cls, [cls.type.__default__()] * (cls.num_entries if isinstance(cls.num_entries, int) else 0)
         )
 
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Array:
+    @classmethod
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[BaseType]:
         if cls.null_terminated:
             return cls.type._read_0(stream, context)
 
@@ -244,22 +266,6 @@ class ArrayMetaType(MetaType):
 
         return cls.type._read_array(stream, num, context)
 
-
-class Array(list, BaseType, metaclass=ArrayMetaType):
-    """Implements a fixed or dynamically sized array type.
-
-    Example:
-        When using the default C-style parser, the following syntax is supported:
-
-            x[3] -> 3 -> static length.
-            x[] -> None -> null-terminated.
-            x[expr] -> expr -> dynamic length.
-    """
-
-    @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Array:
-        return cls(ArrayMetaType._read(cls, stream, context))
-
     @classmethod
     def _write(cls, stream: BinaryIO, data: list[Any]) -> int:
         if cls.null_terminated:
@@ -271,11 +277,17 @@ class Array(list, BaseType, metaclass=ArrayMetaType):
         return cls.type._write_array(stream, data)
 
 
-def _is_readable_type(value: Any) -> bool:
+class Array(list[T], BaseArray):
+    @classmethod
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[T]:
+        return cls(super()._read(stream, context))
+
+
+def _is_readable_type(value: object) -> bool:
     return hasattr(value, "read")
 
 
-def _is_buffer_type(value: Any) -> bool:
+def _is_buffer_type(value: object) -> bool:
     return isinstance(value, (bytes, memoryview, bytearray))
 
 

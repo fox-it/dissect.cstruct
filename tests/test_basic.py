@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import textwrap
 from io import BytesIO
-from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
 import pytest
@@ -12,6 +12,8 @@ from dissect.cstruct.types import BaseType
 from .utils import verify_compiled
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from dissect.cstruct.cstruct import cstruct
 
 
@@ -27,10 +29,15 @@ def test_duplicate_type(cs: cstruct, compiled: bool) -> None:
         cs.load(cdef)
 
 
-def test_load_file(cs: cstruct, compiled: bool) -> None:
-    path = Path(__file__).parent / "_data/testdef.txt"
+def test_load_file(cs: cstruct, compiled: bool, tmp_path: Path) -> None:
+    cdef = """
+    struct test {
+        uint32  a;
+    };
+    """
+    tmp_path.joinpath("testdef.txt").write_text(textwrap.dedent(cdef))
 
-    cs.loadfile(path, compiled=compiled)
+    cs.loadfile(tmp_path.joinpath("testdef.txt"), compiled=compiled)
     assert "test" in cs.typedefs
 
 

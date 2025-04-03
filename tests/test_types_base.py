@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, BinaryIO
 import pytest
 
 from dissect.cstruct.exceptions import ArraySizeError
-from dissect.cstruct.types.base import ArrayMetaType, BaseType
+from dissect.cstruct.types.base import BaseArray, BaseType
 
 from .utils import verify_compiled
 
@@ -98,7 +98,7 @@ def test_custom_array_type(cs: cstruct, compiled: bool) -> None:
             value = stream.read(length)
             return type.__call__(cls, value)
 
-        class ArrayType(BaseType, metaclass=ArrayMetaType):
+        class ArrayType(BaseArray):
             @classmethod
             def __default__(cls) -> CustomType:
                 return cls.type()

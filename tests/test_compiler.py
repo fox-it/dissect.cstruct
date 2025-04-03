@@ -14,11 +14,11 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from dissect.cstruct.cstruct import cstruct
-    from dissect.cstruct.types.base import MetaType
+    from dissect.cstruct.types.base import BaseType
     from dissect.cstruct.types.enum import Enum
 
 
-def f(field_type: MetaType, offset: int | None = 0, name: str = "") -> Field:
+def f(field_type: type[BaseType], offset: int | None = 0, name: str = "") -> Field:
     return Field(name, field_type, offset=offset)
 
 

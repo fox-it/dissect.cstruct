@@ -3,27 +3,27 @@ from __future__ import annotations
 import sys
 from typing import Any, BinaryIO, ClassVar
 
-from dissect.cstruct.types.base import EOF, ArrayMetaType, BaseType
+from dissect.cstruct.types.base import EOF, BaseArray, BaseType
 
 
-class WcharArray(str, BaseType, metaclass=ArrayMetaType):
+class WcharArray(str, BaseArray):
     """Wide-character array type for reading and writing UTF-16 strings."""
 
     __slots__ = ()
 
     @classmethod
+    def __default__(cls) -> WcharArray:
+        return type.__call__(cls, "\x00" * (0 if cls.dynamic or cls.null_terminated else cls.num_entries))
+
+    @classmethod
     def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> WcharArray:
-        return type.__call__(cls, ArrayMetaType._read(cls, stream, context))
+        return type.__call__(cls, super()._read(stream, context))
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: str) -> int:
         if cls.null_terminated:
             data += "\x00"
         return stream.write(data.encode(Wchar.__encoding_map__[cls.cs.endian]))
-
-    @classmethod
-    def __default__(cls) -> WcharArray:
-        return type.__call__(cls, "\x00" * (0 if cls.dynamic or cls.null_terminated else cls.num_entries))
 
 
 class Wchar(str, BaseType):
@@ -39,6 +39,10 @@ class Wchar(str, BaseType):
         ">": "utf-16-be",
         "!": "utf-16-be",
     }
+
+    @classmethod
+    def __default__(cls) -> Wchar:
+        return type.__call__(cls, "\x00")
 
     @classmethod
     def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Wchar:
@@ -76,7 +80,3 @@ class Wchar(str, BaseType):
     @classmethod
     def _write(cls, stream: BinaryIO, data: str) -> int:
         return stream.write(data.encode(cls.__encoding_map__[cls.cs.endian]))
-
-    @classmethod
-    def __default__(cls) -> Wchar:
-        return type.__call__(cls, "\x00")
