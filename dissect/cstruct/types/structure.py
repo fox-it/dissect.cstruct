@@ -31,8 +31,8 @@ class Field:
     """Structure field."""
 
     def __init__(self, name: str | None, type_: type[BaseType], bits: int | None = None, offset: int | None = None):
-        self.name = name
-        self._name = name or type_.__name__
+        self.name = name  # The name of the field, or None if anonymous
+        self._name = name or type_.__name__  # The name of the field, or the type name if anonymous
         self.type = type_
         self.bits = bits
         self.offset = offset
@@ -264,16 +264,15 @@ class StructureMetaType(MetaType):
                 else:
                     value = bit_buffer.read(field.type, field.bits)
 
-                if field._name:
-                    result[field._name] = value
+                result[field._name] = value
                 continue
+
             bit_buffer.reset()
 
             value = field.type._read(stream, result)
 
-            if field._name:
-                sizes[field._name] = stream.tell() - offset
-                result[field._name] = value
+            sizes[field._name] = stream.tell() - offset
+            result[field._name] = value
 
         if cls.__align__:
             # Align the stream

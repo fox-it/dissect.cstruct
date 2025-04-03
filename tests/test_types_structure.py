@@ -208,7 +208,7 @@ def test_structure_eof(TestStruct: type[Structure]) -> None:
 
 def test_structure_definitions(cs: cstruct, compiled: bool) -> None:
     cdef = """
-    typedef struct _test {
+    struct _test {
         uint32  a;
         // uint32 comment
         uint32  b;
