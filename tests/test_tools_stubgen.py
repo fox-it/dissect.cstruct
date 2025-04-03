@@ -274,7 +274,7 @@ def test_generate_cstruct_stub_empty(cs: cstruct) -> None:
     assert stubgen.generate_cstruct_stub(cs) == textwrap.dedent(expected).strip()
 
 
-def test_generate_file_stub(tmp_path: Path) -> None:
+def test_generate_file_stub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     test_content = """
         from dissect.cstruct import cstruct
 
@@ -313,3 +313,23 @@ def test_generate_file_stub(tmp_path: Path) -> None:
     assert stubgen.generate_file_stub(test_file, tmp_path) == textwrap.dedent(expected).lstrip()
 
     assert stubgen.generate_file_stub(tmp_path.joinpath("unknown.py"), tmp_path) == ""
+
+    with monkeypatch.context() as m:
+        caplog.set_level("DEBUG")
+        for path in [tmp_path, test_file]:
+            m.setattr("sys.argv", ["cstruct-stubgen", str(path)])
+
+            stub_file = test_file.with_suffix(".pyi")
+            stub_file.unlink(missing_ok=True)
+            caplog.clear()
+
+            stubgen.main()
+            assert stubgen.generate_file_stub(test_file, tmp_path) == stub_file.read_text()
+            assert f"Writing stub of file {test_file.resolve()} to {stub_file.name}" in caplog.text
+
+        m.setattr("sys.argv", ["cstruct-stubgen", str(tmp_path.joinpath("unknown.py"))])
+        caplog.clear()
+
+        stubgen.main()
+        assert stubgen.generate_file_stub(test_file, tmp_path) == stub_file.read_text()
+        assert caplog.text == ""
