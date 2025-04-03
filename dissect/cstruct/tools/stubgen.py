@@ -193,7 +193,11 @@ def setup_logger(verbosity: int) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser("cstruct-stubify", description="Create .pyi stub files for cstruct definitions")
+    parser = argparse.ArgumentParser(
+        "cstruct-stubify",
+        description="Create .pyi stub files for cstruct definitions",
+        epilog="NOTE: This tool will only generate stubs for the cstruct definitions in a file, not any other Python code. Manual fixups may be required.",  # noqa: E501
+    )
     parser.add_argument("path", type=Path, help="path to the file or directory to create stubs for")
     parser.add_argument("-v", "--verbose", action="count", default=0)
     args = parser.parse_args()
