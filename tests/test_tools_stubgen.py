@@ -257,6 +257,33 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
             """,
             id="alias stub",
         ),
+        pytest.param(
+            """
+            typedef __u16 __fs16;
+            typedef __u32 __fs32;
+            typedef __u64 __fs64;
+
+            struct Test {
+                __fs16 a;
+                __fs32 b;
+                __fs64 c;
+            };
+            """,
+            """
+            class cstruct(cstruct):
+                __fs16: TypeAlias = cstruct.uint16
+                __fs32: TypeAlias = cstruct.uint32
+                __fs64: TypeAlias = cstruct.uint64
+                class Test(Structure):
+                    a: cstruct.uint16
+                    b: cstruct.uint32
+                    c: cstruct.uint64
+                    @overload
+                    def __init__(self, a: cstruct.uint16 | None = ..., b: cstruct.uint32 | None = ..., c: cstruct.uint64 | None = ...): ...
+                    @overload
+                    def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+            """,  # noqa: E501
+        ),
     ],
 )
 def test_generate_cstruct_stub(cs: cstruct, cdef: str, expected: str) -> None:
@@ -295,6 +322,7 @@ def test_generate_file_stub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cap
         from typing import BinaryIO, overload
 
         import dissect.cstruct as __cs__
+        from typing_extensions import TypeAlias
 
         class _c_structure(__cs__.cstruct):
             class Test(__cs__.Structure):
@@ -304,7 +332,9 @@ def test_generate_file_stub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cap
                 def __init__(self, a: _c_structure.uint32 | None = ..., b: _c_structure.uint32 | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
-        c_structure: _c_structure
+
+        # Technically `c_structure` is an instance of `_c_structure`, but then we can't use it in type hints
+        c_structure: TypeAlias = _c_structure
     """
 
     assert stubgen.generate_file_stub(test_file, tmp_path) == textwrap.dedent(expected).lstrip()

@@ -42,6 +42,7 @@ def generate_file_stub(path: Path, base: Path) -> str:
         "from typing import BinaryIO, overload",
         "",
         "import dissect.cstruct as __cs__",
+        "from typing_extensions import TypeAlias",
     ]
     body = []
 
@@ -49,16 +50,14 @@ def generate_file_stub(path: Path, base: Path) -> str:
         if isinstance(obj, cstruct):
             stub = generate_cstruct_stub(obj, module_prefix="__cs__.", cls_name=f"_{name}")
             body.append(stub)
-            body.append(f"{name}: _{name}")
+            body.append("")
+            body.append(f"# Technically `{name}` is an instance of `_{name}`, but then we can't use it in type hints")
+            body.append(f"{name}: TypeAlias = _{name}")
 
     if not body:
         return ""
 
-    body_str = "\n".join(body)
-    if "TypeAlias" in body_str:
-        header.append("from typing_extensions import TypeAlias")
-
-    return "\n".join([*header, "", body_str, ""])
+    return "\n".join([*header, "", "\n".join(body), ""])
 
 
 def generate_cstruct_stub(cs: cstruct, module_prefix: str = "", cls_name: str = "cstruct") -> str:
@@ -82,10 +81,11 @@ def generate_cstruct_stub(cs: cstruct, module_prefix: str = "", cls_name: str = 
         if name in empty_cs.typedefs:
             continue
 
-        if typedef.__name__ in defined_names:
+        if typedef.__name__ in empty_cs.typedefs:
+            stub = f"{name}: TypeAlias = {cs_prefix}{typedef.__name__}"
+        elif typedef.__name__ in defined_names:
             # Create an alias to the type if we have already seen it before.
             stub = f"{name}: TypeAlias = {typedef.__name__}"
-
         elif issubclass(typedef, (types.Enum, types.Flag)):
             stub = generate_enum_stub(typedef, cs_prefix=cs_prefix, module_prefix=module_prefix)
         elif issubclass(typedef, types.Structure):
@@ -181,6 +181,7 @@ def generate_structure_stub(
     result.append(
         textwrap.indent("def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...", prefix=indent)
     )
+    result.append("")
     return "\n".join(result)
 
 
