@@ -27,6 +27,7 @@ if TYPE_CHECKING:
             class Test(Enum):
                 A = ...
                 B = ...
+
             """,
             id="enum",
         ),
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
             class Test(Enum):
                 A = ...
                 B = ...
+
             """,
             id="enum int8",
         ),
@@ -55,6 +57,7 @@ if TYPE_CHECKING:
             class Test(Flag):
                 A = ...
                 B = ...
+
             """,
             id="flag",
         ),
@@ -63,7 +66,9 @@ if TYPE_CHECKING:
 def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
     cs.load(cdef)
 
-    assert stubgen.generate_enum_stub(cs.Test) == textwrap.dedent(expected).strip()
+    # We don't want to strip all trailing whitespace in case it's part of the intended expected output
+    # So just remove one newline from the final """ block
+    assert stubgen.generate_enum_stub(cs.Test) == textwrap.dedent(expected).lstrip()[:-1]
 
 
 @pytest.mark.parametrize(
@@ -86,6 +91,7 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 def __init__(self, a: uint8 | None = ..., b: uint8 | None = ..., c: uint16 | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
             """,
             id="basic",
         ),
@@ -106,6 +112,7 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 def __init__(self, a: Array[uint8] | None = ..., b: CharArray | None = ..., c: WcharArray | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
             """,  # noqa: E501
             id="array",
         ),
@@ -124,6 +131,7 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 def __init__(self, a: Pointer[uint8] | None = ..., b: Array[Pointer[uint8]] | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
             """,
             id="pointer",
         ),
@@ -144,6 +152,7 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 def __init__(self, a: uint8 | None = ..., b: uint8 | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
             """,
             id="anonymous nested",
         ),
@@ -165,11 +174,13 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                     def __init__(self, a: uint8 | None = ..., b: uint8 | None = ...): ...
                     @overload
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
                 x: __anonymous_0__
                 @overload
                 def __init__(self, x: __anonymous_0__ | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
             """,
             id="named nested",
         ),
@@ -191,11 +202,13 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                     def __init__(self, a: uint8 | None = ..., b: uint8 | None = ...): ...
                     @overload
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
                 x: Array[__anonymous_0__]
                 @overload
                 def __init__(self, x: Array[__anonymous_0__] | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
             """,
             id="named nested array",
         ),
@@ -204,7 +217,9 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
 def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
     cs.load(cdef)
 
-    assert stubgen.generate_structure_stub(cs.Test) == textwrap.dedent(expected).strip()
+    # We don't want to strip all trailing whitespace in case it's part of the intended expected output
+    # So just remove one newline from the final """ block
+    assert stubgen.generate_structure_stub(cs.Test) == textwrap.dedent(expected).lstrip()[:-1]
 
 
 @pytest.mark.parametrize(
@@ -225,10 +240,11 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
             """,
             """
             class cstruct(cstruct):
-                TEST: int = ...
+                TEST: Literal[1] = ...
                 class TestEnum(Enum):
                     A = ...
                     B = ...
+
                 class TestStruct(Structure):
                     a: cstruct.uint8
                     @overload
@@ -253,16 +269,64 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                     def __init__(self, a: cstruct.uint8 | None = ...): ...
                     @overload
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
                 _test: TypeAlias = Test
             """,
             id="alias stub",
+        ),
+        pytest.param(
+            """
+            typedef __u16 __fs16;
+            typedef __u32 __fs32;
+            typedef __u64 __fs64;
+
+            struct Test {
+                __fs16 a;
+                __fs32 b;
+                __fs64 c;
+            };
+            """,
+            """
+            class cstruct(cstruct):
+                __fs16: TypeAlias = cstruct.uint16
+                __fs32: TypeAlias = cstruct.uint32
+                __fs64: TypeAlias = cstruct.uint64
+                class Test(Structure):
+                    a: cstruct.uint16
+                    b: cstruct.uint32
+                    c: cstruct.uint64
+                    @overload
+                    def __init__(self, a: cstruct.uint16 | None = ..., b: cstruct.uint32 | None = ..., c: cstruct.uint64 | None = ...): ...
+                    @overload
+                    def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
+            """,  # noqa: E501
+            id="typedef stub",
+        ),
+        pytest.param(
+            """
+            #define INT 1
+            #define FLOAT 2.0
+            #define STRING "hello"
+            #define BYTES b'c'
+            """,
+            """
+            class cstruct(cstruct):
+                INT: Literal[1] = ...
+                FLOAT: Literal[2.0] = ...
+                STRING: Literal['hello'] = ...
+                BYTES: Literal[b'c'] = ...
+            """,
+            id="define literals",
         ),
     ],
 )
 def test_generate_cstruct_stub(cs: cstruct, cdef: str, expected: str) -> None:
     cs.load(cdef)
 
-    assert stubgen.generate_cstruct_stub(cs) == textwrap.dedent(expected).strip()
+    # We don't want to strip all trailing whitespace in case it's part of the intended expected output
+    # So just remove one newline from the final """ block
+    assert stubgen.generate_cstruct_stub(cs) == textwrap.dedent(expected).lstrip()[:-1]
 
 
 def test_generate_cstruct_stub_empty(cs: cstruct) -> None:
@@ -292,9 +356,10 @@ def test_generate_file_stub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cap
 
     expected = """
         # Generated by cstruct-stubgen
-        from typing import BinaryIO, overload
+        from typing import BinaryIO, Literal, overload
 
         import dissect.cstruct as __cs__
+        from typing_extensions import TypeAlias
 
         class _c_structure(__cs__.cstruct):
             class Test(__cs__.Structure):
@@ -304,7 +369,9 @@ def test_generate_file_stub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cap
                 def __init__(self, a: _c_structure.uint32 | None = ..., b: _c_structure.uint32 | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
-        c_structure: _c_structure
+
+        # Technically `c_structure` is an instance of `_c_structure`, but then we can't use it in type hints
+        c_structure: TypeAlias = _c_structure
     """
 
     assert stubgen.generate_file_stub(test_file, tmp_path) == textwrap.dedent(expected).lstrip()

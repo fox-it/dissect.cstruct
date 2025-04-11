@@ -425,10 +425,7 @@ class cstruct:
     ) -> type[Structure]:
         return self._make_struct(name, fields, align=align, anonymous=anonymous, base=Union)
 
-    Z = TYPE_CHECKING
-
     if TYPE_CHECKING:
-        A = 1
         # ruff: noqa: PYI042
         _int = int
         _float = float
