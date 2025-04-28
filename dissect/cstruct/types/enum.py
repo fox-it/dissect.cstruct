@@ -76,12 +76,12 @@ class EnumMetaType(EnumMeta, MetaType):
 
     __len__ = MetaType.__len__
 
-    if not PY_312:
-        # Backport __contains__ from CPython 3.12
-        def __contains__(cls, value: Any) -> bool:
-            if isinstance(value, cls):
-                return True
-            return value in cls._value2member_map_
+    def __contains__(cls, value: Any) -> bool:
+        # We used to let stdlib enum handle `__containts``` but this commit is incompatible with our API:
+        # https://github.com/python/cpython/commit/8a9aee71268c77867d3cc96d43cbbdcbe8c0e1e8
+        if isinstance(value, cls):
+            return True
+        return value in cls._value2member_map_
 
     def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
         return cls(cls.type._read(stream, context))
