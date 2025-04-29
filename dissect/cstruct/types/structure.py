@@ -783,7 +783,7 @@ def _generate_structure__init__(fields: list[Field]) -> FunctionType:
     template: FunctionType = _make_structure__init__(len(field_names))
     return type(template)(
         template.__code__.replace(
-            co_names=(*chain.from_iterable(zip((f"__{name}_default__" for name in field_names), field_names)),),
+            co_names=tuple(chain.from_iterable(zip((f"__{name}_default__" for name in field_names), field_names))),
             co_varnames=("self", *field_names),
         ),
         template.__globals__ | {f"__{field._name}_default__": field.type.__default__() for field in fields},
