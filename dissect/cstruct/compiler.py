@@ -21,6 +21,7 @@ from dissect.cstruct.types import (
     Structure,
     Union,
     Void,
+    VoidArray,
     Wchar,
     WcharArray,
 )
@@ -48,6 +49,7 @@ SUPPORTED_TYPES = (
     Void,
     Wchar,
     WcharArray,
+    VoidArray,
 )
 
 log = logging.getLogger(__name__)
@@ -365,7 +367,7 @@ def _generate_struct_info(cs: cstruct, fields: list[Field], align: bool = False)
         read_type = _get_read_type(cs, field.type)
 
         # Drop voids
-        if issubclass(read_type, Void):
+        if issubclass(read_type, (Void, VoidArray)):
             continue
 
         # Array of more complex types are handled elsewhere

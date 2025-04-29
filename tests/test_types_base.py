@@ -137,3 +137,12 @@ def test_custom_array_type(cs: cstruct, compiled: bool) -> None:
     assert isinstance(result.b, CustomType)
     assert result.a.value == b"ASDF"
     assert result.b.value == b"asdf"
+
+
+def test_truthy_type(cs: cstruct) -> None:
+    static_type = cs.uint32
+    dynamic_type = cs.uint32[None]
+
+    assert static_type
+    # Should not raise a TypeError: Dynamic size
+    assert dynamic_type
