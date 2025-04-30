@@ -77,7 +77,7 @@ class EnumMetaType(EnumMeta, MetaType):
     __len__ = MetaType.__len__
 
     def __contains__(cls, value: Any) -> bool:
-        # We used to let stdlib enum handle `__containts``` but this commit is incompatible with our API:
+        # We used to let stdlib enum handle `__contains__``` but this commit is incompatible with our API:
         # https://github.com/python/cpython/commit/8a9aee71268c77867d3cc96d43cbbdcbe8c0e1e8
         if isinstance(value, cls):
             return True

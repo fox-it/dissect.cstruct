@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.structure import Field, Union, UnionProxy
 
@@ -535,3 +536,14 @@ def test_union_partial_initialization_dynamic(cs: cstruct) -> None:
 
     with pytest.raises(NotImplementedError, match="Initializing a dynamic union is not yet supported"):
         cs.test(x=1)
+
+
+def test_codegen_hashable(cs: cstruct) -> None:
+    hashable_fields = [Field("a", cs.uint8), Field("b", cs.uint8)]
+    unhashable_fields = [Field("a", cs.uint8[2]), Field("b", cs.uint8)]
+
+    with pytest.raises(TypeError, match="unhashable type: 'uint8\\[2\\]'"):
+        hash(unhashable_fields[0].type.__default__())
+
+    assert hash(structure._generate_union__init__(hashable_fields).__code__)
+    assert hash(structure._generate_union__init__(unhashable_fields).__code__)
