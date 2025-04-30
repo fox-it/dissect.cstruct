@@ -750,11 +750,11 @@ def test_codegen_make_init() -> None:
     result = _make__init__([f"_{n}" for n in range(5)])
     expected = """
     def __init__(self, _0 = None, _1 = None, _2 = None, _3 = None, _4 = None):
-     self._0 = _0 if _0 is not None else 0
-     self._1 = _1 if _1 is not None else 1
-     self._2 = _2 if _2 is not None else 2
-     self._3 = _3 if _3 is not None else 3
-     self._4 = _4 if _4 is not None else 4
+     self._0 = _0 if _0 is not None else _0_default
+     self._1 = _1 if _1 is not None else _1_default
+     self._2 = _2 if _2 is not None else _2_default
+     self._3 = _3 if _3 is not None else _3_default
+     self._4 = _4 if _4 is not None else _4_default
     """
     assert result == dedent(expected[1:].rstrip())
 
@@ -765,3 +765,14 @@ def test_codegen_make_init() -> None:
     cached = structure._make_structure__init__(5)
     assert structure._make_structure__init__.cache_info() == (1, 1, 128, 1)
     assert result is cached
+
+
+def test_codegen_hashable(cs: cstruct) -> None:
+    hashable_fields = [Field("a", cs.uint8), Field("b", cs.uint8)]
+    unhashable_fields = [Field("a", cs.uint8[2]), Field("b", cs.uint8)]
+
+    with pytest.raises(TypeError, match="unhashable type: 'uint8\\[2\\]'"):
+        hash(unhashable_fields[0].type.__default__())
+
+    assert hash(structure._generate_structure__init__(hashable_fields).__code__)
+    assert hash(structure._generate_structure__init__(unhashable_fields).__code__)

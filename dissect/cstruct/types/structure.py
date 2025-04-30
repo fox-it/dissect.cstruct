@@ -673,7 +673,9 @@ def _make_structure__init__(fields: list[str]) -> str:
         fields: List of field names.
     """
     field_args = ", ".join(f"{field} = None" for field in fields)
-    field_init = "\n".join(f" self.{name} = {name} if {name} is not None else {i}" for i, name in enumerate(fields))
+    field_init = "\n".join(
+        f" self.{name} = {name} if {name} is not None else _{i}_default" for i, name in enumerate(fields)
+    )
 
     code = f"def __init__(self{', ' + field_args or ''}):\n"
     return code + (field_init or " pass")
@@ -688,7 +690,8 @@ def _make_union__init__(fields: list[str]) -> str:
     """
     field_args = ", ".join(f"{field} = None" for field in fields)
     field_init = "\n".join(
-        f" object.__setattr__(self, '{name}', {name} if {name} is not None else {i})" for i, name in enumerate(fields)
+        f" object.__setattr__(self, '{name}', {name} if {name} is not None else _{i}_default)"
+        for i, name in enumerate(fields)
     )
 
     code = f"def __init__(self{', ' + field_args or ''}):\n"
@@ -780,11 +783,10 @@ def _generate_structure__init__(fields: list[Field]) -> FunctionType:
     template: FunctionType = _make_structure__init__(len(field_names))
     return type(template)(
         template.__code__.replace(
-            co_consts=(None, *[field.type.__default__() for field in fields]),
-            co_names=(*field_names,),
+            co_names=tuple(chain.from_iterable(zip((f"__{name}_default__" for name in field_names), field_names))),
             co_varnames=("self", *field_names),
         ),
-        template.__globals__,
+        template.__globals__ | {f"__{field._name}_default__": field.type.__default__() for field in fields},
         argdefs=template.__defaults__,
     )
 
@@ -800,13 +802,11 @@ def _generate_union__init__(fields: list[Field]) -> FunctionType:
     template: FunctionType = _make_union__init__(len(field_names))
     return type(template)(
         template.__code__.replace(
-            co_consts=(
-                None,
-                *sum([(field._name, field.type.__default__()) for field in fields], ()),
-            ),
+            co_consts=(None, *field_names),
+            co_names=("object", "__setattr__", *(f"__{name}_default__" for name in field_names)),
             co_varnames=("self", *field_names),
         ),
-        template.__globals__,
+        template.__globals__ | {f"__{field._name}_default__": field.type.__default__() for field in fields},
         argdefs=template.__defaults__,
     )
 
