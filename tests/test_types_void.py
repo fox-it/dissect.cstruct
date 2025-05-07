@@ -10,7 +10,9 @@ if TYPE_CHECKING:
 
 
 def test_void_read(cs: cstruct) -> None:
-    assert not cs.void
+    # The type itself is truthy, but an instance is not
+    assert cs.void
+    assert not cs.void()
 
     stream = io.BytesIO(b"AAAA")
     assert not cs.void(stream)
@@ -23,11 +25,11 @@ def test_void_write(cs: cstruct) -> None:
 
 
 def test_void_array_read(cs: cstruct) -> None:
-    assert not cs.void[4]
+    assert not cs.void[4]()
 
     stream = io.BytesIO(b"AAAA")
-    assert not any(cs.void[4](stream))
-    assert not any(cs.void[None](stream))
+    assert not cs.void[4](stream)
+    assert not cs.void[None](stream)
     assert stream.tell() == 0
 
 
@@ -41,7 +43,7 @@ def test_void_default(cs: cstruct) -> None:
     assert not cs.void()
     assert not cs.void.__default__()
 
-    assert cs.void[1].__default__() == [cs.void()]
+    assert cs.void[1].__default__() == []
     assert cs.void[None].__default__() == []
 
 
@@ -61,8 +63,8 @@ def test_void_struct(cs: cstruct, compiled: bool) -> None:
 
     obj = cs.test(stream)
     assert not obj.a
-    assert not any(obj.b)
-    assert not any(obj.c)
+    assert not obj.b
+    assert not obj.c
 
     assert stream.tell() == 0
 

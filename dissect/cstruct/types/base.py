@@ -54,6 +54,10 @@ class MetaType(type):
         """Create a new array with the given number of entries."""
         return cls.cs._make_array(cls, num_entries)
 
+    def __bool__(cls) -> bool:
+        """Type class is always truthy."""
+        return True
+
     def __len__(cls) -> int:
         """Return the byte size of the type."""
         # Python 3.9 compat thing for bound type vars
