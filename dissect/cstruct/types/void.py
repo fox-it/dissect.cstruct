@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 
 class VoidArray(list, BaseArray):
-    """Character array type for reading and writing byte strings."""
+    """Array type representing void elements, primarily used for no-op reading and writing operations."""
 
     @classmethod
     def __default__(cls) -> Self:
