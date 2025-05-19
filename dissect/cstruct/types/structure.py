@@ -151,6 +151,7 @@ class StructureMetaType(MetaType):
 
         return classdict
 
+
     def _calculate_size_and_offsets(cls, fields: list[Field], align: bool = False) -> tuple[int | None, int]:
         """Iterate all fields in this structure to calculate the field offsets and total structure size.
 
@@ -271,8 +272,9 @@ class StructureMetaType(MetaType):
 
             value = field.type._read(stream, result)
 
-            sizes[field._name] = stream.tell() - offset
             result[field._name] = value
+            if field.type.dynamic:
+                sizes[field._name] = stream.tell() - offset
 
         if cls.__align__:
             # Align the stream
@@ -473,8 +475,9 @@ class UnionMetaType(StructureMetaType):
             buf.seek(offset + start)
             value = field_type._read(buf, result)
 
-            sizes[field._name] = buf.tell() - start
             result[field._name] = value
+            if field.type.dynamic:
+                sizes[field._name] = buf.tell() - start
 
         return result, sizes
 

@@ -227,18 +227,18 @@ class _ReadSourceGenerator:
 
     def _generate_structure(self, field: Field) -> Iterator[str]:
         template = f"""
-        _s = stream.tell()
+        {'_s = stream.tell()' if field.type.dynamic else ''}
         r["{field._name}"] = {self._map_field(field)}._read(stream, context=r)
-        s["{field._name}"] = stream.tell() - _s
+        {f's["{field._name}"] = stream.tell() - _s' if field.type.dynamic else ''}
         """
 
         yield dedent(template)
 
     def _generate_array(self, field: Field) -> Iterator[str]:
         template = f"""
-        _s = stream.tell()
+        {'_s = stream.tell()' if field.type.dynamic else ''}
         r["{field._name}"] = {self._map_field(field)}._read(stream, context=r)
-        s["{field._name}"] = stream.tell() - _s
+        {f's["{field._name}"] = stream.tell() - _s' if field.type.dynamic else ''}
         """
 
         yield dedent(template)
@@ -326,7 +326,6 @@ class _ReadSourceGenerator:
                 parser = parser_template.format(type=self._map_field(field), getter=getter)
 
             reads.append(f'r["{field._name}"] = {parser}')
-            reads.append(f's["{field._name}"] = {field_type.size}')
             reads.append("")  # Generates a newline in the resulting code
 
             size += field_type.size
