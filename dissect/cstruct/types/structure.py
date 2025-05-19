@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 from contextlib import contextmanager
 from enum import Enum
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from itertools import chain
 from operator import attrgetter
 from textwrap import dedent
@@ -150,7 +150,6 @@ class StructureMetaType(MetaType):
         classdict["dynamic"] = size is None
 
         return classdict
-
 
     def _calculate_size_and_offsets(cls, fields: list[Field], align: bool = False) -> tuple[int | None, int]:
         """Iterate all fields in this structure to calculate the field offsets and total structure size.
@@ -402,6 +401,18 @@ class Structure(BaseType, metaclass=StructureMetaType):
             values.append(f"{name}={value}")
 
         return f"<{self.__class__.__name__} {' '.join(values)}>"
+
+    @cached_property
+    def sizes(self) -> None:
+        """Return the sizes of the fields in this structure."""
+        sizes = {}
+        for field in self.__class__.__fields__:
+            if field.type.dynamic:
+                sizes[field._name] = self._sizes.get(field._name, None)
+            else:
+                sizes[field._name] = field.type.size
+
+        return sizes
 
 
 class UnionMetaType(StructureMetaType):

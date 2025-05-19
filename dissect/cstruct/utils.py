@@ -169,7 +169,7 @@ def _dumpstruct(
 
         if color:
             foreground, background = colors[ci % len(colors)]
-            size = structure._sizes[field._name] if field.type.dynamic else field.type.size
+            size = structure.sizes[field._name]
             palette.append((size, background))
             ci += 1
             out.append(f"- {foreground}{field._name}{COLOR_NORMAL}: {value}")
