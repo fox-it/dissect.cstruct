@@ -123,8 +123,8 @@ class _ReadSourceGenerator:
 
         outro = """
         obj = type.__call__(cls, **r)
-        obj._sizes = s
-        obj._values = r
+        obj.__dynamic_sizes__ = s
+        obj.__values__ = r
 
         return obj
         """

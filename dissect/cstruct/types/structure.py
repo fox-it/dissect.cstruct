@@ -79,8 +79,8 @@ class StructureMetaType(MetaType):
             return type.__call__(cls, *args, **kwargs)
         if not args and not kwargs:
             obj = type.__call__(cls)
-            object.__setattr__(obj, "_values", {})
-            object.__setattr__(obj, "_sizes", {})
+            object.__setattr__(obj, "__values__", {})
+            object.__setattr__(obj, "__dynamic_sizes__", {})
             return obj
 
         return super().__call__(*args, **kwargs)
@@ -282,8 +282,8 @@ class StructureMetaType(MetaType):
         # Using type.__call__ directly calls the __init__ method of the class
         # This is faster than calling cls() and bypasses the metaclass __call__ method
         obj = type.__call__(cls, **result)
-        obj._sizes = sizes
-        obj._values = result
+        obj.__dynamic_sizes__ = sizes
+        obj.__values__ = result
         return obj
 
     def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:  # type: ignore
@@ -378,8 +378,8 @@ class StructureMetaType(MetaType):
 class Structure(BaseType, metaclass=StructureMetaType):
     """Base class for cstruct structure type classes."""
 
-    _values: dict[str, Any]
-    _sizes: dict[str, int]
+    __values__: dict[str, Any]
+    __dynamic_sizes__: dict[str, int]
 
     def __len__(self) -> int:
         return len(self.dumps())
@@ -403,12 +403,12 @@ class Structure(BaseType, metaclass=StructureMetaType):
         return f"<{self.__class__.__name__} {' '.join(values)}>"
 
     @cached_property
-    def sizes(self) -> None:
+    def __sizes__(self) -> dict[str, int | None]:
         """Return the sizes of the fields in this structure."""
         sizes = {}
         for field in self.__class__.__fields__:
             if field.type.dynamic:
-                sizes[field._name] = self._sizes.get(field._name, None)
+                sizes[field._name] = self.__dynamic_sizes__.get(field._name, None)
             else:
                 sizes[field._name] = field.type.size
 
@@ -510,8 +510,8 @@ class UnionMetaType(StructureMetaType):
         # It also makes it easier to differentiate between user-initialization of the class
         # and initialization from a stream read
         obj: Union = type.__call__(cls, **result)
-        object.__setattr__(obj, "_values", result)
-        object.__setattr__(obj, "_sizes", sizes)
+        object.__setattr__(obj, "__values__", result)
+        object.__setattr__(obj, "__dynamic_sizes__", sizes)
         object.__setattr__(obj, "_buf", buf)
 
         if cls.size is not None:
@@ -593,8 +593,8 @@ class Union(Structure, metaclass=UnionMetaType):
     def _update(self) -> None:
         result, sizes = self.__class__._read_fields(io.BytesIO(self._buf))
         self.__dict__.update(result)
-        object.__setattr__(self, "_values", result)
-        object.__setattr__(self, "_sizes", sizes)
+        object.__setattr__(self, "__values__", result)
+        object.__setattr__(self, "__dynamic_sizes__", sizes)
 
     def _proxify(self) -> None:
         def _proxy_structure(value: Structure) -> None:

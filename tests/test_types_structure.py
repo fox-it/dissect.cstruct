@@ -265,7 +265,7 @@ def test_structure_definition_simple(cs: cstruct, compiled: bool) -> None:
     with pytest.raises(AttributeError):
         obj.nope  # noqa: B018
 
-    assert obj._sizes == { "string": 7, "wstring": 10 }
+    assert obj.__dynamic_sizes__ == { "string": 7, "wstring": 10 }
     assert len(obj) == len(buf)
     assert obj.dumps() == buf
 
