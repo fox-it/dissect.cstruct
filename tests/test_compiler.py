@@ -111,16 +111,12 @@ def test_generate_packed_read(cs: cstruct) -> None:
     data = _struct(cls.cs.endian, "BhIq").unpack(buf)
 
     r["a"] = type.__call__(_0, data[0])
-    s["a"] = 1
 
     r["b"] = type.__call__(_1, data[1])
-    s["b"] = 2
 
     r["c"] = type.__call__(_2, data[2])
-    s["c"] = 4
 
     r["d"] = type.__call__(_3, data[3])
-    s["d"] = 8
     """
 
     assert code == dedent(expected)
@@ -143,22 +139,18 @@ def test_generate_packed_read_array(cs: cstruct) -> None:
     _t = _0
     _et = _t.type
     r["a"] = type.__call__(_t, [type.__call__(_et, e) for e in data[0:2]])
-    s["a"] = 2
 
     _t = _1
     _et = _t.type
     r["b"] = type.__call__(_t, [type.__call__(_et, e) for e in data[2:5]])
-    s["b"] = 6
 
     _t = _2
     _et = _t.type
     r["c"] = type.__call__(_t, [type.__call__(_et, e) for e in data[5:9]])
-    s["c"] = 16
 
     _t = _3
     _et = _t.type
     r["d"] = type.__call__(_t, [type.__call__(_et, e) for e in data[9:14]])
-    s["d"] = 40
     """
 
     assert code == dedent(expected)
@@ -181,25 +173,19 @@ def test_generate_packed_read_byte_types(cs: cstruct) -> None:
     data = _struct(cls.cs.endian, "18x").unpack(buf)
 
     r["a"] = type.__call__(_0, buf[0:1])
-    s["a"] = 1
 
     r["b"] = type.__call__(_1, buf[1:3])
-    s["b"] = 2
 
     r["c"] = _2(buf[3:5])
-    s["c"] = 2
 
     r["d"] = _3(buf[5:9])
-    s["d"] = 4
 
     r["e"] = _4(buf[9:12])
-    s["e"] = 3
 
     _t = _5
     _et = _t.type
     _b = buf[12:18]
     r["f"] = type.__call__(_t, [_et(_b[i:i + 3]) for i in range(0, 6, 3)])
-    s["f"] = 6
     """
 
     assert code == dedent(expected)
@@ -223,16 +209,13 @@ def test_generate_packed_read_composite_types(cs: cstruct, TestEnum: type[Enum])
     data = _struct(cls.cs.endian, "BQ2B").unpack(buf)
 
     r["a"] = type.__call__(_0, data[0])
-    s["a"] = 1
 
     _pt = _1
     r["b"] = _pt.__new__(_pt, data[1], stream, r)
-    s["b"] = 8
 
     _t = _2
     _et = _t.type
     r["c"] = type.__call__(_t, [type.__call__(_et, e) for e in data[2:4]])
-    s["c"] = 2
     """
 
     assert code == dedent(expected)
@@ -251,10 +234,8 @@ def test_generate_packed_read_offsets(cs: cstruct) -> None:
     data = _struct(cls.cs.endian, "B7xB").unpack(buf)
 
     r["a"] = type.__call__(_0, data[0])
-    s["a"] = 1
 
     r["b"] = type.__call__(_1, data[1])
-    s["b"] = 1
     """
 
     assert code == dedent(expected)
@@ -337,6 +318,7 @@ def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, oth
         Field("b", _type, 4),
         Field("c", cs.char["size"], offset=3),
     ]
+    fields[3].type.dynamic = True   # cs.char["size"] is a hack so patch dynamic
 
     output = "\n".join(compiler._ReadSourceGenerator(cs, fields)._generate_fields())
 
@@ -346,7 +328,6 @@ def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, oth
     data = _struct(cls.cs.endian, "H").unpack(buf)
 
     r["size"] = type.__call__(_0, data[0])
-    s["size"] = 2
 
 
     _t = _1
@@ -377,6 +358,7 @@ def test_generate_fields_dynamic_before_bitfield(cs: cstruct, TestEnum: Enum, ot
         Field("b", TestEnum, 4),
         Field("c", cs.char["size"], offset=3),
     ]
+    fields[3].type.dynamic = True   # cs.char["size"] is a hack so patch dynamic
 
     output = "\n".join(compiler._ReadSourceGenerator(cs, fields)._generate_fields())
 
@@ -386,7 +368,6 @@ def test_generate_fields_dynamic_before_bitfield(cs: cstruct, TestEnum: Enum, ot
     data = _struct(cls.cs.endian, "H").unpack(buf)
 
     r["size"] = type.__call__(_0, data[0])
-    s["size"] = 2
 
 
     _t = _1
