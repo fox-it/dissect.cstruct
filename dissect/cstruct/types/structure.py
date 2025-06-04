@@ -21,7 +21,7 @@ from dissect.cstruct.types.enum import EnumMetaType
 from dissect.cstruct.types.pointer import Pointer
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterable, Iterator, MutableMapping
     from types import FunctionType
 
     from typing_extensions import Self
@@ -79,7 +79,6 @@ class StructureMetaType(MetaType):
             return type.__call__(cls, *args, **kwargs)
         if not args and not kwargs:
             obj = type.__call__(cls)
-            object.__setattr__(obj, "__values__", {})
             object.__setattr__(obj, "__dynamic_sizes__", {})
             return obj
 
@@ -283,7 +282,6 @@ class StructureMetaType(MetaType):
         # This is faster than calling cls() and bypasses the metaclass __call__ method
         obj = type.__call__(cls, **result)
         obj.__dynamic_sizes__ = sizes
-        obj.__values__ = result
         return obj
 
     def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:  # type: ignore
@@ -374,11 +372,9 @@ class StructureMetaType(MetaType):
         for key, value in classdict.items():
             setattr(cls, key, value)
 
-
 class Structure(BaseType, metaclass=StructureMetaType):
     """Base class for cstruct structure type classes."""
 
-    __values__: dict[str, Any]
     __dynamic_sizes__: dict[str, int]
 
     def __len__(self) -> int:
@@ -414,6 +410,45 @@ class Structure(BaseType, metaclass=StructureMetaType):
 
         return sizes
 
+    @property
+    def __values__(self) -> MutableMapping[str, Any]:
+        return StructureValuesProxy(self)
+
+class StructureValuesProxy:
+    """A proxy for the values of fields of a Structure."""
+
+    def __init__(self, struct: Structure):
+        self._struct: Structure = struct
+
+    def __getitem__(self, key: str) -> Any:
+        return getattr(self._struct, key)
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        setattr(self._struct, key, value)
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._struct.__class__.fields
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._struct.__class__.fields)
+
+    def keys(self) -> Iterable[str]:
+        return self._struct.__class__.fields.keys()
+
+    def values(self) -> Iterator[Any]:
+        return (getattr(self._struct, k) for k in self.keys())
+
+    def items(self) -> Iterator[tuple[str, Any]]:
+        return ((k, getattr(self._struct, k)) for k in self.keys())
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return getattr(self._struct, key, default)
+
+    def __len__(self) -> int:
+        return len(self._struct.__class__.fields)
+
+    def __repr__(self) -> str:
+        return repr(self._struct)
 
 class UnionMetaType(StructureMetaType):
     """Base metaclass for cstruct union type classes."""
@@ -510,7 +545,6 @@ class UnionMetaType(StructureMetaType):
         # It also makes it easier to differentiate between user-initialization of the class
         # and initialization from a stream read
         obj: Union = type.__call__(cls, **result)
-        object.__setattr__(obj, "__values__", result)
         object.__setattr__(obj, "__dynamic_sizes__", sizes)
         object.__setattr__(obj, "_buf", buf)
 
@@ -593,7 +627,6 @@ class Union(Structure, metaclass=UnionMetaType):
     def _update(self) -> None:
         result, sizes = self.__class__._read_fields(io.BytesIO(self._buf))
         self.__dict__.update(result)
-        object.__setattr__(self, "__values__", result)
         object.__setattr__(self, "__dynamic_sizes__", sizes)
 
     def _proxify(self) -> None:
