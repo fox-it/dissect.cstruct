@@ -265,7 +265,8 @@ def test_structure_definition_simple(cs: cstruct, compiled: bool) -> None:
     with pytest.raises(AttributeError):
         obj.nope  # noqa: B018
 
-    assert obj._sizes["magic"] == 4
+    assert obj.__dynamic_sizes__ == { "string": 7, "wstring": 10 }
+    assert obj.__sizes__ == { "magic": 4, "wmagic": 8, "a": 1, "b": 2, "c": 4, "string": 7, "wstring": 10 }
     assert len(obj) == len(buf)
     assert obj.dumps() == buf
 
@@ -274,6 +275,39 @@ def test_structure_definition_simple(cs: cstruct, compiled: bool) -> None:
     fh = BytesIO()
     obj.write(fh)
     assert fh.getvalue() == buf
+
+def test_structure_values_dict(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    struct test {
+        char    magic[4];
+        wchar   wmagic[4];
+        uint8   a;
+        uint16  b;
+        uint32  c;
+        char    string[];
+        wchar   wstring[];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+    buf = b"testt\x00e\x00s\x00t\x00\x01\x02\x03\x04\x05\x06\x07lalala\x00t\x00e\x00s\x00t\x00\x00\x00"
+    obj = cs.test(buf)
+
+    # Test reading all values
+    values = obj.__values__
+    assert values["magic"] == b"test"
+    assert values["wmagic"] == "test"
+    assert values["a"] == 0x01
+    assert values["b"] == 0x0302
+    assert values["c"] == 0x07060504
+    assert values["string"] == b"lalala"
+    assert values["wstring"] == "test"
+
+    # Test writing a single field through the proxy
+    values["a"] = 0xFF
+    assert obj.a == 0xFF
+
+    # Test dictionary methods
+    assert values.keys() == {"magic", "wmagic", "a", "b", "c", "string", "wstring"}
 
 
 def test_structure_definition_simple_be(cs: cstruct, compiled: bool) -> None:
