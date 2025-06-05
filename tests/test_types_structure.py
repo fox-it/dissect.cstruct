@@ -266,6 +266,7 @@ def test_structure_definition_simple(cs: cstruct, compiled: bool) -> None:
         obj.nope  # noqa: B018
 
     assert obj.__dynamic_sizes__ == { "string": 7, "wstring": 10 }
+    assert obj.__sizes__ == { "magic": 4, "wmagic": 8, "a": 1, "b": 2, "c": 4, "string": 7, "wstring": 10 }
     assert len(obj) == len(buf)
     assert obj.dumps() == buf
 

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import io
+from collections import ChainMap
+from collections.abc import MutableMapping
 from contextlib import contextmanager
 from enum import Enum
-from functools import cached_property, lru_cache
+from functools import lru_cache
 from itertools import chain
 from operator import attrgetter
 from textwrap import dedent
@@ -21,7 +23,7 @@ from dissect.cstruct.types.enum import EnumMetaType
 from dissect.cstruct.types.pointer import Pointer
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, MutableMapping
+    from collections.abc import Iterable, Iterator, Mapping
     from types import FunctionType
 
     from typing_extensions import Self
@@ -60,6 +62,7 @@ class StructureMetaType(MetaType):
     __anonymous__: bool
     __updating__ = False
     __compiled__ = False
+    __static_sizes__: dict[str, int]  # Cache of static sizes by field name
 
     def __new__(metacls, name: str, bases: tuple[type, ...], classdict: dict[str, Any]) -> Self:  # type: ignore
         if (fields := classdict.pop("fields", None)) is not None:
@@ -92,9 +95,13 @@ class StructureMetaType(MetaType):
         lookup = {}
         raw_lookup = {}
         field_names = []
+        static_sizes = {}
         for field in fields:
             if field._name in lookup and field._name != "_":
                 raise ValueError(f"Duplicate field name: {field._name}")
+
+            if not field.type.dynamic:
+                static_sizes[field._name] = field.type.size
 
             if isinstance(field.type, StructureMetaType) and field.name is None:
                 for anon_field in field.type.fields.values():
@@ -111,6 +118,7 @@ class StructureMetaType(MetaType):
         classdict["fields"] = lookup
         classdict["lookup"] = raw_lookup
         classdict["__fields__"] = fields
+        classdict["__static_sizes__"] = static_sizes
         classdict["__bool__"] = _generate__bool__(field_names)
 
         if issubclass(cls, UnionMetaType) or isinstance(cls, UnionMetaType):
@@ -372,6 +380,7 @@ class StructureMetaType(MetaType):
         for key, value in classdict.items():
             setattr(cls, key, value)
 
+
 class Structure(BaseType, metaclass=StructureMetaType):
     """Base class for cstruct structure type classes."""
 
@@ -398,57 +407,46 @@ class Structure(BaseType, metaclass=StructureMetaType):
 
         return f"<{self.__class__.__name__} {' '.join(values)}>"
 
-    @cached_property
-    def __sizes__(self) -> dict[str, int | None]:
-        """Return the sizes of the fields in this structure."""
-        sizes = {}
-        for field in self.__class__.__fields__:
-            if field.type.dynamic:
-                sizes[field._name] = self.__dynamic_sizes__.get(field._name, None)
-            else:
-                sizes[field._name] = field.type.size
-
-        return sizes
+    @property
+    def __sizes__(self) -> Mapping[str, int | None]:
+        return ChainMap(self.__class__.__static_sizes__, self.__dynamic_sizes__)
 
     @property
     def __values__(self) -> MutableMapping[str, Any]:
         return StructureValuesProxy(self)
 
-class StructureValuesProxy:
+
+class StructureValuesProxy(MutableMapping):
     """A proxy for the values of fields of a Structure."""
 
     def __init__(self, struct: Structure):
         self._struct: Structure = struct
+        # Unfortunately, we need to support code that adds attributes dynamically :/
+        self._fields: set[str] = set(iter(self._struct.__class__.fields))
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self._struct, key)
 
     def __setitem__(self, key: str, value: Any) -> None:
         setattr(self._struct, key, value)
+        self._fields.add(key)
+
+    def __delitem__(self, key: str) -> None:
+        del self._struct[key]
+        self._fields.discard(key)
 
     def __contains__(self, key: str) -> bool:
-        return key in self._struct.__class__.fields
+        return key in self._fields
 
     def __iter__(self) -> Iterator[str]:
-        return iter(self._struct.__class__.fields)
-
-    def keys(self) -> Iterable[str]:
-        return self._struct.__class__.fields.keys()
-
-    def values(self) -> Iterator[Any]:
-        return (getattr(self._struct, k) for k in self.keys())
-
-    def items(self) -> Iterator[tuple[str, Any]]:
-        return ((k, getattr(self._struct, k)) for k in self.keys())
-
-    def get(self, key: str, default: Any = None) -> Any:
-        return getattr(self._struct, key, default)
+        return iter(self._fields)
 
     def __len__(self) -> int:
-        return len(self._struct.__class__.fields)
+        return len(self._fields)
 
     def __repr__(self) -> str:
         return repr(self._struct)
+
 
 class UnionMetaType(StructureMetaType):
     """Base metaclass for cstruct union type classes."""
