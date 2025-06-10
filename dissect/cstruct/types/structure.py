@@ -23,7 +23,7 @@ from dissect.cstruct.types.enum import EnumMetaType
 from dissect.cstruct.types.pointer import Pointer
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Mapping
+    from collections.abc import Iterator, Mapping
     from types import FunctionType
 
     from typing_extensions import Self
@@ -382,7 +382,11 @@ class StructureMetaType(MetaType):
 
 
 class Structure(BaseType, metaclass=StructureMetaType):
-    """Base class for cstruct structure type classes."""
+    """Base class for cstruct structure type classes.
+
+    Note that setting attributes which do not correspond to a field in the structure results in undefined behavior.
+    For performance reasons, the structure does not check if the field exists when writing to an attribute.
+    """
 
     __dynamic_sizes__: dict[str, int]
 
@@ -421,31 +425,34 @@ class StructureValuesProxy(MutableMapping):
 
     def __init__(self, struct: Structure):
         self._struct: Structure = struct
-        # Unfortunately, we need to support code that adds attributes dynamically :/
-        self._fields: set[str] = set(iter(self._struct.__class__.fields))
 
     def __getitem__(self, key: str) -> Any:
-        return getattr(self._struct, key)
+        if key in self:
+            return getattr(self._struct, key)
+        raise KeyError(key)
 
     def __setitem__(self, key: str, value: Any) -> None:
-        setattr(self._struct, key, value)
-        self._fields.add(key)
-
-    def __delitem__(self, key: str) -> None:
-        del self._struct[key]
-        self._fields.discard(key)
+        if key in self:
+            setattr(self._struct, key, value)
+        else:
+            raise KeyError(key)
 
     def __contains__(self, key: str) -> bool:
-        return key in self._fields
+        return key in self._struct.__class__.fields
 
     def __iter__(self) -> Iterator[str]:
-        return iter(self._fields)
+        return iter(self._struct.__class__.fields)
 
     def __len__(self) -> int:
-        return len(self._fields)
+        return len(self._struct.__class__.fields)
 
     def __repr__(self) -> str:
-        return repr(self._struct)
+        items = (f"{key!r}: {value!r}" for (key, value) in self.items())
+        return "{" + ", ".join(items) + "}"
+
+    def __delitem__(self, _: str):
+        # Is abstract in base, but deleting is not supported.
+        raise NotImplementedError("Cannot delete fields from a Structure")
 
 
 class UnionMetaType(StructureMetaType):
