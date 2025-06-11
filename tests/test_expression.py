@@ -88,8 +88,8 @@ def id_fn(val: Any) -> str | None:
 
 @pytest.mark.parametrize(("expression", "answer"), testdata, ids=id_fn)
 def test_expression(expression: str, answer: int) -> None:
-    parser = Expression(Consts(), expression)
-    assert parser.evaluate() == answer
+    parser = Expression(expression)
+    assert parser.evaluate(Consts()) == answer
 
 
 @pytest.mark.parametrize(
@@ -110,7 +110,7 @@ def test_expression(expression: str, answer: int) -> None:
 )
 def test_expression_failure(expression: str, exception: type, message: str) -> None:
     with pytest.raises(exception, match=message):
-        Expression(Consts(), expression).evaluate()
+        Expression(expression).evaluate(Consts())
 
 
 def test_sizeof(cs: cstruct) -> None:

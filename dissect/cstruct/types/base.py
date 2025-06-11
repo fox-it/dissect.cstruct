@@ -262,7 +262,7 @@ class BaseArray(BaseType):
             num = EOF
         elif isinstance(cls.num_entries, Expression):
             try:
-                num = max(0, cls.num_entries.evaluate(context))
+                num = max(0, cls.num_entries.evaluate(cls.cs, context))
             except Exception:
                 if cls.num_entries.expression != "EOF":
                     raise
