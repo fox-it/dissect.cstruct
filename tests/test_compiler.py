@@ -8,6 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from dissect.cstruct import compiler
+from dissect.cstruct.expression import Expression
 from dissect.cstruct.types.structure import Field
 
 if TYPE_CHECKING:
@@ -316,9 +317,8 @@ def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, oth
         Field("size", cs.uint16, offset=0),
         Field("a", TestEnum, 4, offset=2),
         Field("b", _type, 4),
-        Field("c", cs.char["size"], offset=3),
+        Field("c", cs.char[Expression("size")], offset=3),
     ]
-    fields[3].type.dynamic = True   # cs.char["size"] is a hack so patch dynamic
 
     output = "\n".join(compiler._ReadSourceGenerator(cs, fields)._generate_fields())
 

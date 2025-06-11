@@ -92,7 +92,7 @@ class TokenParser(Parser):
 
         if isinstance(value, str):
             try:
-                value = Expression(self.cstruct, value).evaluate()
+                value = Expression(value).evaluate(self.cstruct)
             except (ExpressionParserError, ExpressionTokenizerError):
                 pass
 
@@ -120,7 +120,7 @@ class TokenParser(Parser):
                 if not key:
                     continue
 
-                val = nextval if not val else Expression(self.cstruct, val).evaluate(values)
+                val = nextval if not val else Expression(val).evaluate(self.cstruct, values)
 
                 if enumtype == "flag":
                     high_bit = val.bit_length() - 1
@@ -293,9 +293,9 @@ class TokenParser(Parser):
                 if count == "":
                     count = None
                 else:
-                    count = Expression(self.cstruct, count)
+                    count = Expression(count)
                     try:
-                        count = count.evaluate()
+                        count = count.evaluate(self.cstruct)
                     except Exception:
                         pass
 
@@ -434,7 +434,7 @@ class CStyleParser(Parser):
                     if not key:
                         continue
 
-                    val = nextval if not val else Expression(self.cstruct, val).evaluate()
+                    val = nextval if not val else Expression(val).evaluate(self.cstruct)
 
                     if enumtype == "flag":
                         high_bit = val.bit_length() - 1
@@ -515,9 +515,9 @@ class CStyleParser(Parser):
                 if d["count"] == "":
                     count = None
                 else:
-                    count = Expression(self.cstruct, d["count"])
+                    count = Expression(d["count"])
                     try:
-                        count = count.evaluate()
+                        count = count.evaluate(self.cstruct)
                     except Exception:
                         pass
 
