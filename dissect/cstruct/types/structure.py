@@ -412,12 +412,12 @@ class Structure(BaseType, metaclass=StructureMetaType):
         return f"<{self.__class__.__name__} {' '.join(values)}>"
 
     @property
-    def __sizes__(self) -> Mapping[str, int | None]:
-        return ChainMap(self.__class__.__static_sizes__, self.__dynamic_sizes__)
-
-    @property
     def __values__(self) -> MutableMapping[str, Any]:
         return StructureValuesProxy(self)
+
+    @property
+    def __sizes__(self) -> Mapping[str, int | None]:
+        return ChainMap(self.__class__.__static_sizes__, self.__dynamic_sizes__)
 
 
 class StructureValuesProxy(MutableMapping):
@@ -433,9 +433,8 @@ class StructureValuesProxy(MutableMapping):
 
     def __setitem__(self, key: str, value: Any) -> None:
         if key in self:
-            setattr(self._struct, key, value)
-        else:
-            raise KeyError(key)
+            return setattr(self._struct, key, value)
+        raise KeyError(key)
 
     def __contains__(self, key: str) -> bool:
         return key in self._struct.__class__.fields
@@ -447,8 +446,7 @@ class StructureValuesProxy(MutableMapping):
         return len(self._struct.__class__.fields)
 
     def __repr__(self) -> str:
-        items = (f"{key!r}: {value!r}" for (key, value) in self.items())
-        return "{" + ", ".join(items) + "}"
+        return repr(dict(self))
 
     def __delitem__(self, _: str):
         # Is abstract in base, but deleting is not supported.
