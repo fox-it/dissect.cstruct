@@ -356,9 +356,8 @@ def test_generate_fields_dynamic_before_bitfield(cs: cstruct, TestEnum: Enum, ot
         Field("size", cs.uint16, offset=0),
         Field("a", _type, 4, offset=2),
         Field("b", TestEnum, 4),
-        Field("c", cs.char["size"], offset=3),
+        Field("c", cs.char[Expression("size")], offset=3),
     ]
-    fields[3].type.dynamic = True   # cs.char["size"] is a hack so patch dynamic
 
     output = "\n".join(compiler._ReadSourceGenerator(cs, fields)._generate_fields())
 
