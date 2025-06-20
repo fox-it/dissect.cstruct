@@ -30,6 +30,7 @@ dynamic = ["version"]
 homepage = "https://dissect.tools"
 documentation = "https://docs.dissect.tools/en/latest/projects/dissect.cstruct"
 repository = "https://github.com/fox-it/dissect.cstruct"
+changelog = "https://github.com/fox-it/dissect.cstruct/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [

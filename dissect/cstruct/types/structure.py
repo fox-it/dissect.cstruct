@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+from collections import ChainMap
+from collections.abc import MutableMapping
 from contextlib import contextmanager
 from enum import Enum
 from functools import lru_cache
@@ -21,7 +23,7 @@ from dissect.cstruct.types.enum import EnumMetaType
 from dissect.cstruct.types.pointer import Pointer
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping
     from types import FunctionType
 
     from typing_extensions import Self
@@ -60,6 +62,7 @@ class StructureMetaType(MetaType):
     __anonymous__: bool
     __updating__ = False
     __compiled__ = False
+    __static_sizes__: dict[str, int]  # Cache of static sizes by field name
 
     def __new__(metacls, name: str, bases: tuple[type, ...], classdict: dict[str, Any]) -> Self:  # type: ignore
         if (fields := classdict.pop("fields", None)) is not None:
@@ -79,8 +82,7 @@ class StructureMetaType(MetaType):
             return type.__call__(cls, *args, **kwargs)
         if not args and not kwargs:
             obj = type.__call__(cls)
-            object.__setattr__(obj, "_values", {})
-            object.__setattr__(obj, "_sizes", {})
+            object.__setattr__(obj, "__dynamic_sizes__", {})
             return obj
 
         return super().__call__(*args, **kwargs)
@@ -93,9 +95,13 @@ class StructureMetaType(MetaType):
         lookup = {}
         raw_lookup = {}
         field_names = []
+        static_sizes = {}
         for field in fields:
             if field._name in lookup and field._name != "_":
                 raise ValueError(f"Duplicate field name: {field._name}")
+
+            if not field.type.dynamic:
+                static_sizes[field._name] = field.type.size
 
             if isinstance(field.type, StructureMetaType) and field.name is None:
                 for anon_field in field.type.fields.values():
@@ -112,6 +118,7 @@ class StructureMetaType(MetaType):
         classdict["fields"] = lookup
         classdict["lookup"] = raw_lookup
         classdict["__fields__"] = fields
+        classdict["__static_sizes__"] = static_sizes
         classdict["__bool__"] = _generate__bool__(field_names)
 
         if issubclass(cls, UnionMetaType) or isinstance(cls, UnionMetaType):
@@ -271,8 +278,9 @@ class StructureMetaType(MetaType):
 
             value = field.type._read(stream, result)
 
-            sizes[field._name] = stream.tell() - offset
             result[field._name] = value
+            if field.type.dynamic:
+                sizes[field._name] = stream.tell() - offset
 
         if cls.__align__:
             # Align the stream
@@ -281,8 +289,7 @@ class StructureMetaType(MetaType):
         # Using type.__call__ directly calls the __init__ method of the class
         # This is faster than calling cls() and bypasses the metaclass __call__ method
         obj = type.__call__(cls, **result)
-        obj._sizes = sizes
-        obj._values = result
+        obj.__dynamic_sizes__ = sizes
         return obj
 
     def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:  # type: ignore
@@ -375,10 +382,13 @@ class StructureMetaType(MetaType):
 
 
 class Structure(BaseType, metaclass=StructureMetaType):
-    """Base class for cstruct structure type classes."""
+    """Base class for cstruct structure type classes.
 
-    _values: dict[str, Any]
-    _sizes: dict[str, int]
+    Note that setting attributes which do not correspond to a field in the structure results in undefined behavior.
+    For performance reasons, the structure does not check if the field exists when writing to an attribute.
+    """
+
+    __dynamic_sizes__: dict[str, int]
 
     def __len__(self) -> int:
         return len(self.dumps())
@@ -400,6 +410,47 @@ class Structure(BaseType, metaclass=StructureMetaType):
             values.append(f"{name}={value}")
 
         return f"<{self.__class__.__name__} {' '.join(values)}>"
+
+    @property
+    def __values__(self) -> MutableMapping[str, Any]:
+        return StructureValuesProxy(self)
+
+    @property
+    def __sizes__(self) -> Mapping[str, int | None]:
+        return ChainMap(self.__class__.__static_sizes__, self.__dynamic_sizes__)
+
+
+class StructureValuesProxy(MutableMapping):
+    """A proxy for the values of fields of a Structure."""
+
+    def __init__(self, struct: Structure):
+        self._struct: Structure = struct
+
+    def __getitem__(self, key: str) -> Any:
+        if key in self:
+            return getattr(self._struct, key)
+        raise KeyError(key)
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        if key in self:
+            return setattr(self._struct, key, value)
+        raise KeyError(key)
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._struct.__class__.fields
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._struct.__class__.fields)
+
+    def __len__(self) -> int:
+        return len(self._struct.__class__.fields)
+
+    def __repr__(self) -> str:
+        return repr(dict(self))
+
+    def __delitem__(self, _: str):
+        # Is abstract in base, but deleting is not supported.
+        raise NotImplementedError("Cannot delete fields from a Structure")
 
 
 class UnionMetaType(StructureMetaType):
@@ -473,8 +524,9 @@ class UnionMetaType(StructureMetaType):
             buf.seek(offset + start)
             value = field_type._read(buf, result)
 
-            sizes[field._name] = buf.tell() - start
             result[field._name] = value
+            if field.type.dynamic:
+                sizes[field._name] = buf.tell() - start
 
         return result, sizes
 
@@ -496,8 +548,7 @@ class UnionMetaType(StructureMetaType):
         # It also makes it easier to differentiate between user-initialization of the class
         # and initialization from a stream read
         obj: Union = type.__call__(cls, **result)
-        object.__setattr__(obj, "_values", result)
-        object.__setattr__(obj, "_sizes", sizes)
+        object.__setattr__(obj, "__dynamic_sizes__", sizes)
         object.__setattr__(obj, "_buf", buf)
 
         if cls.size is not None:
@@ -579,8 +630,7 @@ class Union(Structure, metaclass=UnionMetaType):
     def _update(self) -> None:
         result, sizes = self.__class__._read_fields(io.BytesIO(self._buf))
         self.__dict__.update(result)
-        object.__setattr__(self, "_values", result)
-        object.__setattr__(self, "_sizes", sizes)
+        object.__setattr__(self, "__dynamic_sizes__", sizes)
 
     def _proxify(self) -> None:
         def _proxy_structure(value: Structure) -> None:
