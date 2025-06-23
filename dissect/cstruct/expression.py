@@ -187,8 +187,7 @@ class Expression:
         "sizeof": 6,
     }
 
-    def __init__(self, cstruct: cstruct, expression: str):
-        self.cstruct = cstruct
+    def __init__(self, expression: str):
         self.expression = expression
         self.tokens = ExpressionTokenizer(expression).tokenize()
         self.stack = []
@@ -222,7 +221,7 @@ class Expression:
     def is_number(self, token: str) -> bool:
         return token.isnumeric() or (len(token) > 2 and token[0] == "0" and token[1] in ("x", "X", "b", "B", "o", "O"))
 
-    def evaluate(self, context: dict[str, int] | None = None) -> int:
+    def evaluate(self, cs: cstruct, context: dict[str, int] | None = None) -> int:
         """Evaluates an expression using a Shunting-Yard implementation."""
 
         self.stack = []
@@ -249,14 +248,14 @@ class Expression:
                 self.queue.append(int(current_token, 0))
             elif current_token in context:
                 self.queue.append(int(context[current_token]))
-            elif current_token in self.cstruct.consts:
-                self.queue.append(int(self.cstruct.consts[current_token]))
+            elif current_token in cs.consts:
+                self.queue.append(int(cs.consts[current_token]))
             elif current_token in self.unary_operators:
                 self.stack.append(current_token)
             elif current_token == "sizeof":
                 if len(tmp_expression) < i + 3 or (tmp_expression[i + 1] != "(" or tmp_expression[i + 3] != ")"):
                     raise ExpressionParserError("Invalid sizeof operation")
-                self.queue.append(len(self.cstruct.resolve(tmp_expression[i + 2])))
+                self.queue.append(len(cs.resolve(tmp_expression[i + 2])))
                 i += 3
             elif current_token in operators:
                 while (

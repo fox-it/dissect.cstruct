@@ -157,11 +157,6 @@ def _dumpstruct(
         if getattr(field.type, "anonymous", False):
             continue
 
-        if color:
-            foreground, background = colors[ci % len(colors)]
-            palette.append((structure._sizes[field._name], background))
-        ci += 1
-
         value = getattr(structure, field._name)
         if isinstance(value, (str, Pointer, Enum)):
             value = repr(value)
@@ -173,6 +168,10 @@ def _dumpstruct(
                 value = value.replace("\n", f"\n{' ' * (len(field._name) + 4)}")
 
         if color:
+            foreground, background = colors[ci % len(colors)]
+            size = structure.__sizes__[field._name]
+            palette.append((size, background))
+            ci += 1
             out.append(f"- {foreground}{field._name}{COLOR_NORMAL}: {value}")
         else:
             out.append(f"- {field._name}: {value}")

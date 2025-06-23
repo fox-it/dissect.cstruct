@@ -45,7 +45,7 @@ def test_align_struct(cs: cstruct, compiled: bool) -> None:
     obj = cs.test(fh)
     assert fh.tell() == 32
 
-    for name, value in obj._values.items():
+    for name, value in obj.__values__.items():
         assert cs.test.fields[name].offset == value
 
     assert obj.dumps() == buf
