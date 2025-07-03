@@ -122,7 +122,7 @@ def test_structure_names(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert all(c in cs.typedefs for c in ("a", "b", "c", "d", "e"))
+    assert all(c in cs.typedefs | cs.types for c in ("a", "b", "c", "d", "e"))
 
     assert cs.a.__name__ == "a"
     assert cs.b.__name__ == "b"

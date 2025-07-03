@@ -53,8 +53,11 @@ class cstruct:
 
         self.consts = {}
         self.lookups = {}
+        self.types = {}
+        self.typedefs = {}
         # fmt: off
-        self.typedefs = {
+
+        initial_types = {
             # Internal types
             "int8": self._make_packed_type("int8", "b", int),
             "uint8": self._make_packed_type("uint8", "B", int),
@@ -97,6 +100,21 @@ class cstruct:
             "long long": "int64",
             "signed long long": "int64",
             "unsigned long long": "uint64",
+
+            # Other convenience types
+            "u1": "uint8",
+            "u2": "uint16",
+            "u4": "uint32",
+            "u8": "uint64",
+            "u16": "uint128",
+            "__u8": "uint8",
+            "__u16": "uint16",
+            "__u32": "uint32",
+            "__u64": "uint64",
+            "uchar": "uint8",
+            "ushort": "uint16",
+            "uint": "uint32",
+            "ulong": "uint32",
 
             # Windows types
             "BYTE": "uint8",
@@ -165,23 +183,11 @@ class cstruct:
             "_DWORD": "uint32",
             "_QWORD": "uint64",
             "_OWORD": "uint128",
-
-            # Other convenience types
-            "u1": "uint8",
-            "u2": "uint16",
-            "u4": "uint32",
-            "u8": "uint64",
-            "u16": "uint128",
-            "__u8": "uint8",
-            "__u16": "uint16",
-            "__u32": "uint32",
-            "__u64": "uint64",
-            "uchar": "uint8",
-            "ushort": "uint16",
-            "uint": "uint32",
-            "ulong": "uint32",
         }
         # fmt: on
+
+        for name, type_ in initial_types.items():
+            self.add_type(name, type_)
 
         pointer = pointer or ("uint64" if sys.maxsize > 2**32 else "uint32")
         self.pointer: type[BaseType] = self.resolve(pointer)
@@ -194,35 +200,69 @@ class cstruct:
             pass
 
         try:
+            return self.types[attr]
+        except KeyError:
+            pass
+
+        try:
             return self.resolve(self.typedefs[attr])
         except KeyError:
             pass
 
-        raise AttributeError(f"Invalid attribute: {attr}")
+        return super().__getattribute__(attr)
 
     def _next_anonymous(self) -> str:
         name = f"__anonymous_{self._anonymous_count}__"
         self._anonymous_count += 1
         return name
 
+    def _add_attr(self, name: str, value: Any, replace: bool = False) -> None:
+        if not replace and (name in self.__dict__ and self.__dict__[name] != value):
+            raise ValueError(f"Attribute already exists: {name}")
+        setattr(self, name, value)
+
     def add_type(self, name: str, type_: type[BaseType] | str, replace: bool = False) -> None:
         """Add a type or type reference.
 
         Only use this method when creating type aliases or adding already bound types.
+        All types will be resolved to their actual type objects prior to being added.
+        Use :func:`add_typedef` to add type references.
 
         Args:
             name: Name of the type to be added.
             type_: The type to be added. Can be a str reference to another type or a compatible type class.
+                   If a str is given, it will be resolved to the actual type object.
 
         Raises:
             ValueError: If the type already exists.
         """
+        typeobj = self.resolve(type_)
+        if not replace and (name in self.types and self.types[name] != typeobj):
+            raise ValueError(f"Duplicate type: {name}")
+
+        self.types[name] = typeobj
+        self._add_attr(name, typeobj, replace=replace)
+
+    addtype = add_type
+
+    def add_typedef(self, name: str, type_: str, replace: bool = False) -> None:
+        """Add a type reference.
+
+        Use this method to add type references to this cstruct instance. These are type names that can be
+        dynamically resolved at a later stage. Use :func:`add_type` to add actual type objects.
+
+        Args:
+            name: Name of the type to be added.
+            type_: The type reference to be added.
+            replace: Whether to replace the type if it already exists.
+        """
+        if not isinstance(type_, str):
+            raise TypeError("Type reference must be a string")
+
         if not replace and (name in self.typedefs and self.resolve(self.typedefs[name]) != self.resolve(type_)):
             raise ValueError(f"Duplicate type: {name}")
 
         self.typedefs[name] = type_
-
-    addtype = add_type
 
     def add_custom_type(
         self, name: str, type_: type[BaseType], size: int | None = None, alignment: int | None = None, **kwargs
@@ -240,6 +280,16 @@ class cstruct:
             **kwargs: Additional attributes to add to the type.
         """
         self.add_type(name, self._make_type(name, (type_,), size, alignment=alignment, attrs=kwargs))
+
+    def add_const(self, name: str, value: Any) -> None:
+        """Add a constant value.
+
+        Args:
+            name: Name of the constant to be added.
+            value: The value of the constant.
+        """
+        self.consts[name] = value
+        self._add_attr(name, value, replace=True)
 
     def load(self, definition: str, deftype: int | None = None, **kwargs) -> cstruct:
         """Parse structures from the given definitions using the given definition type.
@@ -312,13 +362,13 @@ class cstruct:
             return type_name
 
         for _ in range(10):
+            if type_name in self.types:
+                return self.types[type_name]
+
             if type_name not in self.typedefs:
                 raise ResolveError(f"Unknown type {name}")
 
             type_name = self.typedefs[type_name]
-
-            if not isinstance(type_name, str):
-                return type_name
 
         raise ResolveError(f"Recursion limit exceeded while resolving type {name}")
 
