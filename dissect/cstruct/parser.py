@@ -64,6 +64,7 @@ class TokenParser(Parser):
         )
         TOK.add(r"(?<=})\s*(?P<defs>(?:[a-zA-Z0-9_]+\s*,\s*)+[a-zA-Z0-9_]+)\s*(?=;)", "DEFS")
         TOK.add(r"(?P<name>\**?\s*[a-zA-Z0-9_]+)(?:\s*:\s*(?P<bits>\d+))?(?:\[(?P<count>[^;\n]*)\])?\s*(?=;)", "NAME")
+        TOK.add(r"#include\s+(?P<name>[^\s]+)\s*", "INCLUDE")
         TOK.add(r"[a-zA-Z_][a-zA-Z0-9_]*", "IDENTIFIER")
         TOK.add(r"[{}]", "BLOCK")
         TOK.add(r"\$(?P<name>[^\s]+) = (?P<value>{[^}]+})\w*[\r\n]+", "LOOKUP")
@@ -323,7 +324,17 @@ class TokenParser(Parser):
                 names.extend([name.strip() for name in ntoken.value.strip().split(",")])
 
         return names
+        
+    def _include(self, tokens: TokenConsumer) -> None:
+        include = tokens.consume()
+        pattern = self.TOK.patterns[self.TOK.INCLUDE]
+        match = pattern.match(include.value).groupdict()
+        # create if list with incs does not exist
+        if not hasattr(self.cstruct, 'includes'):
+            self.cstruct.includes = []
 
+        self.cstruct.includes.append(match["name"])
+        
     @staticmethod
     def _remove_comments(string: str) -> str:
         # https://stackoverflow.com/a/18381470
@@ -382,6 +393,8 @@ class TokenParser(Parser):
                 self._enum(tokens)
             elif token == self.TOK.LOOKUP:
                 self._lookup(tokens)
+            elif token == self.TOK.INCLUDE:
+                self._include(tokens)
             else:
                 raise ParserError(f"line {self._lineno(token)}: unexpected token {token!r}")
 
