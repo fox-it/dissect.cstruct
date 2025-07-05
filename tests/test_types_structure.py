@@ -1,12 +1,14 @@
+from __future__ import annotations
+
 import inspect
 from io import BytesIO
 from textwrap import dedent
 from types import MethodType
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exceptions import ParserError
 from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
@@ -14,6 +16,9 @@ from dissect.cstruct.types.pointer import Pointer
 from dissect.cstruct.types.structure import Field, Structure, StructureMetaType
 
 from .utils import verify_compiled
+
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import cstruct
 
 
 @pytest.fixture
@@ -220,12 +225,12 @@ def test_structure_definitions(cs: cstruct, compiled: bool) -> None:
     assert "a" in cs.test.fields
     assert "b" in cs.test.fields
 
-    with pytest.raises(ParserError):
-        cdef = """
-        struct {
-            uint32  a;
-        };
-        """
+    cdef = """
+    struct {
+        uint32  a;
+    };
+    """
+    with pytest.raises(ParserError, match="struct has no name"):
         cs.load(cdef)
 
 
@@ -258,9 +263,10 @@ def test_structure_definition_simple(cs: cstruct, compiled: bool) -> None:
     assert obj.wstring == "test"
 
     with pytest.raises(AttributeError):
-        obj.nope
+        obj.nope  # noqa: B018
 
-    assert obj._sizes["magic"] == 4
+    assert obj.__dynamic_sizes__ == { "string": 7, "wstring": 10 }
+    assert obj.__sizes__ == { "magic": 4, "wmagic": 8, "a": 1, "b": 2, "c": 4, "string": 7, "wstring": 10 }
     assert len(obj) == len(buf)
     assert obj.dumps() == buf
 
@@ -269,6 +275,39 @@ def test_structure_definition_simple(cs: cstruct, compiled: bool) -> None:
     fh = BytesIO()
     obj.write(fh)
     assert fh.getvalue() == buf
+
+def test_structure_values_dict(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    struct test {
+        char    magic[4];
+        wchar   wmagic[4];
+        uint8   a;
+        uint16  b;
+        uint32  c;
+        char    string[];
+        wchar   wstring[];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+    buf = b"testt\x00e\x00s\x00t\x00\x01\x02\x03\x04\x05\x06\x07lalala\x00t\x00e\x00s\x00t\x00\x00\x00"
+    obj = cs.test(buf)
+
+    # Test reading all values
+    values = obj.__values__
+    assert values["magic"] == b"test"
+    assert values["wmagic"] == "test"
+    assert values["a"] == 0x01
+    assert values["b"] == 0x0302
+    assert values["c"] == 0x07060504
+    assert values["string"] == b"lalala"
+    assert values["wstring"] == "test"
+
+    # Test writing a single field through the proxy
+    values["a"] = 0xFF
+    assert obj.a == 0xFF
+
+    # Test dictionary methods
+    assert values.keys() == {"magic", "wmagic", "a", "b", "c", "string", "wstring"}
 
 
 def test_structure_definition_simple_be(cs: cstruct, compiled: bool) -> None:
@@ -300,7 +339,7 @@ def test_structure_definition_simple_be(cs: cstruct, compiled: bool) -> None:
     assert obj.wstring == "test"
     assert obj.dumps() == buf
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
 
@@ -358,9 +397,8 @@ def test_structure_definition_sizes(cs: cstruct, compiled: bool) -> None:
     assert obj.another == 2
     assert obj.atoffset == 3
 
-    with pytest.raises(TypeError) as excinfo:
+    with pytest.raises(TypeError, match="Dynamic size"):
         len(cs.dynamic)
-    assert str(excinfo.value) == "Dynamic size"
 
 
 def test_structure_definition_nested(cs: cstruct, compiled: bool) -> None:
@@ -438,7 +476,7 @@ def test_structure_definition_write(cs: cstruct, compiled: bool) -> None:
     obj.wstring = "test"
 
     with pytest.raises(AttributeError):
-        obj.nope
+        obj.nope  # noqa: B018
 
     assert obj.dumps() == buf
 
@@ -622,7 +660,7 @@ def test_structure_default(cs: cstruct, compiled: bool) -> None:
 
     assert obj.dumps() == b"\x00" * 57
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
     assert cs.test_nested() == cs.test_nested.__default__()
@@ -633,7 +671,7 @@ def test_structure_default(cs: cstruct, compiled: bool) -> None:
 
     assert obj.dumps() == b"\x00" * 171
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
 
@@ -691,7 +729,7 @@ def test_structure_default_dynamic(cs: cstruct, compiled: bool) -> None:
 
     assert obj.dumps() == b"\x00" * 20
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
     assert cs.test_nested() == cs.test_nested.__default__()
@@ -701,7 +739,7 @@ def test_structure_default_dynamic(cs: cstruct, compiled: bool) -> None:
 
     assert obj.dumps() == b"\x00" * 21
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
 
@@ -746,11 +784,11 @@ def test_codegen_make_init() -> None:
     result = _make__init__([f"_{n}" for n in range(5)])
     expected = """
     def __init__(self, _0 = None, _1 = None, _2 = None, _3 = None, _4 = None):
-     self._0 = _0 if _0 is not None else 0
-     self._1 = _1 if _1 is not None else 1
-     self._2 = _2 if _2 is not None else 2
-     self._3 = _3 if _3 is not None else 3
-     self._4 = _4 if _4 is not None else 4
+     self._0 = _0 if _0 is not None else _0_default
+     self._1 = _1 if _1 is not None else _1_default
+     self._2 = _2 if _2 is not None else _2_default
+     self._3 = _3 if _3 is not None else _3_default
+     self._4 = _4 if _4 is not None else _4_default
     """
     assert result == dedent(expected[1:].rstrip())
 
@@ -795,3 +833,13 @@ def test_structure_definition_newline(cs: cstruct, compiled: bool) -> None:
     obj.wstring = "test"
 
     assert obj.dumps() == buf
+
+def test_codegen_hashable(cs: cstruct) -> None:
+    hashable_fields = [Field("a", cs.uint8), Field("b", cs.uint8)]
+    unhashable_fields = [Field("a", cs.uint8[2]), Field("b", cs.uint8)]
+
+    with pytest.raises(TypeError, match="unhashable type: 'uint8\\[2\\]'"):
+        hash(unhashable_fields[0].type.__default__())
+
+    assert hash(structure._generate_structure__init__(hashable_fields).__code__)
+    assert hash(structure._generate_structure__init__(unhashable_fields).__code__)

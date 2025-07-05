@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from dissect.cstruct import compiler
 from dissect.cstruct.exceptions import (
@@ -11,7 +11,7 @@ from dissect.cstruct.exceptions import (
     ParserError,
 )
 from dissect.cstruct.expression import Expression
-from dissect.cstruct.types import ArrayMetaType, Field, MetaType
+from dissect.cstruct.types import BaseArray, BaseType, Field, Structure
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
@@ -33,7 +33,7 @@ class Parser:
         Args:
             data: Data to parse definitions from, usually a string.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class TokenParser(Parser):
@@ -92,7 +92,7 @@ class TokenParser(Parser):
 
         if isinstance(value, str):
             try:
-                value = Expression(self.cstruct, value).evaluate()
+                value = Expression(value).evaluate(self.cstruct)
             except (ExpressionParserError, ExpressionTokenizerError):
                 pass
 
@@ -119,10 +119,8 @@ class TokenParser(Parser):
                 val = val.strip()
                 if not key:
                     continue
-                if not val:
-                    val = nextval
-                else:
-                    val = Expression(self.cstruct, val).evaluate(values)
+
+                val = nextval if not val else Expression(val).evaluate(self.cstruct, values)
 
                 if enumtype == "flag":
                     high_bit = val.bit_length() - 1
@@ -149,22 +147,28 @@ class TokenParser(Parser):
         tokens.consume()
         type_ = None
 
+        names = []
+
         if tokens.next == self.TOK.IDENTIFIER:
             type_ = self.cstruct.resolve(self._identifier(tokens))
         elif tokens.next == self.TOK.STRUCT:
-            # The register thing is a bit dirty
-            # Basically consumes all NAME tokens and
-            # registers the struct
-            type_ = self._struct(tokens, register=True)
+            type_ = self._struct(tokens)
+            if not type_.__anonymous__:
+                names.append(type_.__name__)
 
-        names = self._names(tokens)
+        names.extend(self._names(tokens))
         for name in names:
+            if issubclass(type_, Structure) and type_.__anonymous__:
+                type_.__anonymous__ = False
+                type_.__name__ = name
+                type_.__qualname__ = name
+
             type_, name, bits = self._parse_field_type(type_, name)
             if bits is not None:
                 raise ParserError(f"line {self._lineno(tokens.previous)}: typedefs cannot have bitfields")
             self.cstruct.add_type(name, type_)
 
-    def _struct(self, tokens: TokenConsumer, register: bool = False) -> None:
+    def _struct(self, tokens: TokenConsumer, register: bool = False) -> type[Structure]:
         stype = tokens.consume()
 
         factory = self.cstruct._make_union if stype.value.startswith("union") else self.cstruct._make_struct
@@ -206,9 +210,14 @@ class TokenParser(Parser):
             field = self._parse_field(tokens)
             fields.append(field)
 
-        # All names from here on are from typedef's
-        # Parsing names consumes the EOL token
-        names.extend(self._names(tokens))
+        if register:
+            names.extend(self._names(tokens))
+
+        # If the next token is EOL, consume it
+        # Otherwise we're part of a typedef or field definition
+        if tokens.next == self.TOK.EOL:
+            tokens.eol()
+
         name = names[0] if names else None
 
         if st is None:
@@ -243,7 +252,7 @@ class TokenParser(Parser):
         # Dirty trick because the regex expects a ; but we don't want it to be part of the value
         m = pattern.match(ltok.value + ";")
         d = ast.literal_eval(m.group(2))
-        self.cstruct.lookups[m.group(1)] = dict([(self.cstruct.consts[k], v) for k, v in d.items()])
+        self.cstruct.lookups[m.group(1)] = {self.cstruct.consts[k]: v for k, v in d.items()}
 
     def _parse_field(self, tokens: TokenConsumer) -> Field:
         type_ = None
@@ -253,8 +262,7 @@ class TokenParser(Parser):
             type_ = self._struct(tokens)
 
             if tokens.next != self.TOK.NAME:
-                type_, name, bits = self._parse_field_type(type_, type_.__name__)
-                return Field(name.strip(), type_, bits)
+                return Field(None, type_, None)
 
         if tokens.next != self.TOK.NAME:
             raise ParserError(f"line {self._lineno(tokens.next)}: expected name")
@@ -265,7 +273,7 @@ class TokenParser(Parser):
         tokens.eol()
         return Field(name.strip(), type_, bits)
 
-    def _parse_field_type(self, type_: MetaType, name: str) -> tuple[MetaType, str, int | None]:
+    def _parse_field_type(self, type_: type[BaseType], name: str) -> tuple[type[BaseType], str, int | None]:
         pattern = self.TOK.patterns[self.TOK.NAME]
         # Dirty trick because the regex expects a ; but we don't want it to be part of the value
         d = pattern.match(name + ";").groupdict()
@@ -279,22 +287,19 @@ class TokenParser(Parser):
 
         if count_expression is not None:
             # Poor mans multi-dimensional array by abusing the eager regex match of count
-            if "][" in count_expression:
-                counts = count_expression.split("][")
-            else:
-                counts = [count_expression]
+            counts = count_expression.split("][") if "][" in count_expression else [count_expression]
 
             for count in reversed(counts):
                 if count == "":
                     count = None
                 else:
-                    count = Expression(self.cstruct, count)
+                    count = Expression(count)
                     try:
-                        count = count.evaluate()
+                        count = count.evaluate(self.cstruct)
                     except Exception:
                         pass
 
-                if isinstance(type_, ArrayMetaType) and count is None:
+                if issubclass(type_, BaseArray) and count is None:
                     raise ParserError("Depth required for multi-dimensional array")
 
                 type_ = self.cstruct._make_array(type_, count)
@@ -315,8 +320,7 @@ class TokenParser(Parser):
             if ntoken == self.TOK.NAME:
                 names.append(ntoken.value.strip())
             elif ntoken == self.TOK.DEFS:
-                for name in ntoken.value.strip().split(","):
-                    names.append(name.strip())
+                names.extend([name.strip() for name in ntoken.value.strip().split(",")])
 
         return names
 
@@ -333,8 +337,8 @@ class TokenParser(Parser):
             # it means we have captured a non-quoted (real) comment string.
             if comment := match.group(2):
                 return "\n" * comment.count("\n")  # so we will return empty to remove the comment
-            else:  # otherwise, we will return the 1st group
-                return match.group(1)  # captured quoted-string
+            # otherwise, we will return the 1st group
+            return match.group(1)  # captured quoted-string
 
         return regex.sub(_replacer, string)
 
@@ -429,10 +433,8 @@ class CStyleParser(Parser):
                     val = val.strip()
                     if not key:
                         continue
-                    if not val:
-                        val = nextval
-                    else:
-                        val = Expression(self.cstruct, val).evaluate()
+
+                    val = nextval if not val else Expression(val).evaluate(self.cstruct)
 
                     if enumtype == "flag":
                         high_bit = val.bit_length() - 1
@@ -513,9 +515,9 @@ class CStyleParser(Parser):
                 if d["count"] == "":
                     count = None
                 else:
-                    count = Expression(self.cstruct, d["count"])
+                    count = Expression(d["count"])
                     try:
-                        count = count.evaluate()
+                        count = count.evaluate(self.cstruct)
                     except Exception:
                         pass
 
@@ -535,7 +537,7 @@ class CStyleParser(Parser):
 
         for t in r:
             d = ast.literal_eval(t.group(2))
-            self.cstruct.lookups[t.group(1)] = dict([(self.cstruct.consts[k], v) for k, v in d.items()])
+            self.cstruct.lookups[t.group(1)] = {self.cstruct.consts[k]: v for k, v in d.items()}
 
     def parse(self, data: str) -> None:
         self._constants(data)
@@ -545,23 +547,23 @@ class CStyleParser(Parser):
 
 
 class Token:
-    __slots__ = ("token", "value", "match")
+    __slots__ = ("match", "token", "value")
 
     def __init__(self, token: str, value: str, match: re.Match):
         self.token = token
         self.value = value
         self.match = match
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, Token):
             other = other.token
 
         return self.token == other
 
-    def __ne__(self, other):
+    def __ne__(self, other: object) -> bool:
         return not self == other
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Token.{self.token} value={self.value!r}>"
 
 
@@ -571,7 +573,7 @@ class TokenCollection:
         self.lookup: dict[str, str] = {}
         self.patterns: dict[str, re.Pattern] = {}
 
-    def __getattr__(self, attr: str):
+    def __getattr__(self, attr: str) -> str | Any:
         try:
             return self.lookup[attr]
         except AttributeError:
@@ -579,7 +581,7 @@ class TokenCollection:
 
         return object.__getattribute__(self, attr)
 
-    def add(self, regex: str, name: str) -> None:
+    def add(self, regex: str, name: str | None) -> None:
         if name is None:
             self.tokens.append((regex, None))
         else:

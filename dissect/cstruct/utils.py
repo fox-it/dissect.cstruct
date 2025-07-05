@@ -4,10 +4,14 @@ import pprint
 import string
 import sys
 from enum import Enum
-from typing import Iterator
+from typing import TYPE_CHECKING
 
 from dissect.cstruct.types.pointer import Pointer
 from dissect.cstruct.types.structure import Structure
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from typing import Literal
 
 COLOR_RED = "\033[1;31m"
 COLOR_GREEN = "\033[1;32m"
@@ -28,7 +32,7 @@ COLOR_BG_WHITE = "\033[1;47m\033[1;30m"
 
 PRINTABLE = string.digits + string.ascii_letters + string.punctuation + " "
 
-ENDIANNESS_MAP = {
+ENDIANNESS_MAP: dict[str, Literal["big", "little"]] = {
     "@": sys.byteorder,
     "=": sys.byteorder,
     "<": "little",
@@ -37,7 +41,7 @@ ENDIANNESS_MAP = {
     "network": "big",
 }
 
-Palette = list[tuple[str, str]]
+Palette = list[tuple[int, str]]
 
 
 def _hexdump(data: bytes, palette: Palette | None = None, offset: int = 0, prefix: str = "") -> Iterator[str]:
@@ -95,9 +99,8 @@ def _hexdump(data: bytes, palette: Palette | None = None, offset: int = 0, prefi
                     if palette is not None:
                         values += COLOR_NORMAL
 
-                if j == 15:
-                    if palette is not None:
-                        values += COLOR_NORMAL
+                if j == 15 and palette is not None:
+                    values += COLOR_NORMAL
 
             values += " "
             if j == 7:
@@ -122,12 +125,12 @@ def hexdump(
     generator = _hexdump(data, palette, offset, prefix)
     if output == "print":
         print("\n".join(generator))
-    elif output == "generator":
+        return None
+    if output == "generator":
         return generator
-    elif output == "string":
+    if output == "string":
         return "\n".join(list(generator))
-    else:
-        raise ValueError(f"Invalid output argument: {output!r} (should be 'print', 'generator' or 'string').")
+    raise ValueError(f"Invalid output argument: {output!r} (should be 'print', 'generator' or 'string').")
 
 
 def _dumpstruct(
@@ -154,12 +157,7 @@ def _dumpstruct(
         if getattr(field.type, "anonymous", False):
             continue
 
-        if color:
-            foreground, background = colors[ci % len(colors)]
-            palette.append((structure._sizes[field.name], background))
-        ci += 1
-
-        value = getattr(structure, field.name)
+        value = getattr(structure, field._name)
         if isinstance(value, (str, Pointer, Enum)):
             value = repr(value)
         elif isinstance(value, int):
@@ -167,12 +165,16 @@ def _dumpstruct(
         elif isinstance(value, list):
             value = pprint.pformat(value)
             if "\n" in value:
-                value = value.replace("\n", f"\n{' ' * (len(field.name) + 4)}")
+                value = value.replace("\n", f"\n{' ' * (len(field._name) + 4)}")
 
         if color:
-            out.append(f"- {foreground}{field.name}{COLOR_NORMAL}: {value}")
+            foreground, background = colors[ci % len(colors)]
+            size = structure.__sizes__[field._name]
+            palette.append((size, background))
+            ci += 1
+            out.append(f"- {foreground}{field._name}{COLOR_NORMAL}: {value}")
         else:
-            out.append(f"- {field.name}: {value}")
+            out.append(f"- {field._name}: {value}")
 
     out = "\n".join(out)
 
@@ -182,7 +184,8 @@ def _dumpstruct(
         print()
         print(out)
     elif output == "string":
-        return "\n".join(["", hexdump(data, palette, offset=offset, output="string"), "", out])
+        return f"\n{hexdump(data, palette, offset=offset, output='string')}\n\n{out}"
+    return None
 
 
 def dumpstruct(
@@ -207,13 +210,12 @@ def dumpstruct(
 
     if isinstance(obj, Structure):
         return _dumpstruct(obj, obj.dumps(), offset, color, output)
-    elif issubclass(obj, Structure) and data:
+    if issubclass(obj, Structure) and data is not None:
         return _dumpstruct(obj(data), data, offset, color, output)
-    else:
-        raise ValueError("Invalid arguments")
+    raise ValueError("Invalid arguments")
 
 
-def pack(value: int, size: int = None, endian: str = "little") -> bytes:
+def pack(value: int, size: int | None = None, endian: str = "little") -> bytes:
     """Pack an integer value to a given bit size, endianness.
 
     Arguments:
@@ -225,7 +227,7 @@ def pack(value: int, size: int = None, endian: str = "little") -> bytes:
     return value.to_bytes(size, ENDIANNESS_MAP.get(endian, endian), signed=value < 0)
 
 
-def unpack(value: bytes, size: int = None, endian: str = "little", sign: bool = False) -> int:
+def unpack(value: bytes, size: int | None = None, endian: str = "little", sign: bool = False) -> int:
     """Unpack an integer value from a given bit size, endianness and sign.
 
     Arguments:
@@ -323,7 +325,7 @@ def u64(value: bytes, endian: str = "little", sign: bool = False) -> int:
     return unpack(value, 64, endian, sign)
 
 
-def swap(value: int, size: int):
+def swap(value: int, size: int) -> int:
     """Swap the endianness of an integer with a given bit size.
 
     Arguments:

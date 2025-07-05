@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from typing import BinaryIO
+from typing import TYPE_CHECKING, BinaryIO
 
 import pytest
 
-from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exceptions import ArraySizeError
-from dissect.cstruct.types.base import ArrayMetaType, BaseType
+from dissect.cstruct.types.base import BaseArray, BaseType
 
 from .utils import verify_compiled
+
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import cstruct
 
 
 def test_array_size_mismatch(cs: cstruct) -> None:
@@ -96,7 +98,7 @@ def test_custom_array_type(cs: cstruct, compiled: bool) -> None:
             value = stream.read(length)
             return type.__call__(cls, value)
 
-        class ArrayType(BaseType, metaclass=ArrayMetaType):
+        class ArrayType(BaseArray):
             @classmethod
             def __default__(cls) -> CustomType:
                 return cls.type()
@@ -135,3 +137,12 @@ def test_custom_array_type(cs: cstruct, compiled: bool) -> None:
     assert isinstance(result.b, CustomType)
     assert result.a.value == b"ASDF"
     assert result.b.value == b"asdf"
+
+
+def test_truthy_type(cs: cstruct) -> None:
+    static_type = cs.uint32
+    dynamic_type = cs.uint32[None]
+
+    assert static_type
+    # Should not raise a TypeError: Dynamic size
+    assert dynamic_type

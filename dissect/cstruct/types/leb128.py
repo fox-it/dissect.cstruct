@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.types.base import BaseType
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 
 class LEB128(int, BaseType):
@@ -14,7 +17,7 @@ class LEB128(int, BaseType):
     signed: bool
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> LEB128:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
         result = 0
         shift = 0
         while True:
@@ -28,14 +31,13 @@ class LEB128(int, BaseType):
             if (b & 0x80) == 0:
                 break
 
-        if cls.signed:
-            if b & 0x40 != 0:
-                result |= ~0 << shift
+        if cls.signed and b & 0x40 != 0:
+            result |= ~0 << shift
 
         return cls.__new__(cls, result)
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> LEB128:
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:
         result = []
 
         while True:
@@ -60,7 +62,7 @@ class LEB128(int, BaseType):
 
             # function works similar for signed- and unsigned integers, except for the check when to stop
             # the encoding process.
-            if (cls.signed and (data == 0 and byte & 0x40 == 0) or (data == -1 and byte & 0x40 != 0)) or (
+            if ((cls.signed and (data == 0 and byte & 0x40 == 0)) or (data == -1 and byte & 0x40 != 0)) or (
                 not cls.signed and data == 0
             ):
                 result.append(byte)

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.types.base import BaseType
 from dissect.cstruct.utils import ENDIANNESS_MAP
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 
 class Int(int, BaseType):
@@ -12,7 +15,7 @@ class Int(int, BaseType):
     signed: bool
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Int:
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
         data = stream.read(cls.size)
 
         if len(data) != cls.size:
@@ -21,7 +24,7 @@ class Int(int, BaseType):
         return cls.from_bytes(data, ENDIANNESS_MAP[cls.cs.endian], signed=cls.signed)
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Int:
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
         result = []
 
         while True:

@@ -1,11 +1,15 @@
+from __future__ import annotations
+
 from enum import Enum as StdEnum
+from typing import TYPE_CHECKING
 
 import pytest
 
-from dissect.cstruct.cstruct import cstruct
-from dissect.cstruct.types.enum import Enum
-
 from .utils import verify_compiled
+
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import cstruct
+    from dissect.cstruct.types.enum import Enum
 
 
 @pytest.fixture
@@ -203,16 +207,24 @@ def test_enum_struct(cs: cstruct, compiled: bool) -> None:
     buf = b"\x01\x00\x02\x00\x01\x00\x00\x02\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x01\x00\x02\x00"
     obj = cs.test(buf)
 
-    assert isinstance(obj.a16, cs.Test16) and obj.a16 == cs.Test16.A
-    assert isinstance(obj.b16, cs.Test16) and obj.b16 == cs.Test16.B
-    assert isinstance(obj.a24, cs.Test24) and obj.a24 == cs.Test24.A
-    assert isinstance(obj.b24, cs.Test24) and obj.b24 == cs.Test24.B
-    assert isinstance(obj.a32, cs.Test32) and obj.a32 == cs.Test32.A
-    assert isinstance(obj.b32, cs.Test32) and obj.b32 == cs.Test32.B
+    assert isinstance(obj.a16, cs.Test16)
+    assert obj.a16 == cs.Test16.A
+    assert isinstance(obj.b16, cs.Test16)
+    assert obj.b16 == cs.Test16.B
+    assert isinstance(obj.a24, cs.Test24)
+    assert obj.a24 == cs.Test24.A
+    assert isinstance(obj.b24, cs.Test24)
+    assert obj.b24 == cs.Test24.B
+    assert isinstance(obj.a32, cs.Test32)
+    assert obj.a32 == cs.Test32.A
+    assert isinstance(obj.b32, cs.Test32)
+    assert obj.b32 == cs.Test32.B
 
     assert len(obj.l) == 2
-    assert isinstance(obj.l[0], cs.Test16) and obj.l[0] == cs.Test16.A
-    assert isinstance(obj.l[1], cs.Test16) and obj.l[1] == cs.Test16.B
+    assert isinstance(obj.l[0], cs.Test16)
+    assert obj.l[0] == cs.Test16.A
+    assert isinstance(obj.l[1], cs.Test16)
+    assert obj.l[1] == cs.Test16.B
 
     assert cs.Test16(1) == cs.Test16["A"]
     assert cs.Test24(2) == cs.Test24.B
@@ -222,7 +234,7 @@ def test_enum_struct(cs: cstruct, compiled: bool) -> None:
         cs.Test16["C"]
 
     with pytest.raises(AttributeError):
-        cs.Test16.C
+        cs.Test16.C  # noqa: B018
 
     assert obj.dumps() == buf
 

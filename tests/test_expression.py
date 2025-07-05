@@ -1,8 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
 import pytest
 
-from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exceptions import ExpressionParserError, ExpressionTokenizerError
 from dissect.cstruct.expression import Expression
+
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import cstruct
 
 testdata = [
     ("1 * 0", 0),
@@ -68,25 +74,26 @@ testdata = [
 
 
 class Consts:
-    consts = {
+    consts = {  # noqa: RUF012
         "A": 8,
         "B": 13,
     }
 
 
-def id_fn(val):
+def id_fn(val: Any) -> str | None:
     if isinstance(val, (str,)):
         return val
+    return None
 
 
-@pytest.mark.parametrize("expression, answer", testdata, ids=id_fn)
+@pytest.mark.parametrize(("expression", "answer"), testdata, ids=id_fn)
 def test_expression(expression: str, answer: int) -> None:
-    parser = Expression(Consts(), expression)
-    assert parser.evaluate() == answer
+    parser = Expression(expression)
+    assert parser.evaluate(Consts()) == answer
 
 
 @pytest.mark.parametrize(
-    "expression, exception, message",
+    ("expression", "exception", "message"),
     [
         ("0b", ExpressionTokenizerError, "Invalid binary or hex notation"),
         ("0x", ExpressionTokenizerError, "Invalid binary or hex notation"),
@@ -103,8 +110,7 @@ def test_expression(expression: str, answer: int) -> None:
 )
 def test_expression_failure(expression: str, exception: type, message: str) -> None:
     with pytest.raises(exception, match=message):
-        parser = Expression(Consts(), expression)
-        parser.evaluate()
+        Expression(expression).evaluate(Consts())
 
 
 def test_sizeof(cs: cstruct) -> None:

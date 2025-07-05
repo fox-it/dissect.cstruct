@@ -1,16 +1,23 @@
 from __future__ import annotations
 
-from typing import Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO
 
-from dissect.cstruct.types.base import EOF, ArrayMetaType, BaseType
+from dissect.cstruct.types.base import EOF, BaseArray, BaseType
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 
-class CharArray(bytes, BaseType, metaclass=ArrayMetaType):
+class CharArray(bytes, BaseArray):
     """Character array type for reading and writing byte strings."""
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> CharArray:
-        return type.__call__(cls, ArrayMetaType._read(cls, stream, context))
+    def __default__(cls) -> Self:
+        return type.__call__(cls, b"\x00" * (0 if cls.dynamic or cls.null_terminated else cls.num_entries))
+
+    @classmethod
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
+        return type.__call__(cls, super()._read(stream, context))
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: bytes) -> int:
@@ -24,10 +31,6 @@ class CharArray(bytes, BaseType, metaclass=ArrayMetaType):
             return stream.write(data + b"\x00")
         return stream.write(data)
 
-    @classmethod
-    def __default__(cls) -> CharArray:
-        return type.__call__(cls, b"\x00" * (0 if cls.dynamic or cls.null_terminated else cls.num_entries))
-
 
 class Char(bytes, BaseType):
     """Character type for reading and writing bytes."""
@@ -35,11 +38,15 @@ class Char(bytes, BaseType):
     ArrayType = CharArray
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Char:
+    def __default__(cls) -> Self:
+        return type.__call__(cls, b"\x00")
+
+    @classmethod
+    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
         return cls._read_array(stream, 1, context)
 
     @classmethod
-    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> Char:
+    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> Self:
         if count == 0:
             return type.__call__(cls, b"")
 
@@ -50,7 +57,7 @@ class Char(bytes, BaseType):
         return type.__call__(cls, data)
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Char:
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
         buf = []
         while True:
             byte = stream.read(1)
@@ -73,7 +80,3 @@ class Char(bytes, BaseType):
             data = data.encode("latin-1")
 
         return stream.write(data)
-
-    @classmethod
-    def __default__(cls) -> Char:
-        return type.__call__(cls, b"\x00")

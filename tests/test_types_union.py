@@ -1,12 +1,18 @@
+from __future__ import annotations
+
 import inspect
+from typing import TYPE_CHECKING
 
 import pytest
 
-from dissect.cstruct.cstruct import cstruct
+from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.structure import Field, Union, UnionProxy
 
 from .utils import verify_compiled
+
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import cstruct
 
 
 @pytest.fixture
@@ -265,7 +271,7 @@ def test_union_definition_nested(cs: cstruct, compiled: bool) -> None:
     assert isinstance(obj.c.a, UnionProxy)
     assert len(obj.c.a) == 8
     assert bytes(obj.c.a) == b"holybeef"
-    assert repr(obj.c.a) == "<a a=0x796c6f68 b=0x66656562>"
+    assert repr(obj.c.a) == "<__anonymous_0__ a=0x796c6f68 b=0x66656562>"
 
     assert obj.magic == b"zomg"
     assert obj.c.a.a == 0x796C6F68
@@ -422,7 +428,7 @@ def test_union_default(cs: cstruct) -> None:
 
     assert obj.dumps() == b"\x00" * 8
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
     assert cs.test_nested() == cs.test_nested.__default__()
@@ -433,7 +439,7 @@ def test_union_default(cs: cstruct) -> None:
 
     assert obj.dumps() == b"\x00" * 24
 
-    for name in obj.fields.keys():
+    for name in obj.fields:
         assert isinstance(getattr(obj, name), BaseType)
 
 
@@ -530,3 +536,14 @@ def test_union_partial_initialization_dynamic(cs: cstruct) -> None:
 
     with pytest.raises(NotImplementedError, match="Initializing a dynamic union is not yet supported"):
         cs.test(x=1)
+
+
+def test_codegen_hashable(cs: cstruct) -> None:
+    hashable_fields = [Field("a", cs.uint8), Field("b", cs.uint8)]
+    unhashable_fields = [Field("a", cs.uint8[2]), Field("b", cs.uint8)]
+
+    with pytest.raises(TypeError, match="unhashable type: 'uint8\\[2\\]'"):
+        hash(unhashable_fields[0].type.__default__())
+
+    assert hash(structure._generate_union__init__(hashable_fields).__code__)
+    assert hash(structure._generate_union__init__(unhashable_fields).__code__)

@@ -1,8 +1,12 @@
+from __future__ import annotations
+
 import io
+from typing import TYPE_CHECKING
 
 import pytest
 
-from dissect.cstruct.cstruct import cstruct
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import cstruct
 
 
 def test_wchar_read(cs: cstruct) -> None:
