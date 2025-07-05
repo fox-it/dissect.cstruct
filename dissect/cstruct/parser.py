@@ -63,7 +63,7 @@ class TokenParser(Parser):
             "ENUM",
         )
         TOK.add(r"(?<=})\s*(?P<defs>(?:[a-zA-Z0-9_]+\s*,\s*)+[a-zA-Z0-9_]+)\s*(?=;)", "DEFS")
-        TOK.add(r"(?P<name>\**?\s*[a-zA-Z0-9_]+)(?:\s*:\s*(?P<bits>\d+))?(?:\[(?P<count>[^;\n]*)\])?\s*(?=;)", "NAME")
+        TOK.add(r"(?P<name>\**?\s*[a-zA-Z0-9_]+)(?:\s*:\s*(?P<bits>\d+))?(?:\[(?P<count>[^;]*)\])?\s*(?=;)", "NAME")
         TOK.add(r"[a-zA-Z_][a-zA-Z0-9_]*", "IDENTIFIER")
         TOK.add(r"[{}]", "BLOCK")
         TOK.add(r"\$(?P<name>[^\s]+) = (?P<value>{[^}]+})\w*[\r\n]+", "LOOKUP")
