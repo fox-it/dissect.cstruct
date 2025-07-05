@@ -129,3 +129,26 @@ def test_structure_names(cs: cstruct) -> None:
     assert cs.c.__name__ == "c"
     assert cs.d.__name__ == "c"
     assert cs.e.__name__ == "e"
+
+
+def test_structure_names(cs: cstruct) -> None:
+    cdef = """
+    /* Standard libs */
+    #include <stdint.h> // defines fixed data types: int8_t...
+    /* user libs */
+    #include "myLib.h"  // my own header
+
+    typedef struct myStruct
+    {
+        char charVal[16];
+    }
+    """
+    cs.load(cdef)
+
+    assert cs.includes[0] == "<stdint.h>"
+    assert cs.includes[1] == "\"myLib.h\""
+    assert len(cs.includes) == 2
+    assert cs.myStruct.__name__ == "myStruct"
+    assert len(cs.typedefs["myStruct"].fields) == 1
+    assert cs.typedefs["myStruct"].fields.get("charVal") != None
+
