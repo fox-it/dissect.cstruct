@@ -49,6 +49,7 @@ class TokenParser(Parser):
         self.compiled = compiled
         self.align = align
         self.TOK = self._tokencollection()
+        self.cstruct.includes = []
 
     @staticmethod
     def _tokencollection() -> TokenCollection:
@@ -324,17 +325,14 @@ class TokenParser(Parser):
                 names.extend([name.strip() for name in ntoken.value.strip().split(",")])
 
         return names
-        
+
     def _include(self, tokens: TokenConsumer) -> None:
         include = tokens.consume()
         pattern = self.TOK.patterns[self.TOK.INCLUDE]
         match = pattern.match(include.value).groupdict()
-        # create if list with incs does not exist
-        if not hasattr(self.cstruct, 'includes'):
-            self.cstruct.includes = []
 
         self.cstruct.includes.append(match["name"])
-        
+
     @staticmethod
     def _remove_comments(string: str) -> str:
         # https://stackoverflow.com/a/18381470
