@@ -49,7 +49,6 @@ class TokenParser(Parser):
         self.compiled = compiled
         self.align = align
         self.TOK = self._tokencollection()
-        self.cstruct.includes = []
 
     @staticmethod
     def _tokencollection() -> TokenCollection:
