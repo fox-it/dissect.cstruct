@@ -146,7 +146,7 @@ def test_structure_names(cs: cstruct) -> None:
     cs.load(cdef)
 
     assert cs.includes[0] == "<stdint.h>"
-    assert cs.includes[1] == "\"myLib.h\""
+    assert cs.includes[1] == "myLib.h"
     assert len(cs.includes) == 2
     assert cs.myStruct.__name__ == "myStruct"
     assert len(cs.typedefs["myStruct"].fields) == 1

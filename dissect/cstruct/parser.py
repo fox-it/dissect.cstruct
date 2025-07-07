@@ -330,7 +330,7 @@ class TokenParser(Parser):
         pattern = self.TOK.patterns[self.TOK.INCLUDE]
         match = pattern.match(include.value).groupdict()
 
-        self.cstruct.includes.append(match["name"].strip())
+        self.cstruct.includes.append(match["name"].strip().strip('"'))
 
     @staticmethod
     def _remove_comments(string: str) -> str:
