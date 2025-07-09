@@ -145,10 +145,8 @@ def test_includes(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert cs.includes[0] == "<stdint.h>"
-    assert cs.includes[1] == "myLib.h"
-    assert len(cs.includes) == 2
+    assert cs.includes == ["<stdint.h>", "myLib.h"]
     assert cs.myStruct.__name__ == "myStruct"
-    assert len(cs.typedefs["myStruct"].fields) == 1
-    assert cs.typedefs["myStruct"].fields.get("charVal") is not None
+    assert len(cs.myStruct.fields) == 1
+    assert cs.myStruct.fields.get("charVal")
 
