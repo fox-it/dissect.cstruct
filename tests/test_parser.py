@@ -131,7 +131,7 @@ def test_structure_names(cs: cstruct) -> None:
     assert cs.e.__name__ == "e"
 
 
-def test_structure_names(cs: cstruct) -> None:
+def test_includes(cs: cstruct) -> None:
     cdef = """
     /* Standard libs */
     #include <stdint.h> // defines fixed data types: int8_t...
