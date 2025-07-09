@@ -150,5 +150,5 @@ def test_includes(cs: cstruct) -> None:
     assert len(cs.includes) == 2
     assert cs.myStruct.__name__ == "myStruct"
     assert len(cs.typedefs["myStruct"].fields) == 1
-    assert cs.typedefs["myStruct"].fields.get("charVal") != None
+    assert not (cs.typedefs["myStruct"].fields.get("charVal") == None)
 
