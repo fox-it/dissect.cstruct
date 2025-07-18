@@ -53,6 +53,7 @@ class cstruct:
 
         self.consts = {}
         self.lookups = {}
+        self.includes = []
         # fmt: off
         self.typedefs = {
             # Internal types
