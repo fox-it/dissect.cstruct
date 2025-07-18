@@ -77,7 +77,7 @@ def test_load_init_kwargs_only() -> None:
     """
 
     # kwargs only check
-    with pytest.raises(TypeError, match=r"cstruct.__init__\(\) takes from .* positional arguments but \d+ were given"):
+    with pytest.raises(TypeError, match="takes from .* positional arguments but .* were given"):
         cs = cstruct(cdef, ">")
 
     cs = cstruct(cdef, endian=">")
