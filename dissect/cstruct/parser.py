@@ -314,11 +314,11 @@ class TokenParser(Parser):
                 tokens.eol()
                 break
 
-            if tokens.next not in (self.TOK.NAME, self.TOK.DEFS):
+            if tokens.next not in (self.TOK.NAME, self.TOK.DEFS, self.TOK.IDENTIFIER):
                 break
 
             ntoken = tokens.consume()
-            if ntoken == self.TOK.NAME:
+            if ntoken in (self.TOK.NAME, self.TOK.IDENTIFIER):
                 names.append(ntoken.value.strip())
             elif ntoken == self.TOK.DEFS:
                 names.extend([name.strip() for name in ntoken.value.strip().split(",")])
