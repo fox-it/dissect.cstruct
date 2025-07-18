@@ -194,7 +194,7 @@ class TokenParser(Parser):
         if tokens.next == self.TOK.NAME:
             # As part of a struct field
             # struct type_name field_name;
-            if not len(names):
+            if not names:
                 raise ParserError(f"line {self._lineno(tokens.next)}: unexpected anonymous struct")
             return self.cstruct.resolve(names[0])
 
