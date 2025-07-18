@@ -265,8 +265,8 @@ def test_structure_definition_simple(cs: cstruct, compiled: bool) -> None:
     with pytest.raises(AttributeError):
         obj.nope  # noqa: B018
 
-    assert obj.__dynamic_sizes__ == { "string": 7, "wstring": 10 }
-    assert obj.__sizes__ == { "magic": 4, "wmagic": 8, "a": 1, "b": 2, "c": 4, "string": 7, "wstring": 10 }
+    assert obj.__dynamic_sizes__ == {"string": 7, "wstring": 10}
+    assert obj.__sizes__ == {"magic": 4, "wmagic": 8, "a": 1, "b": 2, "c": 4, "string": 7, "wstring": 10}
     assert len(obj) == len(buf)
     assert obj.dumps() == buf
 
@@ -275,6 +275,7 @@ def test_structure_definition_simple(cs: cstruct, compiled: bool) -> None:
     fh = BytesIO()
     obj.write(fh)
     assert fh.getvalue() == buf
+
 
 def test_structure_values_dict(cs: cstruct, compiled: bool) -> None:
     cdef = """
@@ -810,3 +811,36 @@ def test_codegen_hashable(cs: cstruct) -> None:
 
     assert hash(structure._generate_structure__init__(hashable_fields).__code__)
     assert hash(structure._generate_structure__init__(unhashable_fields).__code__)
+
+
+def test_structure_definition_newline(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    struct test {
+        char    magic[4
+        ];
+
+        wchar   wmagic[4];
+        uint8   a;
+        uint16  b;
+        uint32  c;
+        char    string[];
+        wchar   wstring[];
+    };
+    """
+    cs.endian = ">"
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"test\x00t\x00e\x00s\x00t\x01\x02\x03\x04\x05\x06\x07lalala\x00\x00t\x00e\x00s\x00t\x00\x00"
+
+    obj = cs.test()
+    obj.magic = b"test"
+    obj.wmagic = "test"
+    obj.a = 0x01
+    obj.b = 0x0203
+    obj.c = 0x04050607
+    obj.string = b"lalala"
+    obj.wstring = "test"
+
+    assert obj.dumps() == buf

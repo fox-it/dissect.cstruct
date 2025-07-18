@@ -149,4 +149,3 @@ def test_includes(cs: cstruct) -> None:
     assert cs.myStruct.__name__ == "myStruct"
     assert len(cs.myStruct.fields) == 1
     assert cs.myStruct.fields.get("charVal")
-
