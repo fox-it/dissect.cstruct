@@ -21,7 +21,7 @@ def test_cstruct_type_annotation(name: str, monkeypatch: pytest.MonkeyPatch) -> 
         for module in [module for module in sys.modules if module in ("dissect.cstruct.cstruct")]:
             monkeypatch.delitem(sys.modules, module)
 
-        from dissect.cstruct import cstruct
+        from dissect.cstruct import cstruct  # noqa: PLC0415
 
         if name.startswith("__"):
             name = f"_cstruct{name}"

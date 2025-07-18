@@ -139,7 +139,7 @@ class StructureMetaType(MetaType):
 
         if cls.__compiled__:
             # If the previous class was compiled try to compile this too
-            from dissect.cstruct import compiler
+            from dissect.cstruct import compiler  # noqa: PLC0415
 
             try:
                 classdict["_read"] = compiler.Compiler(cls.cs).compile_read(fields, cls.__name__, align=cls.__align__)

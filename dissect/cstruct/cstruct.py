@@ -372,14 +372,14 @@ class cstruct:
             "null_terminated": null_terminated,
         }
 
-        return cast(type[Array], self._make_type(name, bases, size, alignment=type_.alignment, attrs=attrs))
+        return cast("type[Array]", self._make_type(name, bases, size, alignment=type_.alignment, attrs=attrs))
 
     def _make_int_type(self, name: str, size: int, signed: bool, *, alignment: int | None = None) -> type[Int]:
-        return cast(type[Int], self._make_type(name, (Int,), size, alignment=alignment, attrs={"signed": signed}))
+        return cast("type[Int]", self._make_type(name, (Int,), size, alignment=alignment, attrs={"signed": signed}))
 
     def _make_packed_type(self, name: str, packchar: str, base: type, *, alignment: int | None = None) -> type[Packed]:
         return cast(
-            type[Packed],
+            "type[Packed]",
             self._make_type(
                 name,
                 (base, Packed),
