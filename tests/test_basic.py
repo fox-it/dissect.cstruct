@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, BinaryIO
 
 import pytest
 
+from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exceptions import ArraySizeError, ParserError, ResolveError
 from dissect.cstruct.types import BaseType
 
@@ -13,8 +14,6 @@ from .utils import verify_compiled
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    from dissect.cstruct.cstruct import cstruct
 
 
 def test_duplicate_type(cs: cstruct, compiled: bool) -> None:
@@ -39,6 +38,51 @@ def test_load_file(cs: cstruct, compiled: bool, tmp_path: Path) -> None:
 
     cs.loadfile(tmp_path.joinpath("testdef.txt"), compiled=compiled)
     assert "test" in cs.typedefs
+
+
+def test_load_init() -> None:
+    cdef = """
+    struct test {
+        DWORD   a;
+        QWORD   b;
+    };
+    """
+    # load with first positional argument
+    cs = cstruct(cdef)
+    assert "test" in cs.typedefs
+    assert cs.endian == "<"
+
+    # load from keyword argument and big endian
+    cs = cstruct(load=cdef, endian=">")
+    assert "test" in cs.typedefs
+    a = cs.test(a=0xBADC0DE, b=0xACCE55ED)
+    assert len(bytes(a)) == 12
+    assert bytes(a) == a.dumps()
+    assert bytes(a) == b"\x0b\xad\xc0\xde\x00\x00\x00\x00\xac\xce\x55\xed"
+
+    # load using positional argument and little endian
+    cs = cstruct(cdef, endian="<")
+    assert "test" in cs.typedefs
+    a = cs.test(a=0xBADC0DE, b=0xACCE55ED)
+    assert len(bytes(a)) == 12
+    assert bytes(a) == a.dumps()
+    assert bytes(a) == b"\xde\xc0\xad\x0b\xed\x55\xce\xac\x00\x00\x00\x00"
+
+
+def test_load_init_kwargs_only() -> None:
+    cdef = """
+    struct test {
+        uint32  a;
+    };
+    """
+
+    # kwargs only check
+    with pytest.raises(TypeError, match=r"cstruct.__init__\(\) takes from .* positional arguments but \d+ were given"):
+        cs = cstruct(cdef, ">")
+
+    cs = cstruct(cdef, endian=">")
+    assert "test" in cs.typedefs
+    assert cs.endian == ">"
 
 
 def test_read_type_name(cs: cstruct) -> None:
