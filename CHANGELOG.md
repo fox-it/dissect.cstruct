@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Optimize storage of field sizes.
 - Rename `_sizes` property of `Structure` to `__sizes__`.
 - Rename `_values` property of `Structure` to `__values__`.
-- Added `load` argument to `cstruct` class, other arguments to `cstruct` are now keyword only.
+- Added `load` argument to `cstruct` class, allowing direct initialization with a definition (i.e. `cstruct(cdef)` instead of `cstruct().load(cdef)`. Other arguments to `cstruct` are now keyword only.
 
 ## [4.5] - 20-05-2025
 
