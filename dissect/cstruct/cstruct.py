@@ -189,7 +189,7 @@ class cstruct:
         self._anonymous_count = 0
 
         if load:
-            TokenParser(self).parse(load)
+            self.load(load)
 
     def __getattr__(self, attr: str) -> Any:
         try:
