@@ -48,7 +48,7 @@ class cstruct:
     DEF_CSTYLE = 1
     DEF_LEGACY = 2
 
-    def __init__(self, endian: str = "<", pointer: str | None = None):
+    def __init__(self, load: str = "", *, endian: str = "<", pointer: str | None = None):
         self.endian = endian
 
         self.consts = {}
@@ -187,6 +187,9 @@ class cstruct:
         pointer = pointer or ("uint64" if sys.maxsize > 2**32 else "uint32")
         self.pointer: type[BaseType] = self.resolve(pointer)
         self._anonymous_count = 0
+
+        if load:
+            self.load(load)
 
     def __getattr__(self, attr: str) -> Any:
         try:
