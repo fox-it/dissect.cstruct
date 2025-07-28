@@ -829,12 +829,14 @@ def _generate_structure__init__(fields: list[Field]) -> FunctionType:
         fields: List of field names.
     """
     field_names = [field._name for field in fields]
+    mapping = {f"_{i}": name for i, name in enumerate(field_names)}
+    mapping.update({f"_{i}_default": f"__{name}_default__" for i, name in enumerate(field_names)})
 
     template: FunctionType = _make_structure__init__(len(field_names))
     return type(template)(
         template.__code__.replace(
-            co_names=tuple(chain.from_iterable(zip((f"__{name}_default__" for name in field_names), field_names))),
-            co_varnames=("self", *field_names),
+            co_names=tuple(mapping.get(a, a) for a in template.__code__.co_names),
+            co_varnames=tuple(mapping.get(v, v) for v in template.__code__.co_varnames),
         ),
         template.__globals__ | {f"__{field._name}_default__": field.type.__default__() for field in fields},
         argdefs=template.__defaults__,
@@ -848,13 +850,15 @@ def _generate_union__init__(fields: list[Field]) -> FunctionType:
         fields: List of field names.
     """
     field_names = [field._name for field in fields]
+    field_mapping = {f"_{i}": name for i, name in enumerate(field_names)}
+    defaults_mapping = {f"_{i}_default": f"__{name}_default__" for i, name in enumerate(field_names)}
 
     template: FunctionType = _make_union__init__(len(field_names))
     return type(template)(
         template.__code__.replace(
-            co_consts=(None, *field_names),
-            co_names=("object", "__setattr__", *(f"__{name}_default__" for name in field_names)),
-            co_varnames=("self", *field_names),
+            co_consts=tuple(field_mapping.get(c, c) for c in template.__code__.co_consts),
+            co_names=tuple(defaults_mapping.get(a, a) for a in template.__code__.co_names),
+            co_varnames=tuple(field_mapping.get(v, v) for v in template.__code__.co_varnames),
         ),
         template.__globals__ | {f"__{field._name}_default__": field.type.__default__() for field in fields},
         argdefs=template.__defaults__,
