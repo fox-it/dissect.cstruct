@@ -828,15 +828,13 @@ def _generate_structure__init__(fields: list[Field]) -> FunctionType:
     Args:
         fields: List of field names.
     """
-    field_names = [field._name for field in fields]
-    mapping = {f"_{i}": name for i, name in enumerate(field_names)}
-    mapping.update({f"_{i}_default": f"__{name}_default__" for i, name in enumerate(field_names)})
+    mapping = _generate_co_mapping(fields)
 
-    template: FunctionType = _make_structure__init__(len(field_names))
+    template: FunctionType = _make_structure__init__(len(fields))
     return type(template)(
         template.__code__.replace(
-            co_names=tuple(mapping.get(a, a) for a in template.__code__.co_names),
-            co_varnames=tuple(mapping.get(v, v) for v in template.__code__.co_varnames),
+            co_names=_remap_co_values(template.__code__.co_names, mapping),
+            co_varnames=_remap_co_values(template.__code__.co_varnames, mapping),
         ),
         template.__globals__ | {f"__{field._name}_default__": field.type.__default__() for field in fields},
         argdefs=template.__defaults__,
@@ -849,20 +847,48 @@ def _generate_union__init__(fields: list[Field]) -> FunctionType:
     Args:
         fields: List of field names.
     """
-    field_names = [field._name for field in fields]
-    field_mapping = {f"_{i}": name for i, name in enumerate(field_names)}
-    defaults_mapping = {f"_{i}_default": f"__{name}_default__" for i, name in enumerate(field_names)}
+    mapping = _generate_co_mapping(fields)
 
-    template: FunctionType = _make_union__init__(len(field_names))
+    template: FunctionType = _make_union__init__(len(fields))
     return type(template)(
         template.__code__.replace(
-            co_consts=tuple(field_mapping.get(c, c) for c in template.__code__.co_consts),
-            co_names=tuple(defaults_mapping.get(a, a) for a in template.__code__.co_names),
-            co_varnames=tuple(field_mapping.get(v, v) for v in template.__code__.co_varnames),
+            co_consts=_remap_co_values(template.__code__.co_consts, mapping),
+            co_names=_remap_co_values(template.__code__.co_names, mapping),
+            co_varnames=_remap_co_values(template.__code__.co_varnames, mapping),
         ),
         template.__globals__ | {f"__{field._name}_default__": field.type.__default__() for field in fields},
         argdefs=template.__defaults__,
     )
+
+
+def _generate_co_mapping(fields: list[Field]) -> dict[str, str]:
+    """Generates a mapping of generated code object names to field names.
+
+    The generated code uses names like ``_0``, ``_1``, etc. for fields, and ``_0_default``, ``_1_default``, etc.
+    for default initializer values. Return a mapping of these names to the actual field names.
+
+    Args:
+        fields: List of field names.
+    """
+    return {
+        key: value
+        for i, field in enumerate(fields)
+        for key, value in [(f"_{i}", field._name), (f"_{i}_default", f"__{field._name}_default__")]
+    }
+
+
+def _remap_co_values(value: tuple[Any, ...], mapping: dict[str, str]) -> tuple[Any, ...]:
+    """Remaps code object values using a mapping.
+
+    This is used to replace generated code object names with actual field names.
+
+    Args:
+        value: The original code object values.
+        mapping: A mapping of generated code object names to field names.
+    """
+    # Only attempt to remap if the value is a string, otherwise return it as is
+    # This is to avoid issues with trying to remap non-hashable types, and we only need to replace strings anyway
+    return tuple(mapping.get(v, v) if isinstance(v, str) else v for v in value)
 
 
 def _generate__eq__(fields: list[str]) -> FunctionType:
