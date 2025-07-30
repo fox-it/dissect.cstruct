@@ -7,7 +7,7 @@ import pytest
 
 from dissect.cstruct.exceptions import ParserError
 from dissect.cstruct.parser import TokenParser
-from dissect.cstruct.types import BaseArray, Pointer
+from dissect.cstruct.types import BaseArray, Pointer, Structure
 from tests.utils import verify_compiled
 
 if TYPE_CHECKING:
@@ -149,3 +149,18 @@ def test_includes(cs: cstruct) -> None:
     assert cs.myStruct.__name__ == "myStruct"
     assert len(cs.myStruct.fields) == 1
     assert cs.myStruct.fields.get("charVal")
+
+
+def test_typedef_pointer(cs: cstruct) -> None:
+    cdef = """
+    typedef struct _IMAGE_DATA_DIRECTORY {
+        DWORD VirtualAddress;
+        DWORD Size;
+    } IMAGE_DATA_DIRECTORY, *PIMAGE_DATA_DIRECTORY;
+    """
+    cs.load(cdef)
+
+    assert issubclass(cs._IMAGE_DATA_DIRECTORY, Structure)
+    assert cs.IMAGE_DATA_DIRECTORY is cs._IMAGE_DATA_DIRECTORY
+    assert issubclass(cs.PIMAGE_DATA_DIRECTORY, Pointer)
+    assert cs.PIMAGE_DATA_DIRECTORY.type == cs._IMAGE_DATA_DIRECTORY
