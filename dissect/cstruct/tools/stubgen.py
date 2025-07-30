@@ -92,6 +92,9 @@ def generate_cstruct_stub(cs: cstruct, module_prefix: str = "", cls_name: str = 
             stub = f"{name}: TypeAlias = {typedef.__name__}"
         elif issubclass(typedef, (types.Enum, types.Flag)):
             stub = generate_enum_stub(typedef, cs_prefix=cs_prefix, module_prefix=module_prefix)
+        elif issubclass(typedef, types.Pointer):
+            typehint = generate_typehint(typedef, prefix=cs_prefix, module_prefix=module_prefix)
+            stub = f"{name}: TypeAlias = {typehint}"
         elif issubclass(typedef, types.Structure):
             stub = generate_structure_stub(typedef, cs_prefix=cs_prefix, module_prefix=module_prefix)
         elif issubclass(typedef, types.BaseType):
