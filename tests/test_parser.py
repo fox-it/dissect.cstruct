@@ -164,3 +164,16 @@ def test_typedef_pointer(cs: cstruct) -> None:
     assert cs.IMAGE_DATA_DIRECTORY is cs._IMAGE_DATA_DIRECTORY
     assert issubclass(cs.PIMAGE_DATA_DIRECTORY, Pointer)
     assert cs.PIMAGE_DATA_DIRECTORY.type == cs._IMAGE_DATA_DIRECTORY
+
+
+def test_undef(cs: cstruct) -> None:
+    cdef = """
+    #define MY_CONST 42
+    #undef MY_CONST
+    """
+    cs.load(cdef)
+
+    assert "MY_CONST" not in cs.consts
+
+    with pytest.raises(ParserError, match="line 1: constant 'MY_CONST' not defined"):
+        cs.load("#undef MY_CONST")  # This should raise an error since MY_CONST is not defined

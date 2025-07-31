@@ -54,7 +54,8 @@ class TokenParser(Parser):
     def _tokencollection() -> TokenCollection:
         TOK = TokenCollection()
         TOK.add(r"#\[(?P<values>[^\]]+)\](?=\s*)", "CONFIG_FLAG")
-        TOK.add(r"#define\s+(?P<name>[^\s]+)\s+(?P<value>[^\r\n]+)\s*", "DEFINE")
+        TOK.add(r"#define\s+(?P<name>[^\s]+)(?P<value>[^\r\n]*)", "DEFINE")
+        TOK.add(r"#undef\s+(?P<name>[^\s]+)\s*", "UNDEF")
         TOK.add(r"typedef(?=\s)", "TYPEDEF")
         TOK.add(r"(?:struct|union)(?=\s|{)", "STRUCT")
         TOK.add(
@@ -98,6 +99,16 @@ class TokenParser(Parser):
                 pass
 
         self.cstruct.consts[match["name"]] = value
+
+    def _undef(self, tokens: TokenConsumer) -> None:
+        const = tokens.consume()
+        pattern = self.TOK.patterns[self.TOK.UNDEF]
+        match = pattern.match(const.value).groupdict()
+
+        if match["name"] in self.cstruct.consts:
+            del self.cstruct.consts[match["name"]]
+        else:
+            raise ParserError(f"line {self._lineno(const)}: constant {match['name']!r} not defined")
 
     def _enum(self, tokens: TokenConsumer) -> None:
         # We cheat with enums because the entire enum is in the token
@@ -382,6 +393,8 @@ class TokenParser(Parser):
                 self._config_flag(tokens)
             elif token == self.TOK.DEFINE:
                 self._constant(tokens)
+            elif token == self.TOK.UNDEF:
+                self._undef(tokens)
             elif token == self.TOK.TYPEDEF:
                 self._typedef(tokens)
             elif token == self.TOK.STRUCT:
