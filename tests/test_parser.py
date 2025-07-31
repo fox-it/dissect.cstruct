@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 import pytest
 
+from dissect.cstruct import cstruct
 from dissect.cstruct.exceptions import ParserError
 from dissect.cstruct.parser import TokenParser
 from dissect.cstruct.types import BaseArray, Pointer, Structure
 from tests.utils import verify_compiled
-
-if TYPE_CHECKING:
-    from dissect.cstruct import cstruct
 
 
 def test_nested_structs(cs: cstruct, compiled: bool) -> None:
@@ -177,3 +174,123 @@ def test_undef(cs: cstruct) -> None:
 
     with pytest.raises(ParserError, match="line 1: constant 'MY_CONST' not defined"):
         cs.load("#undef MY_CONST")  # This should raise an error since MY_CONST is not defined
+
+
+def test_conditional_ifdef(cs: cstruct) -> None:
+    cdef = """
+    #define MY_CONST 42
+
+    #ifdef MY_CONST
+    struct test {
+        uint32 a;
+    };
+    #endif
+    """
+    cs.load(cdef)
+
+    assert "test" in cs.typedefs
+
+
+def test_conditional_ifndef(cs: cstruct) -> None:
+    cdef = """
+    #ifndef MYVAR
+        #define MYVAR  (1)
+    #endif
+    """
+    cs.load(cdef)
+
+    assert "MYVAR" in cs.consts
+    assert cs.consts["MYVAR"] == 1
+
+
+def test_conditional_ifndef_guard(cs: cstruct) -> None:
+    cdef = """
+    /* Define Guard */
+    #ifndef __MYGUARD
+    #define __MYGUARD
+
+    typedef struct myStruct
+    {
+        char   charVal[16];
+    }
+    #endif // __MYGUARD
+    """
+    cs.load(cdef)
+
+    assert "__MYGUARD" in cs.consts
+    assert "myStruct" in cs.typedefs
+
+
+def test_conditional_nested() -> None:
+    cdef = """
+    #ifndef MYSWITCH1
+        #define MYVAR1 (1)
+    #else
+        #ifdef MYSWITCH2
+            #define MYVAR1 (2)
+        #else
+            #define MYVAR1 (3)
+        #endif
+    #endif
+    """
+    cs = cstruct().load(cdef)
+
+    assert "MYVAR1" in cs.consts
+    assert cs.consts["MYVAR1"] == 1
+
+    cs = cstruct().load("#define MYSWITCH1")
+
+    assert "MYSWITCH1" in cs.consts
+
+    cs.load(cdef)
+
+    assert "MYVAR1" in cs.consts
+    assert cs.consts["MYVAR1"] == 3
+
+
+def test_conditional_in_struct(cs: cstruct) -> None:
+    cdef = """
+    struct t_bitfield {
+        union {
+            struct {
+                uint32_t bit0:1;
+                uint32_t bit1:1;
+                #ifdef MYSWT
+                uint32_t bit2:1;
+                #endif
+            } fval;
+            uint32_t bits;
+        };
+    };
+    """
+    cs.load(cdef)
+
+    assert "t_bitfield" in cs.typedefs
+    assert "fval" in cs.t_bitfield.fields
+    assert "bit0" in cs.t_bitfield.fields["fval"].type.fields
+    assert "bit1" in cs.t_bitfield.fields["fval"].type.fields
+    assert "bit2" not in cs.t_bitfield.fields["fval"].type.fields
+
+
+def test_conditional_parsing_error(cs: cstruct) -> None:
+    cdef = """
+    #ifndef __HELP
+    #define __HELP
+    #endif
+    struct test {
+        uint32 a;
+    };
+    #endif
+    """
+    with pytest.raises(ParserError, match="line 8: unexpected token .+ENDIF"):
+        cs.load(cdef)
+
+    cdef = """
+    #ifndef __HELP
+    #define __HELP
+    struct test {
+        uint32 a;
+    };
+    """
+    with pytest.raises(ParserError, match="line 6: unclosed conditional statement"):
+        cs.load(cdef)

@@ -49,6 +49,8 @@ class TokenParser(Parser):
         self.compiled = compiled
         self.align = align
         self.TOK = self._tokencollection()
+        self._conditionals = []
+        self._conditionals_depth = 0
 
     @staticmethod
     def _tokencollection() -> TokenCollection:
@@ -56,6 +58,10 @@ class TokenParser(Parser):
         TOK.add(r"#\[(?P<values>[^\]]+)\](?=\s*)", "CONFIG_FLAG")
         TOK.add(r"#define\s+(?P<name>[^\s]+)(?P<value>[^\r\n]*)", "DEFINE")
         TOK.add(r"#undef\s+(?P<name>[^\s]+)\s*", "UNDEF")
+        TOK.add(r"#ifdef\s+(?P<name>[^\s]+)\s*", "IFDEF")
+        TOK.add(r"#ifndef\s+(?P<name>[^\s]+)\s*", "IFNDEF")
+        TOK.add(r"#else\s*", "ELSE")
+        TOK.add(r"#endif\s*", "ENDIF")
         TOK.add(r"typedef(?=\s)", "TYPEDEF")
         TOK.add(r"(?:struct|union)(?=\s|{)", "STRUCT")
         TOK.add(
@@ -81,12 +87,61 @@ class TokenParser(Parser):
             idents.append(tokens.consume())
         return " ".join([i.value for i in idents])
 
+    def _conditional(self, tokens: TokenConsumer) -> None:
+        token = tokens.consume()
+        pattern = self.TOK.patterns[token.token]
+        match = pattern.match(token.value).groupdict()
+
+        value = match["name"]
+
+        if token.token == self.TOK.IFDEF:
+            self._conditionals.append(value in self.cstruct.consts)
+        elif token.token == self.TOK.IFNDEF:
+            self._conditionals.append(value not in self.cstruct.consts)
+
+    def _check_conditional(self, tokens: TokenConsumer) -> bool:
+        """Check and handle conditionals. Return a boolean indicating if we need to continue to the next token."""
+        if self._conditionals and self._conditionals_depth == len(self._conditionals):
+            # If we have a conditional and the depth matches, handle it accordingly
+            if tokens.next == self.TOK.ELSE:
+                # Flip the last conditional
+                tokens.consume()
+                self._conditionals[-1] = not self._conditionals[-1]
+                return True
+
+            if tokens.next == self.TOK.ENDIF:
+                # Pop the last conditional
+                tokens.consume()
+                self._conditionals.pop()
+                self._conditionals_depth -= 1
+                return True
+
+        if tokens.next in (self.TOK.IFDEF, self.TOK.IFNDEF):
+            # If we encounter a new conditional, increase the depth
+            self._conditionals_depth += 1
+
+        if tokens.next == self.TOK.ENDIF:
+            # Similarly, decrease the depth if needed
+            self._conditionals_depth -= 1
+
+        if self._conditionals and not self._conditionals[-1]:
+            # If the last conditional evaluated to False, skip the next token
+            tokens.consume()
+            return True
+
+        if tokens.next in (self.TOK.IFDEF, self.TOK.IFNDEF):
+            # If the next token is a conditional, process it
+            self._conditional(tokens)
+            return True
+
+        return False
+
     def _constant(self, tokens: TokenConsumer) -> None:
         const = tokens.consume()
         pattern = self.TOK.patterns[self.TOK.DEFINE]
         match = pattern.match(const.value).groupdict()
 
-        value = match["value"]
+        value = match["value"].strip()
         try:
             value = ast.literal_eval(value)
         except (ValueError, SyntaxError):
@@ -219,6 +274,9 @@ class TokenParser(Parser):
                 tokens.consume()
                 break
 
+            if self._check_conditional(tokens):
+                continue
+
             field = self._parse_field(tokens)
             fields.append(field)
 
@@ -277,7 +335,7 @@ class TokenParser(Parser):
                 return Field(None, type_, None)
 
         if tokens.next != self.TOK.NAME:
-            raise ParserError(f"line {self._lineno(tokens.next)}: expected name")
+            raise ParserError(f"line {self._lineno(tokens.next)}: expected name, got {tokens.next!r}")
         nametok = tokens.consume()
 
         type_, name, bits = self._parse_field_type(type_, nametok.value)
@@ -389,6 +447,9 @@ class TokenParser(Parser):
             if token is None:
                 break
 
+            if self._check_conditional(tokens):
+                continue
+
             if token == self.TOK.CONFIG_FLAG:
                 self._config_flag(tokens)
             elif token == self.TOK.DEFINE:
@@ -407,6 +468,9 @@ class TokenParser(Parser):
                 self._include(tokens)
             else:
                 raise ParserError(f"line {self._lineno(token)}: unexpected token {token!r}")
+
+        if self._conditionals:
+            raise ParserError(f"line {self._lineno(tokens.previous)}: unclosed conditional statement")
 
 
 class CStyleParser(Parser):
