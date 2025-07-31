@@ -257,3 +257,27 @@ def test_conditional_in_struct(cs: cstruct) -> None:
     assert "bit0" in cs.t_bitfield.fields["fval"].type.fields
     assert "bit1" in cs.t_bitfield.fields["fval"].type.fields
     assert "bit2" not in cs.t_bitfield.fields["fval"].type.fields
+
+
+def test_conditional_parsing_error(cs: cstruct) -> None:
+    cdef = """
+    #ifndef __HELP
+    #define __HELP
+    #endif
+    struct test {
+        uint32 a;
+    };
+    #endif
+    """
+    with pytest.raises(ParserError, match="line 8: unexpected token .+ENDIF"):
+        cs.load(cdef)
+
+    cdef = """
+    #ifndef __HELP
+    #define __HELP
+    struct test {
+        uint32 a;
+    };
+    """
+    with pytest.raises(ParserError, match="line 6: unclosed conditional statement"):
+        cs.load(cdef)
