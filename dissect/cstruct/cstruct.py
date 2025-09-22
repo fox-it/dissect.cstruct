@@ -30,8 +30,7 @@ from dissect.cstruct.types import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-
-    from typing_extensions import TypeAlias
+    from typing import TypeAlias
 
 
 T = TypeVar("T", bound=BaseType)

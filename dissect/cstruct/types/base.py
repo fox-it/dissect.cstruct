@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import functools
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, BinaryIO, Callable, ClassVar, TypeVar
+from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, TypeVar
 
 from dissect.cstruct.exceptions import ArraySizeError
 from dissect.cstruct.expression import Expression
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from typing_extensions import Self
 
     from dissect.cstruct.cstruct import cstruct
