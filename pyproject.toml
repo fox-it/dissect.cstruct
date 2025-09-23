@@ -37,6 +37,27 @@ dev = [
   "typing_extensions"
 ]
 
+[dependency-groups]
+test = [
+    "pytest",
+]
+lint = [
+    "ruff==0.13.1",
+    "typing_extensions",
+    "vermin",
+]
+build = [
+    "build",
+]
+debug = [
+    "ipdb",
+]
+dev = [
+    {include-group = "test"},
+    {include-group = "lint"},
+    {include-group = "debug"},
+]
+
 [project.scripts]
 cstruct-stubgen = "dissect.cstruct.tools.stubgen:main"
 
