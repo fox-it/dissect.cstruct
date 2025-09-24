@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 from collections import ChainMap
-from collections.abc import MutableMapping
+from collections.abc import Callable, MutableMapping
 from contextlib import contextmanager
 from enum import Enum
 from functools import lru_cache
@@ -10,7 +10,7 @@ from itertools import chain
 from operator import attrgetter
 from textwrap import dedent
 from types import FunctionType
-from typing import TYPE_CHECKING, Any, BinaryIO, Callable
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.types.base import (
@@ -467,7 +467,7 @@ class UnionMetaType(StructureMetaType):
 
             # User (partial) initialization, rebuild the union
             # First user-provided field is the one used to rebuild the union
-            arg_fields = (field._name for _, field in zip(args, cls.__fields__))
+            arg_fields = (field._name for _, field in zip(args, cls.__fields__, strict=False))
             kwarg_fields = (name for name in kwargs if name in cls.lookup)
             if (first_field := next(chain(arg_fields, kwarg_fields), None)) is not None:
                 obj._rebuild(first_field)

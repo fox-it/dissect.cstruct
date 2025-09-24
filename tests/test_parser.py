@@ -282,7 +282,7 @@ def test_conditional_parsing_error(cs: cstruct) -> None:
     };
     #endif
     """
-    with pytest.raises(ParserError, match="line 8: unexpected token .+ENDIF"):
+    with pytest.raises(ParserError, match=r"line 8: unexpected token .+ENDIF"):
         cs.load(cdef)
 
     cdef = """

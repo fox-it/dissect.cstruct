@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import string
-from typing import TYPE_CHECKING, Callable, ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from dissect.cstruct.exceptions import ExpressionParserError, ExpressionTokenizerError
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from dissect.cstruct import cstruct
 
 

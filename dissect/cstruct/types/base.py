@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import functools
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, BinaryIO, Callable, ClassVar, TypeVar
+from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, TypeVar
 
 from dissect.cstruct.exceptions import ArraySizeError
 from dissect.cstruct.expression import Expression
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from typing_extensions import Self
 
     from dissect.cstruct.cstruct import cstruct
@@ -60,10 +62,6 @@ class MetaType(type):
 
     def __len__(cls) -> int:
         """Return the byte size of the type."""
-        # Python 3.9 compat thing for bound type vars
-        if cls is BaseType:
-            return 0
-
         if cls.size is None:
             raise TypeError("Dynamic size")
 
