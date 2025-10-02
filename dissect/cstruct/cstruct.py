@@ -220,7 +220,7 @@ class cstruct:
         return name
 
     def _add_attr(self, name: str, value: Any, replace: bool = False) -> None:
-        if not replace and (name in self.__dict__ and self.__dict__[name] != value):
+        if not replace and ((existing := self.__dict__.get(name)) is not None and existing != value):
             raise ValueError(f"Attribute already exists: {name}")
         setattr(self, name, value)
 

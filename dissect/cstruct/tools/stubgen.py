@@ -91,8 +91,8 @@ def generate_cstruct_stub(cs: cstruct, module_prefix: str = "", cls_name: str = 
             stub = f"{name}: TypeAlias = {type_.__name__}"
         elif issubclass(type_, (types.Enum, types.Flag)):
             stub = generate_enum_stub(type_, cs_prefix=cs_prefix, module_prefix=module_prefix)
-        elif issubclass(typedef, types.Pointer):
-            typehint = generate_typehint(typedef, prefix=cs_prefix, module_prefix=module_prefix)
+        elif issubclass(type_, types.Pointer):
+            typehint = generate_typehint(type_, prefix=cs_prefix, module_prefix=module_prefix)
             stub = f"{name}: TypeAlias = {typehint}"
         elif issubclass(type_, types.Structure):
             stub = generate_structure_stub(type_, cs_prefix=cs_prefix, module_prefix=module_prefix)
@@ -167,8 +167,9 @@ def generate_structure_stub(
     module_prefix: str = "",
 ) -> str:
     result = [f"class {name_prefix}{structure.__name__}({module_prefix}{structure.__base__.__name__}):"]
-
     indent = " " * 4
+
+    all_types = structure.cs.typedefs | structure.cs.types
 
     args = ["self"]
     for field_name, field in structure.fields.items():
@@ -180,7 +181,7 @@ def generate_structure_stub(
         while issubclass(nested_type, types.BaseArray):
             nested_type = nested_type.type
 
-        if issubclass(nested_type, types.Structure) and type_name not in structure.cs.typedefs:
+        if issubclass(nested_type, types.Structure) and type_name not in all_types:
             inlined = True
             inline_stub = generate_structure_stub(nested_type, cs_prefix=cs_prefix, module_prefix=module_prefix)
 

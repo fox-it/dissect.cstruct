@@ -339,6 +339,35 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
             """,
             id="pointer alias",
         ),
+        pytest.param(
+            """
+            struct A {
+                uint8 a;
+            };
+
+            struct Test {
+                A x;
+            };
+            """,
+            """
+            class cstruct(cstruct):
+                class A(Structure):
+                    a: cstruct.uint8
+                    @overload
+                    def __init__(self, a: cstruct.uint8 | None = ...): ...
+                    @overload
+                    def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
+                class Test(Structure):
+                    x: cstruct.A
+                    @overload
+                    def __init__(self, x: cstruct.A | None = ...): ...
+                    @overload
+                    def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
+            """,
+            id="reference other struct",
+        ),
     ],
 )
 def test_generate_cstruct_stub(cs: cstruct, cdef: str, expected: str) -> None:

@@ -49,12 +49,12 @@ def test_load_init() -> None:
     """
     # load with first positional argument
     cs = cstruct(cdef)
-    assert "test" in cs.typedefs
+    assert "test" in cs.types
     assert cs.endian == "<"
 
     # load from keyword argument and big endian
     cs = cstruct(load=cdef, endian=">")
-    assert "test" in cs.typedefs
+    assert "test" in cs.types
     a = cs.test(a=0xBADC0DE, b=0xACCE55ED)
     assert len(bytes(a)) == 12
     assert bytes(a) == a.dumps()
@@ -62,7 +62,7 @@ def test_load_init() -> None:
 
     # load using positional argument and little endian
     cs = cstruct(cdef, endian="<")
-    assert "test" in cs.typedefs
+    assert "test" in cs.types
     a = cs.test(a=0xBADC0DE, b=0xACCE55ED)
     assert len(bytes(a)) == 12
     assert bytes(a) == a.dumps()
@@ -81,7 +81,7 @@ def test_load_init_kwargs_only() -> None:
         cs = cstruct(cdef, ">")
 
     cs = cstruct(cdef, endian=">")
-    assert "test" in cs.typedefs
+    assert "test" in cs.types
     assert cs.endian == ">"
 
 
