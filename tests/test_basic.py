@@ -532,3 +532,32 @@ def test_linked_list(cs: cstruct) -> None:
 
     assert obj.data == 1
     assert obj.next.data == 2
+
+
+def test_copy(cs: cstruct) -> None:
+    """Test that copying a cstruct instance works as expected."""
+    cdef = """
+    struct test {
+        uint32  a;
+    };
+    """
+    cs.load(cdef)
+
+    cs_copy = cs.copy()
+
+    # Modify the copy and verify the original is unchanged
+    cs_copy.load("""
+    struct test2 {
+        uint16  b;
+    };
+    """)
+
+    assert "test" in cs.typedefs
+    assert "test2" not in cs.typedefs
+
+    assert "test" in cs_copy.typedefs
+    assert "test2" in cs_copy.typedefs
+
+    # Verify that types in the copied cstruct reference the copied cstruct
+    assert cs_copy.resolve("test").cs is cs_copy
+    assert cs_copy.resolve("test2").cs is cs_copy
