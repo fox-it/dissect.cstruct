@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import ctypes as _ctypes
 import struct
 import sys
@@ -27,6 +28,7 @@ from dissect.cstruct.types import (
     Void,
     Wchar,
 )
+from dissect.cstruct.types.base import MetaType
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -324,6 +326,30 @@ class cstruct:
                 return type_name
 
         raise ResolveError(f"Recursion limit exceeded while resolving type {name}")
+
+    def copy(self) -> cstruct:
+        """Create a copy of this cstruct instance.
+
+        Returns:
+            A new cstruct instance with the same types and settings as this one.
+        """
+        cs = cstruct(endian=self.endian, pointer=self.pointer.__name__)
+        cs._anonymous_count = self._anonymous_count
+        cs.consts = self.consts.copy()
+        cs.lookups = self.lookups.copy()
+        cs.includes = self.includes.copy()
+
+        # Update typedefs to point to the new cstruct instance
+        for name, type in self.typedefs.items():
+            if name in cs.typedefs:
+                continue
+
+            if isinstance(type, MetaType):
+                new_type = copy.copy(type)
+                new_type.cs = cs
+                cs.typedefs[name] = new_type
+
+        return cs
 
     def _make_type(
         self,
