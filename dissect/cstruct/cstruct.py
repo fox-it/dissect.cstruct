@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import ctypes as _ctypes
+import inspect
 import struct
 import sys
 import types
+import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO, TypeVar, cast
+from typing import TYPE_CHECKING, Any, BinaryIO, Literal, TypeVar, cast
 
-from dissect.cstruct.exceptions import ResolveError
+from dissect.cstruct.exceptions import Error, ResolveError
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.parser import CStyleParser, TokenParser
 from dissect.cstruct.types import (
@@ -27,6 +29,7 @@ from dissect.cstruct.types import (
     Void,
     Wchar,
 )
+from dissect.cstruct.types.base import normalize_endianness
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -35,20 +38,23 @@ if TYPE_CHECKING:
 
 T = TypeVar("T", bound=BaseType)
 
+AllowedEndianness: TypeAlias = Literal["little", "big", "network", "<", ">", "!", "@", "="]
+Endianness: TypeAlias = Literal["<", ">", "!", "@", "="]
+
 
 class cstruct:
     """Main class of cstruct. All types are registered in here.
 
     Args:
-        endian: The endianness to use when parsing.
+        endian: The endianness to use when parsing (little, big, network, <, >, !, @ or =).
         pointer: The pointer type to use for pointers.
     """
 
     DEF_CSTYLE = 1
     DEF_LEGACY = 2
 
-    def __init__(self, load: str = "", *, endian: str = "<", pointer: str | None = None):
-        self.endian = endian
+    def __init__(self, load: str = "", *, endian: AllowedEndianness = "<", pointer: str | None = None):
+        self.endian = normalize_endianness(endian)
 
         self.consts = {}
         self.lookups = {}
@@ -242,6 +248,33 @@ class cstruct:
             alignment: The alignment of the type.
             **kwargs: Additional attributes to add to the type.
         """
+        # In cstruct 4.8 we changed the function signature of _read and _write
+        # Check if the function signature is compatible, and throw an error if not
+        for type_to_check in (type_, type_.ArrayType):
+            type_name = type_.__name__ + (f".{type_.ArrayType.__name__}" if type_to_check is type_.ArrayType else "")
+
+            for method in ("_read", "_read_array", "_read_0", "_write", "_write_array", "_write_0"):
+                if not hasattr(type_to_check, method):
+                    continue
+
+                signature = inspect.signature(getattr(type_to_check, method))
+
+                # We added a few keyword-only parameters to the function signature, but any custom type will
+                # continue to work fine as long as they accept **kwargs
+                if not any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()):
+                    raise Error(
+                        f"Custom type {type_name} has an incompatible {method} method signature. "
+                        "Please refer to the changelog of dissect.cstruct 4.8 for more information."
+                    )
+
+                # Only warn if the method doesn't accept an endian parameter
+                if "endian" not in signature.parameters:
+                    warnings.warn(
+                        f"Custom type {type_name} is missing the 'endian' keyword-only parameter in its {method} method. "  # noqa: E501
+                        "Please refer to the changelog of dissect.cstruct 4.8 for more information.",
+                        stacklevel=2,
+                    )
+
         self.add_type(name, self._make_type(name, (type_,), size, alignment=alignment, attrs=kwargs))
 
     def load(self, definition: str, deftype: int | None = None, **kwargs) -> cstruct:

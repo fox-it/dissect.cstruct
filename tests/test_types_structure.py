@@ -844,3 +844,27 @@ def test_structure_definition_newline(cs: cstruct, compiled: bool) -> None:
     obj.wstring = "test"
 
     assert obj.dumps() == buf
+
+
+def test_structure_changing_endian(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    struct test {
+        uint32 a;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+    assert cs.endian == "<"
+
+    buf = b"\x01\x02\x03\x04"
+    obj = cs.test(buf)
+
+    assert obj.a == 0x04030201
+
+    assert obj.dumps() == buf
+
+    obj = cs.test(buf, endian=">")
+    assert obj.a == 0x01020304
+
+    assert obj.dumps(endian=">") == buf

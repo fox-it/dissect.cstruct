@@ -109,7 +109,7 @@ def test_generate_packed_read(cs: cstruct) -> None:
     expected = """
     buf = stream.read(15)
     if len(buf) != 15: raise EOFError()
-    data = _struct(cls.cs.endian, "BhIq").unpack(buf)
+    data = _struct(endian, "BhIq").unpack(buf)
 
     r["a"] = type.__call__(_0, data[0])
 
@@ -135,7 +135,7 @@ def test_generate_packed_read_array(cs: cstruct) -> None:
     expected = """
     buf = stream.read(64)
     if len(buf) != 64: raise EOFError()
-    data = _struct(cls.cs.endian, "2B3h4I5q").unpack(buf)
+    data = _struct(endian, "2B3h4I5q").unpack(buf)
 
     _t = _0
     _et = _t.type
@@ -171,7 +171,7 @@ def test_generate_packed_read_byte_types(cs: cstruct) -> None:
     expected = """
     buf = stream.read(18)
     if len(buf) != 18: raise EOFError()
-    data = _struct(cls.cs.endian, "18x").unpack(buf)
+    data = _struct(endian, "18x").unpack(buf)
 
     r["a"] = type.__call__(_0, buf[0:1])
 
@@ -207,12 +207,12 @@ def test_generate_packed_read_composite_types(cs: cstruct, TestEnum: type[Enum])
     expected = """
     buf = stream.read(11)
     if len(buf) != 11: raise EOFError()
-    data = _struct(cls.cs.endian, "BQ2B").unpack(buf)
+    data = _struct(endian, "BQ2B").unpack(buf)
 
     r["a"] = type.__call__(_0, data[0])
 
     _pt = _1
-    r["b"] = _pt.__new__(_pt, data[1], stream, r)
+    r["b"] = _pt.__new__(_pt, data[1], stream, context=r, endian=endian, **kwargs)
 
     _t = _2
     _et = _t.type
@@ -232,7 +232,7 @@ def test_generate_packed_read_offsets(cs: cstruct) -> None:
     expected = """
     buf = stream.read(9)
     if len(buf) != 9: raise EOFError()
-    data = _struct(cls.cs.endian, "B7xB").unpack(buf)
+    data = _struct(endian, "B7xB").unpack(buf)
 
     r["a"] = type.__call__(_0, data[0])
 
@@ -251,7 +251,7 @@ def test_generate_structure_read(cs: cstruct) -> None:
 
     expected = """
     _s = stream.tell()
-    r["a"] = _0._read(stream, context=r)
+    r["a"] = _0._read(stream, context=r, endian=endian, **kwargs)
     s["a"] = stream.tell() - _s
     """
 
@@ -267,7 +267,7 @@ def test_generate_structure_read_anonymous(cs: cstruct) -> None:
 
     expected = """
     _s = stream.tell()
-    r["a"] = _0._read(stream, context=r)
+    r["a"] = _0._read(stream, context=r, endian=endian, **kwargs)
     s["a"] = stream.tell() - _s
     """
 
@@ -280,7 +280,7 @@ def test_generate_array_read(cs: cstruct) -> None:
 
     expected = """
     _s = stream.tell()
-    r["a"] = _0._read(stream, context=r)
+    r["a"] = _0._read(stream, context=r, endian=endian, **kwargs)
     s["a"] = stream.tell() - _s
     """
 
@@ -325,7 +325,7 @@ def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, oth
     expected = """
     buf = stream.read(2)
     if len(buf) != 2: raise EOFError()
-    data = _struct(cls.cs.endian, "H").unpack(buf)
+    data = _struct(endian, "H").unpack(buf)
 
     r["size"] = type.__call__(_0, data[0])
 
@@ -341,7 +341,7 @@ def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, oth
     stream.seek(o + 3)
 
     _s = stream.tell()
-    r["c"] = _3._read(stream, context=r)
+    r["c"] = _3._read(stream, context=r, endian=endian, **kwargs)
     s["c"] = stream.tell() - _s
     """
 
@@ -364,7 +364,7 @@ def test_generate_fields_dynamic_before_bitfield(cs: cstruct, TestEnum: Enum, ot
     expected = """
     buf = stream.read(2)
     if len(buf) != 2: raise EOFError()
-    data = _struct(cls.cs.endian, "H").unpack(buf)
+    data = _struct(endian, "H").unpack(buf)
 
     r["size"] = type.__call__(_0, data[0])
 
@@ -380,7 +380,7 @@ def test_generate_fields_dynamic_before_bitfield(cs: cstruct, TestEnum: Enum, ot
     stream.seek(o + 3)
 
     _s = stream.tell()
-    r["c"] = _3._read(stream, context=r)
+    r["c"] = _3._read(stream, context=r, endian=endian, **kwargs)
     s["c"] = stream.tell() - _s
     """
 
