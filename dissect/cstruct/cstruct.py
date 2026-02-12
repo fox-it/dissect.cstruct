@@ -205,6 +205,25 @@ class cstruct:
 
         raise AttributeError(f"Invalid attribute: {attr}")
 
+    def __copy__(self) -> cstruct:
+        cs = cstruct(endian=self.endian, pointer=self.pointer.__name__)
+        cs._anonymous_count = self._anonymous_count
+        cs.consts = self.consts.copy()
+        cs.lookups = self.lookups.copy()
+        cs.includes = self.includes.copy()
+
+        # Update typedefs to point to the new cstruct instance
+        for name, type in self.typedefs.items():
+            if name in cs.typedefs:
+                continue
+
+            if isinstance(type, MetaType):
+                new_type = copy.copy(type)
+                new_type.cs = cs
+                cs.typedefs[name] = new_type
+
+        return cs
+
     def _next_anonymous(self) -> str:
         name = f"__anonymous_{self._anonymous_count}__"
         self._anonymous_count += 1
@@ -333,23 +352,7 @@ class cstruct:
         Returns:
             A new cstruct instance with the same types and settings as this one.
         """
-        cs = cstruct(endian=self.endian, pointer=self.pointer.__name__)
-        cs._anonymous_count = self._anonymous_count
-        cs.consts = self.consts.copy()
-        cs.lookups = self.lookups.copy()
-        cs.includes = self.includes.copy()
-
-        # Update typedefs to point to the new cstruct instance
-        for name, type in self.typedefs.items():
-            if name in cs.typedefs:
-                continue
-
-            if isinstance(type, MetaType):
-                new_type = copy.copy(type)
-                new_type.cs = cs
-                cs.typedefs[name] = new_type
-
-        return cs
+        return copy.copy(self)
 
     def _make_type(
         self,
