@@ -2,6 +2,10 @@ class Error(Exception):
     pass
 
 
+class LexerError(Error):
+    pass
+
+
 class ParserError(Error):
     pass
 
@@ -19,8 +23,4 @@ class ArraySizeError(Error):
 
 
 class ExpressionParserError(Error):
-    pass
-
-
-class ExpressionTokenizerError(Error):
     pass
