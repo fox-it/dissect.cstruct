@@ -6,11 +6,14 @@ from typing import TYPE_CHECKING
 import pytest
 
 from dissect.cstruct.expression import Expression
+from dissect.cstruct.lexer import tokenize
+from dissect.cstruct.parser import CStyleParser, _join_line_continuations
 
 if TYPE_CHECKING:
     from pytest_benchmark.fixture import BenchmarkFixture
 
     from dissect.cstruct.cstruct import cstruct
+    from dissect.cstruct.lexer import Token
 
 
 @pytest.mark.benchmark
@@ -166,6 +169,32 @@ struct ACCESS_ALLOWED_OBJECT_ACE {
     LDAP_SID Sid;
 };
 """
+
+
+@pytest.mark.benchmark
+def test_benchmark_lexer(benchmark: BenchmarkFixture) -> None:
+    """Benchmark tokenizing a realistic set of struct definitions."""
+    benchmark(lambda: tokenize(_BENCHMARK_CDEF))
+
+
+@pytest.mark.benchmark
+def test_benchmark_parser(cs: cstruct, benchmark: BenchmarkFixture) -> None:
+    """Benchmark parsing a realistic set of struct definitions."""
+    cs.add_type = partial(cs.add_type, replace=True)
+
+    parser = CStyleParser(cs)
+    cdef = _join_line_continuations(_BENCHMARK_CDEF)
+    tokens = tokenize(cdef)
+
+    def parse(parser: CStyleParser, tokens: list[Token]) -> None:
+        parser.reset()
+        parser._tokens = tokens
+        tokens = parser._preprocess()
+        parser.reset()
+        parser._tokens = tokens
+        parser._parse()
+
+    benchmark(lambda: parse(parser, tokens))
 
 
 @pytest.mark.benchmark

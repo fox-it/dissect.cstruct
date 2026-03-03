@@ -326,7 +326,7 @@ def test_array_of_null_terminated_strings(cs: cstruct, compiled: bool) -> None:
     struct args {
         uint32 argc;
         char   argv[argc][];
-    }
+    };
     """
     cs.load(cdef, compiled=compiled)
 
@@ -343,7 +343,7 @@ def test_array_of_null_terminated_strings(cs: cstruct, compiled: bool) -> None:
     struct args2 {
         uint32 argc;
         char   argv[][argc];
-    }
+    };
     """
     with pytest.raises(ParserError, match="Depth required for multi-dimensional array"):
         cs.load(cdef)
@@ -354,7 +354,7 @@ def test_array_of_size_limited_strings(cs: cstruct, compiled: bool) -> None:
     struct args {
         uint32 argc;
         char   argv[argc][8];
-    }
+    };
     """
     cs.load(cdef, compiled=compiled)
 
@@ -374,7 +374,7 @@ def test_array_three_dimensional(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test {
         uint8   a[2][2][2];
-    }
+    };
     """
     cs.load(cdef, compiled=compiled)
 
@@ -402,7 +402,7 @@ def test_nested_array_of_variable_size(cs: cstruct, compiled: bool) -> None:
         uint8   medior;
         uint8   inner;
         uint8   a[outer][medior][inner];
-    }
+    };
     """
     cs.load(cdef, compiled=compiled)
 
@@ -490,14 +490,14 @@ def test_size_and_aligment(cs: cstruct) -> None:
 
 def test_dynamic_substruct_size(cs: cstruct) -> None:
     cdef = """
-    struct {
+    struct sub {
         int32 len;
         char str[len];
-    } sub;
+    };
 
-    struct {
+    struct test {
         sub data[1];
-    } test;
+    };
     """
     cs.load(cdef)
 
