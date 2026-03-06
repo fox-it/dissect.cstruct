@@ -44,7 +44,7 @@ if TYPE_CHECKING:
                 B = ...
 
             """,
-            id="enum int8",
+            id="enum-int8",
         ),
         pytest.param(
             """
@@ -154,7 +154,7 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
             """,
-            id="anonymous nested",
+            id="anonymous-nested",
         ),
         pytest.param(
             """
@@ -182,7 +182,7 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
             """,
-            id="named nested",
+            id="named-nested",
         ),
         pytest.param(
             """
@@ -210,7 +210,7 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
             """,
-            id="named nested array",
+            id="named-nested-array",
         ),
     ],
 )
@@ -253,7 +253,7 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
             """,
-            id="cstruct stub",
+            id="cstruct-stub",
         ),
         pytest.param(
             """
@@ -272,7 +272,7 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
 
                 _test: TypeAlias = Test
             """,
-            id="alias stub",
+            id="alias-stub",
         ),
         pytest.param(
             """
@@ -301,7 +301,7 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
             """,  # noqa: E501
-            id="typedef stub",
+            id="typedef-stub",
         ),
         pytest.param(
             """
@@ -317,7 +317,7 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 STRING: Literal['hello'] = ...
                 BYTES: Literal[b'c'] = ...
             """,
-            id="define literals",
+            id="define-literals",
         ),
         pytest.param(
             """
@@ -337,7 +337,7 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 Test: TypeAlias = _Test
                 pTest: TypeAlias = Pointer[cstruct._Test]
             """,
-            id="pointer alias",
+            id="pointer-alias",
         ),
     ],
 )
@@ -366,7 +366,7 @@ def test_generate_file_stub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cap
         struct Test {
             uint32  a;
             uint32  b;
-        }
+        };
         \"\"\"
 
         c_structure = cstruct().load(structure_def)
