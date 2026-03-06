@@ -119,7 +119,7 @@ def test_structure_names(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert all(c in cs.typedefs for c in ("a", "b", "c", "d", "e"))
+    assert all(c in cs.typedefs | cs.types for c in ("a", "b", "c", "d", "e"))
 
     assert cs.a.__name__ == "a"
     assert cs.b.__name__ == "b"
@@ -188,7 +188,7 @@ def test_conditional_ifdef(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert "test" in cs.typedefs
+    assert "test" in cs.types
 
 
 def test_conditional_ifndef(cs: cstruct) -> None:
@@ -218,7 +218,7 @@ def test_conditional_ifndef_guard(cs: cstruct) -> None:
     cs.load(cdef)
 
     assert "__MYGUARD" in cs.consts
-    assert "myStruct" in cs.typedefs
+    assert "myStruct" in cs.types
 
 
 def test_conditional_nested() -> None:
@@ -265,7 +265,7 @@ def test_conditional_in_struct(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert "t_bitfield" in cs.typedefs
+    assert "t_bitfield" in cs.types
     assert "fval" in cs.t_bitfield.fields
     assert "bit0" in cs.t_bitfield.fields["fval"].type.fields
     assert "bit1" in cs.t_bitfield.fields["fval"].type.fields

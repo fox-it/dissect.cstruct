@@ -288,9 +288,6 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
             """,
             """
             class cstruct(cstruct):
-                __fs16: TypeAlias = cstruct.uint16
-                __fs32: TypeAlias = cstruct.uint32
-                __fs64: TypeAlias = cstruct.uint64
                 class Test(Structure):
                     a: cstruct.uint16
                     b: cstruct.uint32
@@ -300,6 +297,9 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                     @overload
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
+                __fs16: TypeAlias = cstruct.__u16
+                __fs32: TypeAlias = cstruct.__u32
+                __fs64: TypeAlias = cstruct.__u64
             """,  # noqa: E501
             id="typedef stub",
         ),
@@ -338,6 +338,35 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 pTest: TypeAlias = Pointer[cstruct._Test]
             """,
             id="pointer alias",
+        ),
+        pytest.param(
+            """
+            struct A {
+                uint8 a;
+            };
+
+            struct Test {
+                A x;
+            };
+            """,
+            """
+            class cstruct(cstruct):
+                class A(Structure):
+                    a: cstruct.uint8
+                    @overload
+                    def __init__(self, a: cstruct.uint8 | None = ...): ...
+                    @overload
+                    def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
+                class Test(Structure):
+                    x: cstruct.A
+                    @overload
+                    def __init__(self, x: cstruct.A | None = ...): ...
+                    @overload
+                    def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
+            """,
+            id="reference other struct",
         ),
     ],
 )

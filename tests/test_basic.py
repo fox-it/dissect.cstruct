@@ -37,7 +37,7 @@ def test_load_file(cs: cstruct, compiled: bool, tmp_path: Path) -> None:
     tmp_path.joinpath("testdef.txt").write_text(textwrap.dedent(cdef))
 
     cs.loadfile(tmp_path.joinpath("testdef.txt"), compiled=compiled)
-    assert "test" in cs.typedefs
+    assert "test" in cs.types
 
 
 def test_load_init() -> None:
@@ -49,12 +49,12 @@ def test_load_init() -> None:
     """
     # load with first positional argument
     cs = cstruct(cdef)
-    assert "test" in cs.typedefs
+    assert "test" in cs.types
     assert cs.endian == "<"
 
     # load from keyword argument and big endian
     cs = cstruct(load=cdef, endian=">")
-    assert "test" in cs.typedefs
+    assert "test" in cs.types
     a = cs.test(a=0xBADC0DE, b=0xACCE55ED)
     assert len(bytes(a)) == 12
     assert bytes(a) == a.dumps()
@@ -62,7 +62,7 @@ def test_load_init() -> None:
 
     # load using positional argument and little endian
     cs = cstruct(cdef, endian="<")
-    assert "test" in cs.typedefs
+    assert "test" in cs.types
     a = cs.test(a=0xBADC0DE, b=0xACCE55ED)
     assert len(bytes(a)) == 12
     assert bytes(a) == a.dumps()
@@ -81,7 +81,7 @@ def test_load_init_kwargs_only() -> None:
         cs = cstruct(cdef, ">")
 
     cs = cstruct(cdef, endian=">")
-    assert "test" in cs.typedefs
+    assert "test" in cs.types
     assert cs.endian == ">"
 
 
@@ -97,7 +97,7 @@ def test_type_resolve(cs: cstruct) -> None:
 
     cs.add_type("ref0", "uint32")
     for i in range(1, 15):  # Recursion limit is currently 10
-        cs.add_type(f"ref{i}", f"ref{i - 1}")
+        cs.add_typedef(f"ref{i}", f"ref{i - 1}")
 
     with pytest.raises(ResolveError, match="Recursion limit exceeded"):
         cs.resolve("ref14")
@@ -455,7 +455,7 @@ def test_reserved_keyword(cs: cstruct, compiled: bool) -> None:
     cs.load(cdef, compiled=compiled)
 
     for name in ["in", "class", "for"]:
-        assert name in cs.typedefs
+        assert name in cs.types
         assert verify_compiled(cs.resolve(name), compiled)
 
         assert cs.resolve(name)(b"\x01").a == 1
