@@ -9,6 +9,8 @@ from dissect.cstruct.types.base import EOF, BaseType
 if TYPE_CHECKING:
     from typing_extensions import Self
 
+    from dissect.cstruct.cstruct import Endianness
+
 
 @lru_cache(1024)
 def _struct(endian: str, packchar: str) -> Struct:
@@ -24,11 +26,13 @@ class Packed(BaseType, Generic[T]):
     packchar: str
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
-        return cls._read_array(stream, 1, context)[0]
+    def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs) -> Self:
+        return cls._read_array(stream, 1, context=context, endian=endian, **kwargs)[0]
 
     @classmethod
-    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Self]:
+    def _read_array(
+        cls, stream: BinaryIO, count: int, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs
+    ) -> list[Self]:
         if count == EOF:
             data = stream.read()
             length = len(data)
@@ -37,7 +41,7 @@ class Packed(BaseType, Generic[T]):
             length = cls.size * count
             data = stream.read(length)
 
-        fmt = _struct(cls.cs.endian, f"{count}{cls.packchar}")
+        fmt = _struct(endian, f"{count}{cls.packchar}")
 
         if len(data) != length:
             raise EOFError(f"Read {len(data)} bytes, but expected {length}")
@@ -45,10 +49,10 @@ class Packed(BaseType, Generic[T]):
         return [cls.__new__(cls, value) for value in fmt.unpack(data)]
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
+    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None, *, endian: Endianness) -> Self:
         result = []
 
-        fmt = _struct(cls.cs.endian, cls.packchar)
+        fmt = _struct(endian, cls.packchar)
         while True:
             data = stream.read(cls.size)
 
@@ -63,9 +67,9 @@ class Packed(BaseType, Generic[T]):
         return result
 
     @classmethod
-    def _write(cls, stream: BinaryIO, data: Packed[T]) -> int:
-        return stream.write(_struct(cls.cs.endian, cls.packchar).pack(data))
+    def _write(cls, stream: BinaryIO, data: Packed[T], *, endian: Endianness, **kwargs) -> int:
+        return stream.write(_struct(endian, cls.packchar).pack(data))
 
     @classmethod
-    def _write_array(cls, stream: BinaryIO, data: list[Packed[T]]) -> int:
-        return stream.write(_struct(cls.cs.endian, f"{len(data)}{cls.packchar}").pack(*data))
+    def _write_array(cls, stream: BinaryIO, data: list[Packed[T]], *, endian: Endianness, **kwargs) -> int:
+        return stream.write(_struct(endian, f"{len(data)}{cls.packchar}").pack(*data))

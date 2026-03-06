@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import Self
 
-    from dissect.cstruct.cstruct import cstruct
+    from dissect.cstruct.cstruct import AllowedEndianness, Endianness, cstruct
 
 
 EOF = -0xE0F  # Negative counts are illegal anyway, so abuse that for our EOF sentinel
@@ -41,14 +41,15 @@ class MetaType(type):
             stream = args[0]
 
             if _is_readable_type(stream):
-                return cls._read(stream)
+                endian = normalize_endianness(endian) if (endian := kwargs.get("endian")) is not None else cls.cs.endian
+                return cls._read(stream, endian=endian)
 
             if issubclass(cls, bytes) and isinstance(stream, bytes) and len(stream) == cls.size:
                 # Shortcut for char/bytes type
                 return type.__call__(cls, *args, **kwargs)
 
             if _is_buffer_type(stream):
-                return cls.reads(stream)
+                return cls.reads(stream, endian=kwargs.get("endian"))
 
         return type.__call__(cls, *args, **kwargs)
 
@@ -71,60 +72,71 @@ class MetaType(type):
         """Return the default value of this type."""
         return cls()
 
-    def reads(cls, data: bytes | memoryview | bytearray) -> Self:  # type: ignore
+    def reads(cls, data: bytes | memoryview | bytearray, *, endian: AllowedEndianness | None = None) -> Self:  # type: ignore
         """Parse the given data from a bytes-like object.
 
         Args:
             data: Bytes-like object to parse.
+            endian: The endianness to use when parsing. If not provided, the cstruct's default endianness will be used.
 
         Returns:
             The parsed value of this type.
         """
-        return cls._read(BytesIO(data))
+        endian = normalize_endianness(endian) if endian is not None else cls.cs.endian
+        return cls._read(BytesIO(data), endian=endian)
 
-    def read(cls, obj: BinaryIO | bytes | memoryview | bytearray) -> Self:  # type: ignore
+    def read(cls, obj: BinaryIO | bytes | memoryview | bytearray, *, endian: AllowedEndianness | None = None) -> Self:  # type: ignore
         """Parse the given data.
 
         Args:
             obj: Data to parse. Can be a bytes-like object or a file-like object.
+            endian: The endianness to use when parsing. If not provided, the cstruct's default endianness will be used.
 
         Returns:
             The parsed value of this type.
         """
         if _is_buffer_type(obj):
-            return cls.reads(obj)
+            return cls.reads(obj, endian=endian)
 
         if not _is_readable_type(obj):
             raise TypeError("Invalid object type")
 
-        return cls._read(obj)
+        endian = normalize_endianness(endian) if endian is not None else cls.cs.endian
+        return cls._read(obj, endian=endian)
 
-    def write(cls, stream: BinaryIO, value: Any) -> int:
+    def write(cls, stream: BinaryIO, value: Any, *, endian: AllowedEndianness | None = None) -> int:
         """Write a value to a writable file-like object.
 
         Args:
             stream: File-like objects that supports writing.
             value: Value to write.
+            endian: The endianness to use when writing. If not provided, the cstruct's default endianness will be used.
 
         Returns:
             The amount of bytes written.
         """
-        return cls._write(stream, value)
+        endian = normalize_endianness(endian) if endian is not None else cls.cs.endian
+        return cls._write(stream, value, endian=endian)
 
-    def dumps(cls, value: Any) -> bytes:
+    def dumps(cls, value: Any, *, endian: AllowedEndianness | None = None) -> bytes:
         """Dump a value to a byte string.
 
         Args:
             value: Value to dump.
+            endian: The endianness to use when dumping. If not provided, the cstruct's default endianness will be used.
 
         Returns:
             The raw bytes of this type.
         """
+        endian = normalize_endianness(endian) if endian is not None else cls.cs.endian
+
         out = BytesIO()
-        cls._write(out, value)
+        cls._write(out, value, endian=endian)
         return out.getvalue()
 
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:  # type: ignore
+    def _read(
+        cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness | None = None, **kwargs
+    ) -> Self:  # type: ignore
         """Internal function for reading value.
 
         Must be implemented per type.
@@ -132,10 +144,19 @@ class MetaType(type):
         Args:
             stream: The stream to read from.
             context: Optional reading context.
+            endian: The endianness to use when reading. If not provided, the cstruct's default endianness will be used.
         """
         raise NotImplementedError
 
-    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Self]:  # type: ignore
+    def _read_array(
+        cls,
+        stream: BinaryIO,
+        count: int,
+        *,
+        context: dict[str, Any] | None = None,
+        endian: Endianness | None = None,
+        **kwargs,
+    ) -> list[Self]:  # type: ignore
         """Internal function for reading array values.
 
         Allows type implementations to do optimized reading for their type.
@@ -144,16 +165,19 @@ class MetaType(type):
             stream: The stream to read from.
             count: The amount of values to read.
             context: Optional reading context.
+            endian: The endianness to use when reading. If not provided, the cstruct's default endianness will be used.
         """
         if count == EOF:
             result = []
             while not _is_eof(stream):
-                result.append(cls._read(stream, context))
+                result.append(cls._read(stream, context=context, endian=endian, **kwargs))
             return result
 
-        return [cls._read(stream, context) for _ in range(count)]
+        return [cls._read(stream, context=context, endian=endian, **kwargs) for _ in range(count)]
 
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:
+    def _read_0(
+        cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness | None = None, **kwargs
+    ) -> list[Self]:
         """Internal function for reading null-terminated data.
 
         "Null" is type specific, so must be implemented per type.
@@ -161,13 +185,14 @@ class MetaType(type):
         Args:
             stream: The stream to read from.
             context: Optional reading context.
+            endian: The endianness to use when reading. If not provided, the cstruct's default endianness will be used.
         """
         raise NotImplementedError
 
-    def _write(cls, stream: BinaryIO, data: Any) -> int:
+    def _write(cls, stream: BinaryIO, data: Any, *, endian: Endianness | None = None, **kwargs) -> int:
         raise NotImplementedError
 
-    def _write_array(cls, stream: BinaryIO, array: list[Self]) -> int:  # type: ignore
+    def _write_array(cls, stream: BinaryIO, array: list[Self], *, endian: Endianness | None = None, **kwargs) -> int:  # type: ignore
         """Internal function for writing arrays.
 
         Allows type implementations to do optimized writing for their type.
@@ -175,10 +200,11 @@ class MetaType(type):
         Args:
             stream: The stream to read from.
             array: The array to write.
+            endian: The endianness to use when reading. If not provided, the cstruct's default endianness will be used.
         """
-        return sum(cls._write(stream, entry) for entry in array)
+        return sum(cls._write(stream, entry, endian=endian, **kwargs) for entry in array)
 
-    def _write_0(cls, stream: BinaryIO, array: list[Self]) -> int:  # type: ignore
+    def _write_0(cls, stream: BinaryIO, array: list[Self], *, endian: Endianness | None = None, **kwargs) -> int:  # type: ignore
         """Internal function for writing null-terminated arrays.
 
         Allows type implementations to do optimized writing for their type.
@@ -186,8 +212,9 @@ class MetaType(type):
         Args:
             stream: The stream to read from.
             array: The array to write.
+            endian: The endianness to use when reading. If not provided, the cstruct's default endianness will be used.
         """
-        return cls._write_array(stream, [*array, cls.__default__()])
+        return cls._write_array(stream, [*array, cls.__default__()], endian=endian, **kwargs)
 
 
 class _overload:
@@ -250,9 +277,11 @@ class BaseArray(BaseType):
         )
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[BaseType]:
+    def _read(
+        cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs
+    ) -> list[BaseType]:
         if cls.null_terminated:
-            return cls.type._read_0(stream, context)
+            return cls.type._read_0(stream, context=context, endian=endian, **kwargs)
 
         if isinstance(cls.num_entries, int):
             num = max(0, cls.num_entries)
@@ -266,23 +295,23 @@ class BaseArray(BaseType):
                     raise
                 num = EOF
 
-        return cls.type._read_array(stream, num, context)
+        return cls.type._read_array(stream, num, context=context, endian=endian, **kwargs)
 
     @classmethod
-    def _write(cls, stream: BinaryIO, data: list[Any]) -> int:
+    def _write(cls, stream: BinaryIO, data: list[Any], *, endian: Endianness, **kwargs) -> int:
         if cls.null_terminated:
-            return cls.type._write_0(stream, data)
+            return cls.type._write_0(stream, data, endian=endian, **kwargs)
 
         if not cls.dynamic and cls.num_entries != (actual_size := len(data)):
             raise ArraySizeError(f"Expected static array size {cls.num_entries}, got {actual_size} instead.")
 
-        return cls.type._write_array(stream, data)
+        return cls.type._write_array(stream, data, endian=endian, **kwargs)
 
 
 class Array(list[T], BaseArray):
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[T]:
-        return cls(super()._read(stream, context))
+    def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs) -> list[T]:
+        return cls(super()._read(stream, context=context, endian=endian, **kwargs))
 
 
 def _is_readable_type(value: object) -> bool:
@@ -303,6 +332,25 @@ def _is_eof(stream: BinaryIO) -> bool:
 
     stream.seek(pos)
     return False
+
+
+ENDIANNESS_MAP: dict[AllowedEndianness, Endianness] = {
+    "<": "<",
+    ">": ">",
+    "!": "!",
+    "@": "@",
+    "=": "=",
+    "network": "!",
+    "little": "<",
+    "big": ">",
+}
+
+
+def normalize_endianness(endian: AllowedEndianness) -> Endianness:
+    """Normalize an endianness string to one of the standard format characters."""
+    if endian not in ENDIANNESS_MAP:
+        raise ValueError(f"Invalid endianness: {endian}")
+    return ENDIANNESS_MAP[endian]
 
 
 # As mentioned in the BaseType class, we correctly set the type here

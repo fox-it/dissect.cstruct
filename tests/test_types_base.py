@@ -10,7 +10,7 @@ from dissect.cstruct.types.base import BaseArray, BaseType
 from .utils import verify_compiled
 
 if TYPE_CHECKING:
-    from dissect.cstruct.cstruct import cstruct
+    from dissect.cstruct.cstruct import Endianness, cstruct
 
 
 def test_array_size_mismatch(cs: cstruct) -> None:
@@ -93,7 +93,7 @@ def test_custom_array_type(cs: cstruct, compiled: bool) -> None:
             self.value = value.upper()
 
         @classmethod
-        def _read(cls, stream: BinaryIO, context: dict | None = None) -> CustomType:
+        def _read(cls, stream: BinaryIO, *, context: dict | None = None, endian: Endianness, **kwargs) -> CustomType:
             length = stream.read(1)[0]
             value = stream.read(length)
             return type.__call__(cls, value)
@@ -104,8 +104,10 @@ def test_custom_array_type(cs: cstruct, compiled: bool) -> None:
                 return cls.type()
 
             @classmethod
-            def _read(cls, stream: BinaryIO, context: dict | None = None) -> CustomType:
-                value = cls.type._read(stream, context)
+            def _read(
+                cls, stream: BinaryIO, *, context: dict | None = None, endian: Endianness, **kwargs
+            ) -> CustomType:
+                value = cls.type._read(stream, context=context, endian=endian, **kwargs)
                 if str(cls.num_entries) == "lower":
                     value.value = value.value.lower()
 

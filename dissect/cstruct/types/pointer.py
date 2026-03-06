@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+from functools import cache
 from typing import TYPE_CHECKING, Any, BinaryIO, Generic, TypeVar
 
 from dissect.cstruct.exceptions import NullPointerDereference
-from dissect.cstruct.types.base import BaseType
+from dissect.cstruct.types.base import BaseType, normalize_endianness
 from dissect.cstruct.types.char import Char
 from dissect.cstruct.types.void import Void
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from typing_extensions import Self
+
+    from dissect.cstruct.cstruct import AllowedEndianness, Endianness
 
 T = TypeVar("T", bound=BaseType)
 
@@ -19,13 +24,18 @@ class Pointer(int, BaseType, Generic[T]):
     type: type[T]
     _stream: BinaryIO | None
     _context: dict[str, Any] | None
-    _value: T | None
+    _endian: Endianness
+    _kwargs: dict[str, Any]
 
-    def __new__(cls, value: int, stream: BinaryIO | None, context: dict[str, Any] | None = None) -> Self:
+    def __new__(
+        cls, value: int, stream: BinaryIO | None, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs
+    ) -> Self:
         obj = super().__new__(cls, value)
         obj._stream = stream
         obj._context = context
-        obj._value = None
+        obj._endian = endian
+        obj._kwargs = kwargs
+        obj.dereference = cache(obj.dereference)
         return obj
 
     def __repr__(self) -> str:
@@ -37,68 +47,80 @@ class Pointer(int, BaseType, Generic[T]):
     def __getattr__(self, attr: str) -> Any:
         return getattr(self.dereference(), attr)
 
-    def __add__(self, other: int) -> Self:
-        return type.__call__(self.__class__, int.__add__(self, other), self._stream, self._context)
+    @staticmethod
+    def __op(op: Callable[[int, int], int]) -> Self:
+        def method(self: Self, other: int) -> Self:
+            return type.__call__(
+                self.__class__,
+                op(self, other),
+                self._stream,
+                context=self._context,
+                endian=self._endian,
+                **self._kwargs,
+            )
 
-    def __sub__(self, other: int) -> Self:
-        return type.__call__(self.__class__, int.__sub__(self, other), self._stream, self._context)
+        return method
 
-    def __mul__(self, other: int) -> Self:
-        return type.__call__(self.__class__, int.__mul__(self, other), self._stream, self._context)
-
-    def __floordiv__(self, other: int) -> Self:
-        return type.__call__(self.__class__, int.__floordiv__(self, other), self._stream, self._context)
-
-    def __mod__(self, other: int) -> Self:
-        return type.__call__(self.__class__, int.__mod__(self, other), self._stream, self._context)
-
-    def __pow__(self, other: int) -> Self:
-        return type.__call__(self.__class__, int.__pow__(self, other), self._stream, self._context)
-
-    def __lshift__(self, other: int) -> Self:
-        return type.__call__(self.__class__, int.__lshift__(self, other), self._stream, self._context)
-
-    def __rshift__(self, other: int) -> Self:
-        return type.__call__(self.__class__, int.__rshift__(self, other), self._stream, self._context)
-
-    def __and__(self, other: int) -> Self:
-        return type.__call__(self.__class__, int.__and__(self, other), self._stream, self._context)
-
-    def __xor__(self, other: int) -> Self:
-        return type.__call__(self.__class__, int.__xor__(self, other), self._stream, self._context)
-
-    def __or__(self, other: int) -> Self:
-        return type.__call__(self.__class__, int.__or__(self, other), self._stream, self._context)
+    __add__ = __op(int.__add__)
+    __sub__ = __op(int.__sub__)
+    __mul__ = __op(int.__mul__)
+    __floordiv__ = __op(int.__floordiv__)
+    __mod__ = __op(int.__mod__)
+    __pow__ = __op(int.__pow__)
+    __lshift__ = __op(int.__lshift__)
+    __rshift__ = __op(int.__rshift__)
+    __and__ = __op(int.__and__)
+    __xor__ = __op(int.__xor__)
+    __or__ = __op(int.__or__)
 
     @classmethod
     def __default__(cls) -> Self:
-        return cls.__new__(cls, cls.cs.pointer.__default__(), None, None)
+        return cls.__new__(
+            cls,
+            cls.cs.pointer.__default__(),
+            None,
+            context=None,
+            endian=cls.cs.endian,
+        )
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
-        return cls.__new__(cls, cls.cs.pointer._read(stream, context), stream, context)
+    def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs) -> Self:
+        return cls.__new__(
+            cls,
+            cls.cs.pointer._read(stream, context=context, endian=endian, **kwargs),
+            stream,
+            context=context,
+            endian=endian,
+            **kwargs,
+        )
 
     @classmethod
-    def _write(cls, stream: BinaryIO, data: int) -> int:
-        return cls.cs.pointer._write(stream, data)
+    def _write(cls, stream: BinaryIO, data: int, *, endian: Endianness, **kwargs) -> int:
+        return cls.cs.pointer._write(stream, data, endian=endian, **kwargs)
 
-    def dereference(self) -> T:
+    def dereference(self, *, endian: AllowedEndianness | None = None) -> T:
+        """Dereference the pointer and read the value it points to.
+
+        Args:
+            endian: Optional endianness to use when reading the value.
+                    If not provided, the endianness used when reading the pointer itself will be used.
+        """
         if self == 0 or self._stream is None:
             raise NullPointerDereference
 
-        if self._value is None and not issubclass(self.type, Void):
-            # Read current position of file read/write pointer
-            position = self._stream.tell()
-            # Reposition the file read/write pointer
-            self._stream.seek(self)
+        endian = normalize_endianness(endian) if endian is not None else self._endian
+        if issubclass(self.type, Void):
+            return None
 
-            if issubclass(self.type, Char):
-                # this makes the assumption that a char pointer is a null-terminated string
-                value = self.type._read_0(self._stream, self._context)
-            else:
-                value = self.type._read(self._stream, self._context)
+        position = self._stream.tell()
+        self._stream.seek(self)
 
-            self._stream.seek(position)
-            self._value = value
+        if issubclass(self.type, Char):
+            # This makes the assumption that a char pointer is a null-terminated string
+            value = self.type._read_0(self._stream, context=self._context, endian=endian, **self._kwargs)
+        else:
+            value = self.type._read(self._stream, context=self._context, endian=endian, **self._kwargs)
 
-        return self._value
+        # Restore the stream position after reading the value
+        self._stream.seek(position)
+        return value

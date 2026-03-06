@@ -547,3 +547,24 @@ def test_codegen_hashable(cs: cstruct) -> None:
 
     assert hash(structure._generate_union__init__(hashable_fields).__code__)
     assert hash(structure._generate_union__init__(unhashable_fields).__code__)
+
+
+def test_union_changing_endian(cs: cstruct) -> None:
+    cdef = """
+    union test {
+        uint32 a;
+        char   b[8];
+    };
+    """
+    cs.load(cdef, compiled=False)
+
+    assert len(cs.test) == 8
+    assert cs.endian == "<"
+
+    buf = b"zomgbeef"
+    obj = cs.test(buf, endian=">")
+
+    assert obj.a == 0x7A6F6D67
+    assert obj.b == b"zomgbeef"
+
+    assert obj.dumps(endian=">") == buf

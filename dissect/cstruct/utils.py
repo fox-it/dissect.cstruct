@@ -13,6 +13,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from typing import Literal
 
+    from dissect.cstruct.cstruct import AllowedEndianness, Endianness
+
 COLOR_RED = "\033[1;31m"
 COLOR_GREEN = "\033[1;32m"
 COLOR_YELLOW = "\033[1;33m"
@@ -32,13 +34,16 @@ COLOR_BG_WHITE = "\033[1;47m\033[1;30m"
 
 PRINTABLE = string.digits + string.ascii_letters + string.punctuation + " "
 
-ENDIANNESS_MAP: dict[str, Literal["big", "little"]] = {
-    "@": sys.byteorder,
-    "=": sys.byteorder,
+
+ENDIANNESS_TO_BYTEORDER_MAP: dict[AllowedEndianness, Literal["big", "little"]] = {
     "<": "little",
     ">": "big",
     "!": "big",
+    "@": sys.byteorder,
+    "=": sys.byteorder,
     "network": "big",
+    "little": "little",
+    "big": "big",
 }
 
 Palette = list[tuple[int, str]]
@@ -215,111 +220,118 @@ def dumpstruct(
     raise ValueError("Invalid arguments")
 
 
-def pack(value: int, size: int | None = None, endian: str = "little") -> bytes:
+def pack(value: int, size: int | None = None, endian: AllowedEndianness = "little") -> bytes:
     """Pack an integer value to a given bit size, endianness.
 
     Arguments:
         value: Value to pack.
         size: Integer size in bits.
-        endian: Endianness to use (little, big, network, <, > or !)
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
     """
+    if endian not in ENDIANNESS_TO_BYTEORDER_MAP:
+        raise ValueError(f"Invalid endianness: {endian!r} (should be little, big, network, <, >, !, @ or =)")
+
     size = ((size or value.bit_length()) + 7) // 8
-    return value.to_bytes(size, ENDIANNESS_MAP.get(endian, endian), signed=value < 0)
+    return value.to_bytes(size, ENDIANNESS_TO_BYTEORDER_MAP[endian], signed=value < 0)
 
 
-def unpack(value: bytes, size: int | None = None, endian: str = "little", sign: bool = False) -> int:
+def unpack(value: bytes, size: int | None = None, endian: AllowedEndianness = "little", sign: bool = False) -> int:
     """Unpack an integer value from a given bit size, endianness and sign.
 
     Arguments:
         value: Value to unpack.
         size: Integer size in bits.
-        endian: Endianness to use (little, big, network, <, > or !)
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
         sign: Signedness of the integer.
     """
     if size and len(value) != size // 8:
         raise ValueError(f"Invalid byte value, expected {size // 8} bytes, got {len(value)} bytes")
-    return int.from_bytes(value, ENDIANNESS_MAP.get(endian, endian), signed=sign)
+
+    if endian not in ENDIANNESS_TO_BYTEORDER_MAP:
+        raise ValueError(f"Invalid endianness: {endian!r} (should be little, big, network, <, >, !, @ or =)")
+
+    return int.from_bytes(value, ENDIANNESS_TO_BYTEORDER_MAP[endian], signed=sign)
 
 
-def p8(value: int, endian: str = "little") -> bytes:
+def p8(value: int, endian: AllowedEndianness = "little") -> bytes:
     """Pack an 8 bit integer.
 
     Arguments:
         value: Value to pack.
-        endian: Endianness to use (little, big, network, <, > or !)
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
     """
     return pack(value, 8, endian)
 
 
-def p16(value: int, endian: str = "little") -> bytes:
+def p16(value: int, endian: AllowedEndianness = "little") -> bytes:
     """Pack a 16 bit integer.
 
     Arguments:
         value: Value to pack.
-        endian: Endianness to use (little, big, network, <, > or !)
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
     """
     return pack(value, 16, endian)
 
 
-def p32(value: int, endian: str = "little") -> bytes:
+def p32(value: int, endian: AllowedEndianness = "little") -> bytes:
     """Pack a 32 bit integer.
 
     Arguments:
         value: Value to pack.
-        endian: Endianness to use (little, big, network, <, > or !)
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
     """
     return pack(value, 32, endian)
 
 
-def p64(value: int, endian: str = "little") -> bytes:
+def p64(value: int, endian: AllowedEndianness = "little") -> bytes:
     """Pack a 64 bit integer.
 
     Arguments:
         value: Value to pack.
-        endian: Endianness to use (little, big, network, <, > or !)
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
     """
     return pack(value, 64, endian)
 
 
-def u8(value: bytes, endian: str = "little", sign: bool = False) -> int:
+def u8(value: bytes, endian: AllowedEndianness = "little", sign: bool = False) -> int:
     """Unpack an 8 bit integer.
 
     Arguments:
         value: Value to unpack.
-        endian: Endianness to use (little, big, network, <, > or !)
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
         sign: Signedness of the integer.
     """
     return unpack(value, 8, endian, sign)
 
 
-def u16(value: bytes, endian: str = "little", sign: bool = False) -> int:
+def u16(value: bytes, endian: AllowedEndianness = "little", sign: bool = False) -> int:
     """Unpack a 16 bit integer.
 
     Arguments:
         value: Value to unpack.
-        endian: Endianness to use (little, big, network, <, > or !)
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
         sign: Signedness of the integer.
     """
     return unpack(value, 16, endian, sign)
 
 
-def u32(value: bytes, endian: str = "little", sign: bool = False) -> int:
+def u32(value: bytes, endian: AllowedEndianness = "little", sign: bool = False) -> int:
     """Unpack a 32 bit integer.
 
     Arguments:
         value: Value to unpack.
-        endian: Endianness to use (little, big, network, <, > or !)
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
         sign: Signedness of the integer.
     """
     return unpack(value, 32, endian, sign)
 
 
-def u64(value: bytes, endian: str = "little", sign: bool = False) -> int:
+def u64(value: bytes, endian: AllowedEndianness = "little", sign: bool = False) -> int:
     """Unpack a 64 bit integer.
 
     Arguments:
         value: Value to unpack.
-        endian: Endianness to use (little, big, network, <, > or !)
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
         sign: Signedness of the integer.
     """
     return unpack(value, 64, endian, sign)
