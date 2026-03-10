@@ -210,6 +210,26 @@ The API to access enum and flag members and their values in the same way as the 
 ### Custom types
 You can implement your own types by subclassing `BaseType`, and adding them to your cstruct instance with `add_custom_type(name, type, size, alignment, ...)`
 
+### Dynamic length fields
+To read all remaining data in the provided buffer/stream, you can use the magic `EOF` size variable. This will automatically expand until the end of the stream has been reached and works for any field type. For example:
+
+```python
+from dissect.cstruct import cstruct
+
+eof_def = """
+struct example {
+    uint32 magic;
+    char data[EOF];
+};
+"""
+
+c_eof = cstruct().load(eof_def)
+
+example = c_eof.example(b"9\x05\x00\x00arbitrary length data")
+assert example.magic == 1337
+assert example.data == b"arbitrary length data"
+```
+
 ### Custom definition parsers
 Don't like the C-like definition syntax? Write your own syntax parser!
 
