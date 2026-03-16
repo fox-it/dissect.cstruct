@@ -7,6 +7,8 @@ from dissect.cstruct.types.base import BaseType
 if TYPE_CHECKING:
     from typing_extensions import Self
 
+    from dissect.cstruct.cstruct import Endianness
+
 
 class LEB128(int, BaseType):
     """Variable-length code compression to store an arbitrarily large integer in a small number of bytes.
@@ -17,7 +19,7 @@ class LEB128(int, BaseType):
     signed: bool
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
+    def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs) -> Self:
         result = 0
         shift = 0
         while True:
@@ -37,11 +39,13 @@ class LEB128(int, BaseType):
         return cls.__new__(cls, result)
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:
+    def _read_0(
+        cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs
+    ) -> list[Self]:
         result = []
 
         while True:
-            if (value := cls._read(stream, context)) == 0:
+            if (value := cls._read(stream, context=context, endian=endian, **kwargs)) == 0:
                 break
 
             result.append(value)
@@ -49,7 +53,7 @@ class LEB128(int, BaseType):
         return result
 
     @classmethod
-    def _write(cls, stream: BinaryIO, data: int) -> int:
+    def _write(cls, stream: BinaryIO, data: int, *, endian: Endianness, **kwargs) -> int:
         # only write negative numbers when in signed mode
         if data < 0 and not cls.signed:
             raise ValueError("Attempt to encode a negative integer using unsigned LEB128 encoding")

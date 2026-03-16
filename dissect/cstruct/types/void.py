@@ -7,6 +7,8 @@ from dissect.cstruct.types.base import BaseArray, BaseType
 if TYPE_CHECKING:
     from typing_extensions import Self
 
+    from dissect.cstruct.cstruct import Endianness
+
 
 class VoidArray(list, BaseArray):
     """Array type representing void elements, primarily used for no-op reading and writing operations."""
@@ -16,11 +18,11 @@ class VoidArray(list, BaseArray):
         return cls()
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
+    def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs) -> Self:
         return cls()
 
     @classmethod
-    def _write(cls, stream: BinaryIO, data: bytes) -> int:
+    def _write(cls, stream: BinaryIO, data: bytes, *, endian: Endianness, **kwargs) -> int:
         return 0
 
 
@@ -36,9 +38,9 @@ class Void(BaseType):
         return isinstance(value, Void)
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
+    def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs) -> Self:
         return cls.__new__(cls)
 
     @classmethod
-    def _write(cls, stream: BinaryIO, data: Void) -> int:
+    def _write(cls, stream: BinaryIO, data: Void, *, endian: Endianness, **kwargs) -> int:
         return 0

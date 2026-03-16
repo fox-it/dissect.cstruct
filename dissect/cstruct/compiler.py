@@ -117,7 +117,7 @@ class _ReadSourceGenerator:
         """
 
         if any(field.bits for field in self.fields):
-            preamble += "bit_reader = BitBuffer(stream, cls.cs.endian)\n"
+            preamble += "bit_reader = BitBuffer(stream, endian=endian, **kwargs)\n"
 
         read_code = "\n".join(self._generate_fields())
 
@@ -130,7 +130,7 @@ class _ReadSourceGenerator:
 
         code = indent(dedent(preamble).lstrip() + read_code + dedent(outro), "    ")
 
-        return f"def _read(cls, stream, context=None):\n{code}"
+        return f"def _read(cls, stream, *, context=None, endian, **kwargs):\n{code}"
 
     def _generate_fields(self) -> Iterator[str]:
         current_offset = 0
@@ -227,7 +227,7 @@ class _ReadSourceGenerator:
     def _generate_structure(self, field: Field) -> Iterator[str]:
         template = f"""
         {"_s = stream.tell()" if field.type.dynamic else ""}
-        r["{field._name}"] = {self._map_field(field)}._read(stream, context=r)
+        r["{field._name}"] = {self._map_field(field)}._read(stream, context=r, endian=endian, **kwargs)
         {f's["{field._name}"] = stream.tell() - _s' if field.type.dynamic else ""}
         """
 
@@ -236,7 +236,7 @@ class _ReadSourceGenerator:
     def _generate_array(self, field: Field) -> Iterator[str]:
         template = f"""
         {"_s = stream.tell()" if field.type.dynamic else ""}
-        r["{field._name}"] = {self._map_field(field)}._read(stream, context=r)
+        r["{field._name}"] = {self._map_field(field)}._read(stream, context=r, endian=endian, **kwargs)
         {f's["{field._name}"] = stream.tell() - _s' if field.type.dynamic else ""}
         """
 
@@ -309,7 +309,7 @@ class _ReadSourceGenerator:
                     item_parser = parser_template.format(type="_et", getter=f"_b[i:i + {field_type.type.size}]")
                     list_comp = f"[{item_parser} for i in range(0, {count}, {field_type.type.size})]"
                 elif issubclass(field_type.type, Pointer):
-                    item_parser = "_et.__new__(_et, e, stream, r)"
+                    item_parser = "_et.__new__(_et, e, stream, context=r, endian=endian, **kwargs)"
                     list_comp = f"[{item_parser} for e in {getter}]"
                 else:
                     item_parser = parser_template.format(type="_et", getter="e")
@@ -320,7 +320,7 @@ class _ReadSourceGenerator:
                 parser = f"type.__call__({self._map_field(field)}, {getter})"
             elif issubclass(field_type, Pointer):
                 reads.append(f"_pt = {self._map_field(field)}")
-                parser = f"_pt.__new__(_pt, {getter}, stream, r)"
+                parser = f"_pt.__new__(_pt, {getter}, stream, context=r, endian=endian, **kwargs)"
             else:
                 parser = parser_template.format(type=self._map_field(field), getter=getter)
 
@@ -333,7 +333,7 @@ class _ReadSourceGenerator:
         if fmt == "x" or (len(fmt) == 2 and fmt[1] == "x"):
             unpack = ""
         else:
-            unpack = f'data = _struct(cls.cs.endian, "{fmt}").unpack(buf)\n'
+            unpack = f'data = _struct(endian, "{fmt}").unpack(buf)\n'
 
         template = f"""
         buf = stream.read({size})

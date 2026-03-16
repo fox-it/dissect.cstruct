@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, BinaryIO
 
 import pytest
 
-from dissect.cstruct.cstruct import cstruct
+from dissect.cstruct.cstruct import Endianness, cstruct
 from dissect.cstruct.exceptions import ArraySizeError, ParserError, ResolveError
 from dissect.cstruct.types import BaseType
 
@@ -215,12 +215,12 @@ def test_half_compiled_struct(cs: cstruct) -> None:
         type: BaseType
 
         @classmethod
-        def _read(cls, stream: BinaryIO, context: dict | None = None) -> OffByOne:
-            return cls(cls.type._read(stream, context) + 1)
+        def _read(cls, stream: BinaryIO, *, context: dict | None = None, endian: Endianness, **kwargs) -> OffByOne:
+            return cls(cls.type._read(stream, context=context, endian=endian, **kwargs) + 1)
 
         @classmethod
-        def _write(cls, stream: BinaryIO, data: int) -> OffByOne:
-            return cls(cls.type._write(stream, data - 1))
+        def _write(cls, stream: BinaryIO, data: int, *, endian: Endianness, **kwargs) -> OffByOne:
+            return cls(cls.type._write(stream, data - 1, endian=endian, **kwargs))
 
     # Add an unsupported type for the cstruct compiler
     # so that it returns the original struct,

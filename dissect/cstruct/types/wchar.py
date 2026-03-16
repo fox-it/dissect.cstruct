@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import sys
-from typing import Any, BinaryIO, ClassVar
+from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar
 
 from dissect.cstruct.types.base import EOF, BaseArray, BaseType
+
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import Endianness
 
 
 class WcharArray(str, BaseArray):
@@ -16,14 +19,16 @@ class WcharArray(str, BaseArray):
         return type.__call__(cls, "\x00" * (0 if cls.dynamic or cls.null_terminated else cls.num_entries))
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> WcharArray:
-        return type.__call__(cls, super()._read(stream, context))
+    def _read(
+        cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs
+    ) -> WcharArray:
+        return type.__call__(cls, super()._read(stream, context=context, endian=endian, **kwargs))
 
     @classmethod
-    def _write(cls, stream: BinaryIO, data: str) -> int:
+    def _write(cls, stream: BinaryIO, data: str, *, endian: Endianness, **kwargs) -> int:
         if cls.null_terminated:
             data += "\x00"
-        return stream.write(data.encode(Wchar.__encoding_map__[cls.cs.endian]))
+        return stream.write(data.encode(Wchar.__encoding_map__[endian]))
 
 
 class Wchar(str, BaseType):
@@ -32,7 +37,7 @@ class Wchar(str, BaseType):
     ArrayType = WcharArray
 
     __slots__ = ()
-    __encoding_map__: ClassVar[dict[str, str]] = {
+    __encoding_map__: ClassVar[dict[Endianness, str]] = {
         "@": f"utf-16-{sys.byteorder[0]}e",
         "=": f"utf-16-{sys.byteorder[0]}e",
         "<": "utf-16-le",
@@ -45,11 +50,13 @@ class Wchar(str, BaseType):
         return type.__call__(cls, "\x00")
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Wchar:
-        return cls._read_array(stream, 1, context)
+    def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs) -> Wchar:
+        return cls._read_array(stream, 1, context=context, endian=endian, **kwargs)
 
     @classmethod
-    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> Wchar:
+    def _read_array(
+        cls, stream: BinaryIO, count: int, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs
+    ) -> Wchar:
         if count == 0:
             return type.__call__(cls, "")
 
@@ -60,10 +67,10 @@ class Wchar(str, BaseType):
         if count != EOF and len(data) != count:
             raise EOFError(f"Read {len(data)} bytes, but expected {count}")
 
-        return type.__call__(cls, data.decode(cls.__encoding_map__[cls.cs.endian]))
+        return type.__call__(cls, data.decode(cls.__encoding_map__[endian]))
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Wchar:
+    def _read_0(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs) -> Wchar:
         buf = []
         while True:
             point = stream.read(2)
@@ -75,8 +82,8 @@ class Wchar(str, BaseType):
 
             buf.append(point)
 
-        return type.__call__(cls, b"".join(buf).decode(cls.__encoding_map__[cls.cs.endian]))
+        return type.__call__(cls, b"".join(buf).decode(cls.__encoding_map__[endian]))
 
     @classmethod
-    def _write(cls, stream: BinaryIO, data: str) -> int:
-        return stream.write(data.encode(cls.__encoding_map__[cls.cs.endian]))
+    def _write(cls, stream: BinaryIO, data: str, *, endian: Endianness, **kwargs) -> int:
+        return stream.write(data.encode(cls.__encoding_map__[endian]))
