@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 from collections import ChainMap
-from collections.abc import Callable, MutableMapping
+from collections.abc import MutableMapping
 from contextlib import contextmanager
 from enum import Enum
 from functools import lru_cache
@@ -23,7 +23,7 @@ from dissect.cstruct.types.enum import EnumMetaType
 from dissect.cstruct.types.pointer import Pointer
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Callable, Iterator, Mapping
     from types import FunctionType
 
     from typing_extensions import Self
@@ -139,7 +139,7 @@ class StructureMetaType(MetaType):
 
         if cls.__compiled__:
             # If the previous class was compiled try to compile this too
-            from dissect.cstruct import compiler  # noqa: PLC0415
+            from dissect.cstruct import compiler
 
             try:
                 classdict["_read"] = compiler.Compiler(cls.cs).compile_read(fields, cls.__name__, align=cls.__align__)

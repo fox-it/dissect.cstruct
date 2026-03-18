@@ -11,10 +11,11 @@ from dissect.cstruct.exceptions import (
     ParserError,
 )
 from dissect.cstruct.expression import Expression
-from dissect.cstruct.types import BaseArray, BaseType, Field, Structure
+from dissect.cstruct.types import BaseArray, Field, Structure
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
+    from dissect.cstruct.types import BaseType
 
 
 class Parser:
@@ -37,10 +38,9 @@ class Parser:
 
 
 class TokenParser(Parser):
-    """
-    Args:
-        cs: An instance of cstruct.
-        compiled: Whether structs should be compiled or not.
+    """Args:
+    cs: An instance of cstruct.
+    compiled: Whether structs should be compiled or not.
     """
 
     def __init__(self, cs: cstruct, compiled: bool = True, align: bool = False):
@@ -421,8 +421,7 @@ class TokenParser(Parser):
 
     @staticmethod
     def _lineno(tok: Token) -> int:
-        """Quick and dirty line number calculator"""
-
+        """Quick and dirty line number calculator."""
         match = tok.match
         return match.string.count("\n", 0, match.start()) + 1
 

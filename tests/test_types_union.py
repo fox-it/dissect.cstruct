@@ -444,7 +444,7 @@ def test_union_default(cs: cstruct) -> None:
 
 
 def test_union_default_dynamic(cs: cstruct) -> None:
-    """initialization of a dynamic union is not yet supported"""
+    """Initialization of a dynamic union is not yet supported."""
     cdef = """
     union test {
         uint8  x;
@@ -472,7 +472,7 @@ def test_union_default_dynamic(cs: cstruct) -> None:
 
 
 def test_union_partial_initialization(cs: cstruct) -> None:
-    """partial initialization of a union should fill in the rest with appropriate values"""
+    """Partial initialization of a union should fill in the rest with appropriate values."""
     cdef = """
     union test {
         uint8 a;
@@ -518,7 +518,7 @@ def test_union_partial_initialization(cs: cstruct) -> None:
 
 
 def test_union_partial_initialization_dynamic(cs: cstruct) -> None:
-    """partial initialization of a dynamic union should fill in the rest with appropriate values"""
+    """Partial initialization of a dynamic union should fill in the rest with appropriate values."""
     cdef = """
     union test {
         uint8  x;

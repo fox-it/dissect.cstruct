@@ -5,12 +5,13 @@ from enum import Enum as _Enum
 from enum import EnumMeta, IntEnum, IntFlag
 from typing import TYPE_CHECKING, Any, BinaryIO, TypeVar, overload
 
-from dissect.cstruct.types.base import Array, BaseType, MetaType
+from dissect.cstruct.types.base import BaseType, MetaType
 
 if TYPE_CHECKING:
     from typing_extensions import Self
 
     from dissect.cstruct.cstruct import cstruct
+    from dissect.cstruct.types.base import Array
 
 
 PY_311 = sys.version_info >= (3, 11, 0)
