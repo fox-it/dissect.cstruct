@@ -38,9 +38,11 @@ class Parser:
 
 
 class TokenParser(Parser):
-    """Args:
-    cs: An instance of cstruct.
-    compiled: Whether structs should be compiled or not.
+    """Definition parser for C-like structure syntax.
+
+    Args:
+        cs: An instance of cstruct.
+        compiled: Whether structs should be compiled or not.
     """
 
     def __init__(self, cs: cstruct, compiled: bool = True, align: bool = False):
@@ -473,7 +475,7 @@ class TokenParser(Parser):
 
 
 class CStyleParser(Parser):
-    """Definition parser for C-like structure syntax.
+    """Definition parser for C-like structure syntax (legacy parser).
 
     Args:
         cs: An instance of cstruct
