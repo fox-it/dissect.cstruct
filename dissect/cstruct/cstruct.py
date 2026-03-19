@@ -12,12 +12,10 @@ from dissect.cstruct.expression import Expression
 from dissect.cstruct.parser import CStyleParser, TokenParser
 from dissect.cstruct.types import (
     LEB128,
-    Array,
     BaseArray,
     BaseType,
     Char,
     Enum,
-    Field,
     Flag,
     Int,
     Packed,
@@ -31,6 +29,11 @@ from dissect.cstruct.types import (
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from typing import TypeAlias
+
+    from dissect.cstruct.types import (
+        Array,
+        Field,
+    )
 
 
 T = TypeVar("T", bound=BaseType)

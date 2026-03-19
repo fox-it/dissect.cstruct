@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.types import (
     Array,
-    BaseType,
     Char,
     CharArray,
     Flag,
@@ -34,6 +33,9 @@ if TYPE_CHECKING:
     from types import MethodType
 
     from dissect.cstruct.cstruct import cstruct
+    from dissect.cstruct.types import (
+        BaseType,
+    )
     from dissect.cstruct.types.structure import Field
 
 SUPPORTED_TYPES = (

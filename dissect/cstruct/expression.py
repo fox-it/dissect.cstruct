@@ -225,7 +225,6 @@ class Expression:
 
     def evaluate(self, cs: cstruct, context: dict[str, int] | None = None) -> int:
         """Evaluates an expression using a Shunting-Yard implementation."""
-
         self.stack = []
         self.queue = []
         operators = set(self.binary_operators.keys()) | set(self.unary_operators.keys())

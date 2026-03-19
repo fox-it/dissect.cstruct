@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dissect.cstruct.types.base import Array, BaseArray, BaseType, MetaType
 from dissect.cstruct.types.char import Char, CharArray
 from dissect.cstruct.types.enum import Enum
