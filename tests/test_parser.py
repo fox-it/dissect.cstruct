@@ -5,6 +5,7 @@ import pytest
 from dissect.cstruct import cstruct
 from dissect.cstruct.exceptions import ParserError, ResolveError
 from dissect.cstruct.lexer import tokenize
+from dissect.cstruct.parser import CStyleParser
 from dissect.cstruct.types import BaseArray, Pointer, Structure
 from tests.utils import verify_compiled
 
@@ -361,3 +362,14 @@ def test_multiple_declarators(cs: cstruct) -> None:
     assert cs.test.fields["c"].type == cs.uint32
     assert cs.test.fields["d"].type.__name__ == "__anonymous_0__"
     assert cs.test.fields["e"].type is cs.test.fields["d"].type
+
+
+def test_config_flags(cs: cstruct) -> None:
+    """Test that we parse configuration flag directives correctly."""
+    cdef = """
+    #[a, b, c]
+    """
+    parser = CStyleParser(cs)
+    parser.parse(cdef)
+
+    assert parser._flags == ["a", "b", "c"]

@@ -211,7 +211,7 @@ class CStyleParser(Parser):
 
     def _parse_config_flags(self) -> None:
         """Parse configuration flags from a directive like ``#[flag1, flag2, ...]``."""
-        self._flags.extend(self._expect(TokenType.PP_FLAGS).value.split(","))
+        self._flags.extend(flag.strip() for flag in self._expect(TokenType.PP_FLAGS).value.split(","))
 
     def _handle_conditional(self) -> None:
         """Handle conditional directives: ``#ifdef``, ``#ifndef``, ``#else``, ``#endif``."""
