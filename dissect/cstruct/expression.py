@@ -58,6 +58,9 @@ PRECEDENCE_LEVELS = {
 
 
 def precedence(o1: TokenType, o2: TokenType) -> bool:
+    # Unary (prefix) operators are right-associative, so use strict greater-than
+    if o2 in UNARY_OPERATORS:
+        return PRECEDENCE_LEVELS[o1] > PRECEDENCE_LEVELS[o2]
     return PRECEDENCE_LEVELS[o1] >= PRECEDENCE_LEVELS[o2]
 
 
