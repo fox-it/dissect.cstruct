@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from dissect.cstruct import compiler
 from dissect.cstruct.exceptions import (
     ExpressionParserError,
+    LexerError,
     ParserError,
 )
 from dissect.cstruct.expression import Expression
@@ -90,11 +91,6 @@ class CStyleParser(Parser):
     def _at(self, *types: TokenType) -> bool:
         """Return whether the current token matches any of the given types."""
         return self._tokens[self._pos].type in types
-
-    def _at_value(self, value: str) -> bool:
-        """Return whether the current token is an identifier with the given value."""
-        token = self._tokens[self._pos]
-        return token.type == TokenType.IDENTIFIER and token.value == value
 
     def _error(self, msg: str, *, token: Token | None = None) -> ParserError:
         return ParserError(f"line {(token if token is not None else self._tokens[self._pos]).line}: {msg}")
@@ -188,7 +184,7 @@ class CStyleParser(Parser):
         if isinstance(value, str):
             try:
                 value = Expression(value).evaluate(self.cs)
-            except ExpressionParserError:
+            except (LexerError, ExpressionParserError):
                 # If evaluation fails, just keep it as a string (e.g. for macro-like constants)
                 pass
 

@@ -475,10 +475,10 @@ def sizeof(type_: type[BaseType] | BaseType) -> int:
     return len(type_)
 
 
-def offsetof(type_: type[Structure], field: str) -> int:
+def offsetof(type_: type[Structure], name: str) -> int:
     """Get the offset of a field in a structure."""
-    if (field := type_.fields.get(field)) is None:
-        raise ValueError(f"Structure '{type_.__name__}' does not have a field named '{field}'")
+    if (field := type_.fields.get(name)) is None:
+        raise ValueError(f"Structure '{type_.__name__}' does not have a field named '{name}'")
     if (offset := field.offset) is None:
         raise ValueError(f"Field '{field._name}' of structure '{type_.__name__}' does not have a known offset")
     return offset

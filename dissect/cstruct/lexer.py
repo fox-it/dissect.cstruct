@@ -482,7 +482,8 @@ class Lexer:
 
             elif ch == "-" and (
                 self._pos == 0
-                or self._tokens[-1].type not in (TokenType.IDENTIFIER, TokenType.NUMBER, TokenType.RPAREN)
+                or self._tokens[-1].type
+                not in (TokenType.IDENTIFIER, TokenType.NUMBER, TokenType.RPAREN, TokenType.RBRACKET)
             ):
                 self._emit(TokenType.UNARY_MINUS, self._take(), line, col)
 
