@@ -56,6 +56,23 @@ from dissect.cstruct.lexer import TokenType, tokenize
         ("a << b", [TokenType.IDENTIFIER, TokenType.LSHIFT, TokenType.IDENTIFIER], ["a", "<<", "b"]),
         ("x >> 2", [TokenType.IDENTIFIER, TokenType.RSHIFT, TokenType.NUMBER], ["x", ">>", "2"]),
         ("-1", [TokenType.UNARY_MINUS, TokenType.NUMBER], ["-", "1"]),
+        (
+            "(0) - 1",
+            [TokenType.LPAREN, TokenType.NUMBER, TokenType.RPAREN, TokenType.MINUS, TokenType.NUMBER],
+            ["(", "0", ")", "-", "1"],
+        ),
+        (
+            "c[1] - 1",
+            [
+                TokenType.IDENTIFIER,
+                TokenType.LBRACKET,
+                TokenType.NUMBER,
+                TokenType.RBRACKET,
+                TokenType.MINUS,
+                TokenType.NUMBER,
+            ],
+            ["c", "[", "1", "]", "-", "1"],
+        ),
         ("1 - 1", [TokenType.NUMBER, TokenType.MINUS, TokenType.NUMBER], ["1", "-", "1"]),
         # Preprocessor directives
         ("#define", [TokenType.PP_DEFINE], ["define"]),

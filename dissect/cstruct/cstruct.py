@@ -253,11 +253,7 @@ class cstruct:
         Definitions can be parsed using different parsers. Currently, there's
         only one supported parser - DEF_CSTYLE. Parsers can add types and
         modify this cstruct instance. Arguments can be passed to parsers
-        using kwargs.
-
-        The CSTYLE parser was recently replaced with token based parser,
-        instead of a strictly regex based one. The old parser is still available
-        by using DEF_LEGACY.
+        using ``kwargs``.
 
         Args:
             definition: The definition to parse.
