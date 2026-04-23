@@ -30,6 +30,28 @@ def test_hexdump(capsys: pytest.CaptureFixture) -> None:
         utils.hexdump("b\x00", output="str")
 
 
+def test_hexdump_pretty(capsys: pytest.CaptureFixture) -> None:
+    """Check if we can create a pretty hexdump."""
+    n = utils.COLOR_NORMAL
+    b = utils.COLOR_BLACK_REG
+    w = utils.COLOR_WHITE
+
+    utils.hexdump((b"\x00" * 5) + b"\x01\x02\x03abc" + (b"\x00" * 5), pretty=True)
+    captured = capsys.readouterr()
+    assert (
+        captured.out
+        == "00000000  "
+        + (f"{b}00{n} " * 5)
+        + f"01 02 03  {w}61{n} {w}62{n} {w}63{n} "
+        + (f"{b}00{n} " * 5)
+        + "  "
+        + (f"{b}.{n}" * 5)
+        + f"...{w}a{n}{w}b{n}{w}c{n}"
+        + (f"{b}.{n}" * 5)
+        + "\n"
+    )
+
+
 def test_dumpstruct(cs: cstruct, capsys: pytest.CaptureFixture, compiled: bool) -> None:
     cdef = """
     struct test {

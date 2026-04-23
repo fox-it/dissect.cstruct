@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from typing import Literal
 
+# Bold ANSI colors
 COLOR_RED = "\033[1;31m"
 COLOR_GREEN = "\033[1;32m"
 COLOR_YELLOW = "\033[1;33m"
@@ -22,6 +23,10 @@ COLOR_CYAN = "\033[1;36m"
 COLOR_WHITE = "\033[1;37m"
 COLOR_NORMAL = "\033[1;0m"
 
+# Regular ANSI colors
+COLOR_BLACK_REG = "\033[0;30m"
+
+# Background ANSI colors
 COLOR_BG_RED = "\033[1;41m\033[1;37m"
 COLOR_BG_GREEN = "\033[1;42m\033[1;37m"
 COLOR_BG_YELLOW = "\033[1;43m\033[1;37m"
@@ -44,17 +49,41 @@ ENDIANNESS_MAP: dict[str, Literal["big", "little"]] = {
 Palette = list[tuple[int, str]]
 
 
-def _hexdump(data: bytes, palette: Palette | None = None, offset: int = 0, prefix: str = "") -> Iterator[str]:
+def human_colors() -> dict[str, str]:
+    """Generate a dictionary of characters with a human-readable ANSI color they should be in a hexdump."""
+    colors = {
+        "\00": COLOR_BLACK_REG,
+        # ...
+    }
+    # approx. 0x20-0x7E
+    for char in PRINTABLE:
+        colors[char] = COLOR_WHITE
+
+    # ... other coloring rules here ...
+    return colors
+
+
+HUMAN_COLORS = human_colors()
+
+
+def _hexdump(
+    data: bytes, palette: Palette | None = None, offset: int = 0, prefix: str = "", pretty: bool = False
+) -> Iterator[str]:
     """Hexdump some data.
 
     Args:
         data: Bytes to hexdump.
+        palette: Colorize the hexdump using this color pattern.
         offset: Byte offset of the hexdump.
         prefix: Optional prefix.
-        palette: Colorize the hexdump using this color pattern.
+        pretty: Use pretty colors, mutual exclusive with palette.
     """
     if palette:
         palette = palette[::-1]
+
+    # only happy little accidents
+    if pretty and palette:
+        raise ValueError("Cannot use argument 'pretty' in combination with 'palette', please pick one")
 
     remaining = 0
     active = None
@@ -89,8 +118,12 @@ def _hexdump(data: bytes, palette: Palette | None = None, offset: int = 0, prefi
                     values += f"{ord(char):02x}"
                     chars.append(active + print_char + COLOR_NORMAL)
                 else:
-                    values += f"{ord(char):02x}"
-                    chars.append(print_char)
+                    if pretty and (color := HUMAN_COLORS.get(char, "")):
+                        values += f"{color}{ord(char):02x}{COLOR_NORMAL}"
+                        chars.append(color + print_char + COLOR_NORMAL)
+                    else:
+                        values += f"{ord(char):02x}"
+                        chars.append(print_char)
 
                 remaining -= 1
                 if remaining == 0:
@@ -111,7 +144,12 @@ def _hexdump(data: bytes, palette: Palette | None = None, offset: int = 0, prefi
 
 
 def hexdump(
-    data: bytes, palette: Palette | None = None, offset: int = 0, prefix: str = "", output: str = "print"
+    data: bytes,
+    palette: Palette | None = None,
+    offset: int = 0,
+    prefix: str = "",
+    output: str = "print",
+    pretty: bool = False,
 ) -> Iterator[str] | str | None:
     """Hexdump some data.
 
@@ -121,8 +159,9 @@ def hexdump(
         offset: Byte offset of the hexdump.
         prefix: Optional prefix.
         output: Output format, can be 'print', 'generator' or 'string'.
+        pretty: Use pretty colors for improved human readability.
     """
-    generator = _hexdump(data, palette, offset, prefix)
+    generator = _hexdump(data, palette, offset, prefix, pretty)
     if output == "print":
         print("\n".join(generator))
         return None
