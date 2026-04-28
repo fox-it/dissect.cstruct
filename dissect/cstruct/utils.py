@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import pprint
 import string
 import sys
@@ -25,6 +26,9 @@ COLOR_NORMAL = "\033[1;0m"
 
 # Regular ANSI colors
 COLOR_BLACK_REG = "\033[0;30m"
+COLOR_GREY_REG = "\033[0;90m"
+COLOR_GREEN_REG = "\033[0;32m"
+COLOR_YELLOW_REG = "\033[0;93m"
 
 # Background ANSI colors
 COLOR_BG_RED = "\033[1;41m\033[1;37m"
@@ -34,6 +38,8 @@ COLOR_BG_BLUE = "\033[1;44m\033[1;37m"
 COLOR_BG_PURPLE = "\033[1;45m\033[1;37m"
 COLOR_BG_CYAN = "\033[1;46m\033[1;37m"
 COLOR_BG_WHITE = "\033[1;47m\033[1;30m"
+
+COLOR_CLEAR = "\033[0m"
 
 PRINTABLE = string.digits + string.ascii_letters + string.punctuation + " "
 
@@ -50,16 +56,29 @@ Palette = list[tuple[int, str]]
 
 
 def human_colors() -> dict[str, str]:
-    """Generate a dictionary of characters with a human-readable ANSI color they should be in a hexdump."""
-    colors = {
-        "\00": COLOR_BLACK_REG,
-        # ...
-    }
-    # approx. 0x20-0x7E
+    """Generates a dictionary of characters with a human-readable ANSI color they should be in a hexdump.
+
+    Coloring logic implementation derived from HexFriend and ImHex.
+    """
+    # Make all characters not in any rules below light green
+    colors = {chr(char): COLOR_GREEN_REG for char in range(256)}
+
+    # Make all ASCII extended characters yellow
+    for char in colors:
+        if ord(char) & 0x80 == 0:
+            colors[char] = COLOR_YELLOW_REG
+
+    # Make null bytes grey
+    colors["\00"] = COLOR_GREY_REG
+
+    # Make printable ASCII characters bold white (0x32-0x7E)
     for char in PRINTABLE:
         colors[char] = COLOR_WHITE
 
-    # ... other coloring rules here ...
+    # Make ASCII whitespace characters green bold (0x9, 0xA, 0xB, 0xC, 0xD, 0x20)
+    for char in ("\t", "\n", "\11", "\12", "\r", "\20"):
+        colors[char] = COLOR_GREEN
+
     return colors
 
 
@@ -67,7 +86,7 @@ HUMAN_COLORS = human_colors()
 
 
 def _hexdump(
-    data: bytes, palette: Palette | None = None, offset: int = 0, prefix: str = "", pretty: bool = False
+    data: bytes, palette: Palette | None = None, offset: int = 0, prefix: str = "", pretty: bool | None = False
 ) -> Iterator[str]:
     """Hexdump some data.
 
@@ -116,11 +135,11 @@ def _hexdump(
 
                 if active:
                     values += f"{ord(char):02x}"
-                    chars.append(active + print_char + COLOR_NORMAL)
+                    chars.append(active + print_char + COLOR_CLEAR)
                 else:
                     if pretty and (color := HUMAN_COLORS.get(char, "")):
-                        values += f"{color}{ord(char):02x}{COLOR_NORMAL}"
-                        chars.append(color + print_char + COLOR_NORMAL)
+                        values += f"{color}{ord(char):02x}{COLOR_CLEAR}"
+                        chars.append(color + print_char + COLOR_CLEAR)
                     else:
                         values += f"{ord(char):02x}"
                         chars.append(print_char)
@@ -130,10 +149,10 @@ def _hexdump(
                     active = None
 
                     if palette is not None:
-                        values += COLOR_NORMAL
+                        values += COLOR_CLEAR
 
                 if j == 15 and palette is not None:
-                    values += COLOR_NORMAL
+                    values += COLOR_CLEAR
 
             values += " "
             if j == 7:
@@ -149,9 +168,12 @@ def hexdump(
     offset: int = 0,
     prefix: str = "",
     output: str = "print",
-    pretty: bool = False,
+    pretty: bool | None = None,
 ) -> Iterator[str] | str | None:
     """Hexdump some data.
+
+    Uses colored ANSI output with output type "print" by default. Disable with ``pretty=False``
+    or set the environment variable ``NO_COLOR``.
 
     Args:
         data: Bytes to hexdump.
@@ -161,7 +183,11 @@ def hexdump(
         output: Output format, can be 'print', 'generator' or 'string'.
         pretty: Use pretty colors for improved human readability.
     """
-    generator = _hexdump(data, palette, offset, prefix, pretty)
+    _pretty = (
+        True if output == "print" and not palette and pretty is not False and not os.environ.get("NO_COLOR") else pretty
+    )
+
+    generator = _hexdump(data, palette, offset, prefix, _pretty)
     if output == "print":
         print("\n".join(generator))
         return None

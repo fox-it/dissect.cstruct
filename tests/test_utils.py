@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 def test_hexdump(capsys: pytest.CaptureFixture) -> None:
-    utils.hexdump(b"\x00" * 16)
+    utils.hexdump(b"\x00" * 16, pretty=False)
     captured = capsys.readouterr()
     assert captured.out == "00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00   ................\n"
 
@@ -32,24 +32,45 @@ def test_hexdump(capsys: pytest.CaptureFixture) -> None:
 
 def test_hexdump_pretty(capsys: pytest.CaptureFixture) -> None:
     """Check if we can create a pretty hexdump."""
-    n = utils.COLOR_NORMAL
-    b = utils.COLOR_BLACK_REG
+    c = utils.COLOR_CLEAR
+    g = utils.COLOR_GREY_REG
     w = utils.COLOR_WHITE
+    y = utils.COLOR_YELLOW_REG
 
     utils.hexdump((b"\x00" * 5) + b"\x01\x02\x03abc" + (b"\x00" * 5), pretty=True)
     captured = capsys.readouterr()
     assert (
         captured.out
         == "00000000  "
-        + (f"{b}00{n} " * 5)
-        + f"01 02 03  {w}61{n} {w}62{n} {w}63{n} "
-        + (f"{b}00{n} " * 5)
+        + (f"{g}00{c} " * 5)
+        + f"{y}01{c} {y}02{c} {y}03{c}  {w}61{c} {w}62{c} {w}63{c} "
+        + (f"{g}00{c} " * 5)
         + "  "
-        + (f"{b}.{n}" * 5)
-        + f"...{w}a{n}{w}b{n}{w}c{n}"
-        + (f"{b}.{n}" * 5)
+        + (f"{g}.{c}" * 5)
+        + f"{y}.{c}{y}.{c}{y}.{c}{w}a{c}{w}b{c}{w}c{c}"
+        + (f"{g}.{c}" * 5)
         + "\n"
     )
+
+
+def test_hexdump_pretty_print_conditions(capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test if we respec the ``NO_COLOR`` environment variable and ``pretty=False`` argument."""
+    # Test regular print output behavior
+    utils.hexdump(b"\x00" * 16)
+    captured = capsys.readouterr()
+    assert captured.out.startswith("00000000  \x1b[0;90m00")
+
+    # Test explicit disable using NO_COLOR
+    with monkeypatch.context() as m:
+        m.setenv("NO_COLOR", "1")
+        utils.hexdump(b"\x00" * 16)
+        captured = capsys.readouterr()
+        assert captured.out.startswith("00000000  00")
+
+    # Test explicit disable using pretty=False
+    utils.hexdump(b"\x00" * 16, pretty=False)
+    captured = capsys.readouterr()
+    assert captured.out.startswith("00000000  00")
 
 
 def test_dumpstruct(cs: cstruct, capsys: pytest.CaptureFixture, compiled: bool) -> None:
