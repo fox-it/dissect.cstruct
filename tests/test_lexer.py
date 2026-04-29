@@ -30,6 +30,7 @@ from dissect.cstruct.lexer import TokenType, tokenize
         ("0b1010", [TokenType.NUMBER], ["0b1010"]),
         ("0B1100", [TokenType.NUMBER], ["0B1100"]),
         ("0755", [TokenType.NUMBER], ["0o755"]),
+        ("0o777", [TokenType.NUMBER], ["0o777"]),
         ("3.14", [TokenType.NUMBER], ["3.14"]),
         ("1.", [TokenType.NUMBER], ["1."]),
         ("{", [TokenType.LBRACE], ["{"]),
@@ -103,9 +104,6 @@ from dissect.cstruct.lexer import TokenType, tokenize
         ("_my_var", [TokenType.IDENTIFIER], ["_my_var"]),
         ("UINT32", [TokenType.IDENTIFIER], ["UINT32"]),
         ("uint32_t", [TokenType.IDENTIFIER], ["uint32_t"]),
-        # Lookup
-        ("$my_lookup = {1: 'a', 2: 'b'}", [TokenType.LOOKUP], ["$my_lookup = {1: 'a', 2: 'b'}"]),
-        ("$tbl = {\n    1: 'x',\n    2: 'y'\n}", [TokenType.LOOKUP], ["$tbl = {\n    1: 'x',\n    2: 'y'\n}"]),
         # Combination
         (
             "uint32_t bit0:1;",
@@ -148,6 +146,7 @@ def test_token(src: str, types: list[TokenType], values: list[str]) -> None:
     [
         ("0b", "invalid binary literal"),
         ("0x", "invalid hexadecimal literal"),
+        ("0888", "invalid octal literal"),
         ('"unterminated', "unexpected end of input"),
         ("'unterminated", "unexpected end of input"),
         ("#foobar", "unknown preprocessor directive"),

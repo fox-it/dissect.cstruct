@@ -54,7 +54,6 @@ class cstruct:
         self.endian = endian
 
         self.consts = {}
-        self.lookups = {}
         self.includes = []
         # fmt: off
         self.typedefs = {

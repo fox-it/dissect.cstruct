@@ -137,8 +137,6 @@ class CStyleParser(Parser):
         while (token := self._current()).type != TokenType.EOF:
             if token.type == TokenType.PP_FLAGS:
                 self._parse_config_flags()
-            elif token.type == TokenType.LOOKUP:
-                self._parse_lookup()
             elif token.type == TokenType.TYPEDEF:
                 self._parse_typedef()
             elif token.type in (TokenType.STRUCT, TokenType.UNION):
@@ -173,7 +171,7 @@ class CStyleParser(Parser):
         while (token := self._current()).type != TokenType.EOF and token.line == name_token.line:
             parts.append(self._take().value)
 
-        value = " ".join(parts).strip()
+        value = "".join(parts).strip()
         try:
             # Lazy mode, try to evaluate as a Python literal first (for simple constants)
             value = ast.literal_eval(value)
@@ -508,17 +506,3 @@ class CStyleParser(Parser):
                 break
 
         return self.cs.resolve(" ".join(parts))
-
-    # Custom lookup definitions
-
-    def _parse_lookup(self) -> None:
-        """Parse a lookup definition."""
-        value = self._take().value
-
-        # Parse $name = { dict }
-        # Find the name and dict parts
-        dollar_rest = value.lstrip("$")
-        name, _, lookup = dollar_rest.partition("=")
-
-        d = ast.literal_eval(lookup.strip())
-        self.cs.lookups[name.strip()] = {self.cs.consts[k]: v for k, v in d.items()}
