@@ -189,9 +189,6 @@ def test_benchmark_parser(cs: cstruct, benchmark: BenchmarkFixture) -> None:
     def parse(parser: CStyleParser, tokens: list[Token]) -> None:
         parser.reset()
         parser._tokens = tokens
-        tokens = parser._preprocess()
-        parser.reset()
-        parser._tokens = tokens
         parser._parse()
 
     benchmark(lambda: parse(parser, tokens))

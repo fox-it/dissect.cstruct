@@ -199,6 +199,21 @@ def test_typedef_pointer(cs: cstruct) -> None:
     assert cs.PIMAGE_DATA_DIRECTORY.type == cs._IMAGE_DATA_DIRECTORY
 
 
+def test_typedef_enum(cs: cstruct) -> None:
+    cdef = """
+    typedef enum {
+        VAL1 = 1,
+        VAL2 = 2,
+        VAL3 = 4
+    } test_enum;
+    """
+    cs.load(cdef)
+
+    assert cs.test_enum.VAL1 == 1
+    assert cs.test_enum.VAL2 == 2
+    assert cs.test_enum.VAL3 == 4
+
+
 def test_define(cs: cstruct) -> None:
     cdef = """
     #define MY_CONST 42
@@ -217,6 +232,23 @@ def test_define(cs: cstruct) -> None:
     # We don't evaluate function-like macros yet, so they should be stored as their raw string representation
     assert cs.consts["MY_FUNC"] == "(x)(x==0)"
     assert cs.consts["MY_TERNARY"] == "(x)(x?1:0)"
+
+
+def test_define_flag_value(cs: cstruct) -> None:
+    cdef = """
+    flag test {
+        VAL1 = 1,
+        VAL2 = 2,
+        VAL3 = 4
+    };
+
+    #define FLAG_VAL1 test.VAL1
+    #define FLAG_VAL3 test.VAL1 | test.VAL2
+    """
+    cs.load(cdef)
+
+    assert cs.consts["FLAG_VAL1"] == 1
+    assert cs.consts["FLAG_VAL3"] == 3
 
 
 def test_undef(cs: cstruct) -> None:
@@ -393,3 +425,102 @@ def test_config_flags(cs: cstruct) -> None:
     parser.parse(cdef)
 
     assert parser._flags == ["a", "b", "c"]
+
+
+def test_preprocessor_in_struct_body(cs: cstruct) -> None:
+    """Test #define, #ifdef, #ifndef, #else, and #undef inside struct bodies."""
+    cdef = """
+    struct test {
+        #define VERSION 2
+
+        uint32 always_present;
+
+        #ifdef VERSION
+        uint16 version;
+        #endif
+
+        #ifndef EXTRA
+        uint8 basic;
+        #else
+        uint32 extra;
+        #endif
+
+        #define EXTRA
+        #ifdef EXTRA
+        uint64 bonus;
+        #endif
+
+        #undef EXTRA
+        #ifdef EXTRA
+        uint32 should_not_exist;
+        #endif
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.consts["VERSION"] == 2
+    assert "always_present" in cs.test.fields
+    assert "version" in cs.test.fields
+    assert "basic" in cs.test.fields
+    assert "extra" not in cs.test.fields
+    assert "bonus" in cs.test.fields
+    assert "should_not_exist" not in cs.test.fields
+
+    assert cs.test.fields["always_present"].type == cs.uint32
+    assert cs.test.fields["version"].type == cs.uint16
+    assert cs.test.fields["basic"].type == cs.uint8
+    assert cs.test.fields["bonus"].type == cs.uint64
+
+
+def test_preprocessor_define_from_enum_in_struct() -> None:
+    """Test #define referencing enum values used for conditional fields and array sizes."""
+    cdef = """
+    enum protocol : uint8 {
+        TCP = 6,
+        UDP = 17
+    };
+
+    #define PROTO protocol.TCP
+    #define HAS_OPTIONS 1
+    #define HEADER_LEN 4
+
+    struct packet {
+        uint8 type;
+
+        #ifdef HAS_OPTIONS
+        uint32 options[HEADER_LEN];
+
+        enum flags : uint16 {
+            SYN = 1,
+            ACK = 2,
+            FIN = 4
+        };
+
+        #define FLAG_SYNACK flags.SYN | flags.ACK
+
+        #ifndef NO_PAYLOAD
+        #ifdef HAS_OPTIONS
+        uint8 payload[20];
+        #else
+        uint8 payload[4];
+        #endif
+        #endif
+
+        #endif
+
+        uint16 checksum;
+    };
+    """
+    cs = cstruct()
+    cs.load(cdef)
+
+    assert cs.consts["PROTO"] == 6
+    assert cs.consts["FLAG_SYNACK"] == 3
+
+    assert "type" in cs.packet.fields
+    assert "options" in cs.packet.fields
+    assert "payload" in cs.packet.fields
+    assert "checksum" in cs.packet.fields
+
+    assert cs.packet.fields["options"].type.num_entries == 4
+    assert cs.packet.fields["payload"].type.num_entries == 20

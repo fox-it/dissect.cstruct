@@ -100,8 +100,6 @@ _C_KEYWORDS = {
     "typedef": TokenType.TYPEDEF,
 }
 
-_IDENTIFIER_TYPES = set(_C_KEYWORDS.values()) | {TokenType.IDENTIFIER}
-
 _SINGLE_CHARS = {
     "{": TokenType.LBRACE,
     "}": TokenType.RBRACE,
@@ -125,8 +123,10 @@ _SINGLE_CHARS = {
     "~": TokenType.TILDE,
 }
 
-_RE_IDENTIFIER = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*")
+_RE_IDENTIFIER = re.compile(r"[a-zA-Z_.][a-zA-Z0-9_.]*")
 _RE_WHITESPACE = re.compile(r"[ \t\r\n]+")
+
+IDENTIFIER_TYPES = set(_C_KEYWORDS.values()) | {TokenType.IDENTIFIER}
 
 
 def tokenize(data: str) -> list[Token]:
