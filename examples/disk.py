@@ -1,6 +1,17 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["dissect.cstruct"]
+# ///
+from __future__ import annotations
+
 import sys
+from pathlib import Path
+from typing import TYPE_CHECKING, BinaryIO
 
 from dissect.cstruct import cstruct, dumpstruct
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 disk_def = """
 #define MAX_MBR_CODE_SIZE 0x1b6
@@ -83,7 +94,7 @@ SECTOR_SIZE = 512
 
 
 class Partition:
-    def __init__(self, disk, offset, size, vtype, name, guid=None):
+    def __init__(self, disk: BinaryIO, offset: int, size: int, vtype: int, name: str, guid: str | None = None):
         self.disk = disk
         self.offset = offset
         self.size = size
@@ -95,56 +106,55 @@ class Partition:
         return f"<Partition offset=0x{self.offset:x} size=0x{self.size:x} type={self.type} name={self.name}>"
 
 
-def partitions(fh_part, mbr_part, offset):
-    for mbr_p in mbr_part.part:
+def partitions(fh: BinaryIO, mbr: c_disk.mbr, offset: int) -> Iterator[Partition]:
+    for mbr_p in mbr.part:
         part_offset = offset + mbr_p.sector_ofs * SECTOR_SIZE
 
         if mbr_p.type == 0x00:
             continue
 
         if mbr_p.type == 0x05:
-            fh_part.seek(part_offset)
-            e_mbr = c_disk.mbr(fh_part)
-            for y_part in partitions(fh_part, e_mbr, part_offset):
-                yield y_part
+            fh.seek(part_offset)
+            e_mbr = c_disk.mbr(fh)
+            yield from partitions(fh, e_mbr, part_offset)
 
-        yield Partition(fh_part, part_offset, mbr_p.sector_size * SECTOR_SIZE, mbr_p.type, None)
+        yield Partition(fh, part_offset, mbr_p.sector_size * SECTOR_SIZE, mbr_p.type, None)
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         sys.exit("usage: disk.py <disk or image>")
 
-    fh = open(sys.argv[1], "rb")
-    mbr = c_disk.mbr(fh)
+    with Path(sys.argv[1]).open("rb") as fh:
+        mbr = c_disk.mbr(fh)
 
-    if mbr.bootsig != 0xAA55:
-        sys.exit("Not a valid MBR")
+        if mbr.bootsig != 0xAA55:
+            sys.exit("Not a valid MBR")
 
-    dumpstruct(mbr)
+        dumpstruct(mbr)
 
-    for p in partitions(fh, mbr, 0):
-        if p.type == 0xEE:
-            fh.seek(p.offset)
-            gpt = c_disk.GPT_HEADER(fh)
-            dumpstruct(gpt)
+        for p in partitions(fh, mbr, 0):
+            if p.type == 0xEE:
+                fh.seek(p.offset)
+                gpt = c_disk.GPT_HEADER(fh)
+                dumpstruct(gpt)
 
-            fh.seek(gpt.lba_partition_array * SECTOR_SIZE)
-            for _ in range(gpt.partition_table_count):
-                p = c_disk.GPT_PARTITION(fh)
-                if p.first_lba == 0:
-                    break
+                fh.seek(gpt.lba_partition_array * SECTOR_SIZE)
+                for _ in range(gpt.partition_table_count):
+                    p = c_disk.GPT_PARTITION(fh)
+                    if p.first_lba == 0:
+                        break
 
-                part = Partition(
-                    fh,
-                    p.first_lba * SECTOR_SIZE,
-                    (p.last_lba - p.first_lba) * SECTOR_SIZE,
-                    p.type_guid,
-                    p.name.rstrip("\x00"),
-                    guid=p.partition_guid,
-                )
-                print(part)
+                    part = Partition(
+                        fh,
+                        p.first_lba * SECTOR_SIZE,
+                        (p.last_lba - p.first_lba) * SECTOR_SIZE,
+                        p.type_guid,
+                        p.name.rstrip("\x00"),
+                        guid=p.partition_guid,
+                    )
+                    print(part)
 
-            continue
+                continue
 
-        print(p)
+            print(p)

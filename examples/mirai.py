@@ -1,8 +1,13 @@
-#!/usr/bin/env python
-from dissect.cstruct import cstruct, dumpstruct
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["dissect.cstruct"]
+# ///
+from __future__ import annotations
 
 import socket
 import struct
+
+from dissect.cstruct import cstruct, dumpstruct
 
 protocol = cstruct()
 

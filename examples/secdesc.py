@@ -1,8 +1,13 @@
-#!/usr/bin/env python
-# flake8: noqa
-import zlib
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["dissect.cstruct"]
+# ///
+from __future__ import annotations
+
 import binascii
+import zlib
 from io import BytesIO
+from typing import BinaryIO
 
 from dissect.cstruct import cstruct
 
@@ -62,7 +67,7 @@ c_secd.load(cdef, compiled=True)
 
 
 class SecurityDescriptor:
-    def __init__(self, fh):
+    def __init__(self, fh: BinaryIO):
         self.fh = fh
         self.descriptor = c_secd.SECURITY_DESCRIPTOR(fh)
 
@@ -89,7 +94,7 @@ class SecurityDescriptor:
 
 
 class LdapSid:
-    def __init__(self, fh=None, in_obj=None):
+    def __init__(self, fh: BinaryIO | None = None, in_obj: c_secd.LDAP_SID | None = None):
         if fh:
             self.fh = fh
             self.ldap_sid = c_secd.LDAP_SID(fh)
@@ -101,19 +106,20 @@ class LdapSid:
         sub_authority = "-".join(f"{v}" for v in self.ldap_sid.SubAuthority)
         return f"S-{self.ldap_sid.Revision}-{authority}-{sub_authority}"
 
+
 class ACL:
-    def __init__(self, fh):
+    def __init__(self, fh: BinaryIO):
         self.fh = fh
         self.acl = c_secd.ACL(fh)
         self.aces = []
 
         buf = BytesIO(self.acl.Data)
-        for i in range(self.acl.AceCount):
+        for _ in range(self.acl.AceCount):
             self.aces.append(ACE(buf))
 
 
 class ACCESS_ALLOWED_ACE:
-    def __init__(self, fh):
+    def __init__(self, fh: BinaryIO):
         self.fh = fh
         self.data = c_secd.ACCESS_ALLOWED_ACE(fh)
         self.sid = LdapSid(in_obj=self.data.Sid)
@@ -138,7 +144,7 @@ class ACCESS_ALLOWED_OBJECT_ACE:
     ADS_RIGHT_DS_WRITE_PROP = 0x00000020
     ADS_RIGHT_DS_SELF = 0x00000008
 
-    def __init__(self, fh):
+    def __init__(self, fh: BinaryIO):
         self.fh = fh
         self.data = c_secd.ACCESS_ALLOWED_OBJECT_ACE(fh)
         self.sid = LdapSid(in_obj=self.data.Sid)
@@ -149,10 +155,7 @@ class ACCESS_DENIED_OBJECT_ACE(ACCESS_ALLOWED_OBJECT_ACE):
 
 
 class ACCESS_MASK:
-    """
-    ACCESS_MASK as described in 2.4.3
-    https://msdn.microsoft.com/en-us/library/cc230294.aspx
-    """
+    """ACCESS_MASK as described in 2.4.3 https://msdn.microsoft.com/en-us/library/cc230294.aspx."""
 
     # Flag constants
     GENERIC_READ = 0x80000000
@@ -167,16 +170,16 @@ class ACCESS_MASK:
     READ_CONTROL = 0x00020000
     DELETE = 0x00010000
 
-    def __init__(self, mask):
+    def __init__(self, mask: int):
         self.mask = mask
 
-    def has_priv(self, priv):
+    def has_priv(self, priv: int) -> bool:
         return (self.mask & priv) == priv
 
-    def set_priv(self, priv):
+    def set_priv(self, priv: int) -> None:
         self.mask |= priv
 
-    def remove_priv(self, priv):
+    def remove_priv(self, priv: int) -> None:
         self.mask ^= priv
 
 
@@ -189,7 +192,7 @@ class ACE:
     OBJECT_INHERIT_ACE = 0x01
     SUCCESSFUL_ACCESS_ACE_FLAG = 0x04
 
-    def __init__(self, fh):
+    def __init__(self, fh: BinaryIO):
         self.fh = fh
         self.ace = c_secd.ACE(fh)
         self.acedata = None
@@ -206,13 +209,11 @@ class ACE:
         elif self.ace.AceType == 0x06:
             # ACCESS_DENIED_OBJECT_ACE
             self.acedata = ACCESS_DENIED_OBJECT_ACE(buf)
-        # else:
-        #     print 'Unsupported type %d' % self.ace.AceType
 
         if self.acedata:
             self.mask = ACCESS_MASK(self.acedata.data.Mask)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return repr(self.ace)
 
 
@@ -261,13 +262,13 @@ if __name__ == "__main__":
 
     sc = SecurityDescriptor(d)
 
-    # print sc.descriptor
-    # print sc.owner_sid
-    # print sc.group_sid
-    # print sc.sacl.acl
-    # print sc.sacl.aces
-    # print sc.dacl.acl
-    # print sc.dacl.aces
+    # print(sc.descriptor)
+    # print(sc.owner_sid)
+    # print(sc.group_sid)
+    # print(sc.sacl.acl)
+    # print(sc.sacl.aces)
+    # print(sc.dacl.acl)
+    # print(sc.dacl.aces)
 
     for i in sc.dacl.aces:
         if i.ace.AceType == 0x05:
