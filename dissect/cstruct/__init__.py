@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.cstruct import cstruct, ctypes, ctypes_type
+from dissect.cstruct.dump import dumpstruct, hexdump
 from dissect.cstruct.exception import (
     Error,
     NullPointerDereference,
@@ -29,8 +30,6 @@ from dissect.cstruct.types import (
     WcharArray,
 )
 from dissect.cstruct.util import (
-    dumpstruct,
-    hexdump,
     p8,
     p16,
     p32,

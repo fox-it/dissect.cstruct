@@ -9,8 +9,7 @@ import pytest
 from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.structure import Field, Union, UnionProxy
-
-from .utils import verify_compiled
+from tests.util import verify_compiled
 
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct

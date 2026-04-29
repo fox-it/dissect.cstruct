@@ -7,8 +7,7 @@ import pytest
 from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exception import NullPointerDereference
 from dissect.cstruct.types.pointer import Pointer
-
-from .utils import verify_compiled
+from tests.util import verify_compiled
 
 
 def test_pointer(cs: cstruct) -> None:

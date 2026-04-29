@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from .utils import verify_compiled
+from tests.util import verify_compiled
 
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
