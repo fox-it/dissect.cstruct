@@ -167,8 +167,32 @@ def test_expression(cs_with_consts: cstruct, expression: str, answer: int) -> No
         pytest.param(
             "sizeof(0 +)",
             ResolveError,
-            "Unknown type 0 +",
+            "Unknown type 0 \\+",
             id="invalid-sizeof-expression",
+        ),
+        pytest.param(
+            "UNKNOWN",
+            ExpressionParserError,
+            "Unknown identifier: 'UNKNOWN'",
+            id="unknown-identifier",
+        ),
+        pytest.param(
+            "UNKNOWN.UNKNOWN",
+            ExpressionParserError,
+            "Unknown identifier: 'UNKNOWN.UNKNOWN'",
+            id="unknown-identifier",
+        ),
+        pytest.param(
+            "1 2",
+            ExpressionParserError,
+            "Invalid expression: too many operands",
+            id="too-many-operands",
+        ),
+        pytest.param(
+            "1 + + 2",
+            ExpressionParserError,
+            "Invalid expression: not enough operands",
+            id="double-binary-operator",
         ),
     ],
 )
@@ -210,3 +234,38 @@ def test_offsetof(cs: cstruct) -> None:
     assert Expression("offsetof(test, b)").evaluate(cs) == 4
     assert Expression("offsetof(test, c)").evaluate(cs) == 12
     assert Expression("offsetof(test, d)").evaluate(cs) == 14
+
+
+def test_dotted_identifier(cs: cstruct) -> None:
+    """Test dotted member access in expressions."""
+    cs.load("""
+    enum color : uint8 {
+        RED = 1,
+        GREEN = 2,
+        BLUE = 4
+    };
+    """)
+
+    assert Expression("color.RED").evaluate(cs) == 1
+    assert Expression("color.RED | color.BLUE").evaluate(cs) == 5
+    assert Expression("color.GREEN + 10").evaluate(cs) == 12
+
+
+def test_dotted_identifier_unknown_member(cs: cstruct) -> None:
+    """Test error when a member in a dotted expression doesn't exist."""
+    cs.load("""
+    enum color : uint8 {
+        RED = 1
+    };
+    """)
+
+    with pytest.raises(ExpressionParserError, match="Unknown identifier: 'color\\.NOTAMEMBER'"):
+        Expression("color.NOTAMEMBER").evaluate(cs)
+
+
+def test_dotted_identifier_not_integer(cs: cstruct) -> None:
+    """Test error when a dotted expression resolves to a non-integer."""
+    cs.consts["mydict"] = {"nested": "hello"}
+
+    with pytest.raises(ExpressionParserError, match="does not resolve to an integer"):
+        Expression("mydict.nested").evaluate(cs)

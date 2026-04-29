@@ -11,7 +11,7 @@ from dissect.cstruct.exceptions import (
     ParserError,
 )
 from dissect.cstruct.expression import Expression
-from dissect.cstruct.lexer import _IDENTIFIER_TYPES, TokenCursor, TokenType, tokenize
+from dissect.cstruct.lexer import IDENTIFIER_TYPES, TokenCursor, TokenType, tokenize
 from dissect.cstruct.types import BaseArray, BaseType, Field, Structure
 
 if TYPE_CHECKING:
@@ -74,12 +74,7 @@ class CStyleParser(Parser):
 
         data = _join_line_continuations(data)
 
-        # Tokenize and preprocess the input, then parse top-level definitions
         self._reset_tokens(tokenize(data))
-        preprocessed_tokens = self._preprocess()
-        self.reset()
-
-        self._reset_tokens(preprocessed_tokens)
         self._parse()
 
     def _match(self, *types: TokenType) -> Token | None:
@@ -95,46 +90,41 @@ class CStyleParser(Parser):
     def _error(self, msg: str, *, token: Token | None = None) -> ParserError:
         return ParserError(f"line {(token if token is not None else self._tokens[self._pos]).line}: {msg}")
 
-    def _preprocess(self) -> list[Token]:
-        """Handle preprocessor directives and return a new list of tokens with directives processed."""
-        result = []
+    def _in_false_branch(self) -> bool:
+        """Return whether we're currently in a false conditional branch."""
+        return bool(self._conditional_stack) and not self._conditional_stack[-1][1]
 
-        while self._tokens[self._pos].type != TokenType.EOF:
-            token = self._tokens[self._pos]
+    def _handle_preprocessor(self) -> bool:
+        """Handle preprocessor directives.
 
-            # Always handle conditional directives first (even in false branches)
-            if token.type in (TokenType.PP_IFDEF, TokenType.PP_IFNDEF, TokenType.PP_ELSE, TokenType.PP_ENDIF):
-                self._handle_conditional()
-                continue
+        Returns ``True`` if a directive was processed, indicating the caller should continue its loop.
+        """
+        token = self._current()
 
-            # If we're in a false conditional branch, skip this token
-            if self._conditional_stack and not self._conditional_stack[-1][1]:
-                self._pos += 1
-                continue
+        if token.type in (TokenType.PP_IFDEF, TokenType.PP_IFNDEF, TokenType.PP_ELSE, TokenType.PP_ENDIF):
+            self._handle_conditional()
+            return True
 
-            if token.type == TokenType.PP_DEFINE:
-                self._parse_define()
-            elif token.type == TokenType.PP_UNDEF:
-                self._parse_undef()
-            elif token.type == TokenType.PP_INCLUDE:
-                self._parse_include()
-            else:
-                # Not a preprocessor directive, just add it to the result
-                result.append(token)
-                self._pos += 1
+        if token.type == TokenType.PP_DEFINE:
+            self._parse_define()
+            return True
 
-        # Append EOF token
-        result.append(self._tokens[self._pos])
-        self._pos += 1
+        if token.type == TokenType.PP_UNDEF:
+            self._parse_undef()
+            return True
 
-        if self._conditional_stack:
-            raise self._error("unclosed conditional statement", token=self._conditional_stack[-1][0])
+        if token.type == TokenType.PP_INCLUDE:
+            self._parse_include()
+            return True
 
-        return result
+        return False
 
     def _parse(self) -> None:
         """Parse top-level definitions from the token stream."""
         while (token := self._current()).type != TokenType.EOF:
+            if self._handle_preprocessor():
+                continue
+
             if token.type == TokenType.PP_FLAGS:
                 self._parse_config_flags()
             elif token.type == TokenType.TYPEDEF:
@@ -157,6 +147,9 @@ class CStyleParser(Parser):
                 self._expect(TokenType.SEMICOLON)
             else:
                 raise self._error(f"unexpected token {token.value!r}")
+
+        if self._conditional_stack:
+            raise self._error("unclosed conditional statement", token=self._conditional_stack[-1][0])
 
     # Preprocessor directives
 
@@ -245,6 +238,34 @@ class CStyleParser(Parser):
             if not self._conditional_stack:
                 raise self._error("#endif without matching #ifdef/#ifndef", token=token)
             self._conditional_stack.pop()
+
+        # If we ended up in a false branch, skip ahead to the matching #else/#endif
+        if self._in_false_branch():
+            self._skip_false_branch()
+
+    def _skip_false_branch(self) -> None:
+        """Skip all tokens in a false conditional branch until the matching ``#else`` or ``#endif``."""
+        depth = 0
+        while self._current().type != TokenType.EOF:
+            token_type = self._current().type
+
+            if token_type in (TokenType.PP_IFDEF, TokenType.PP_IFNDEF):
+                depth += 1
+                self._pos += 1
+                # Skip the identifier argument
+                if self._current().type != TokenType.EOF:
+                    self._pos += 1
+            elif token_type == TokenType.PP_ENDIF:
+                if depth == 0:
+                    return
+                depth -= 1
+                self._pos += 1
+            elif token_type == TokenType.PP_ELSE:
+                if depth == 0:
+                    return
+                self._pos += 1
+            else:
+                self._pos += 1
 
     # Type definitions
 
@@ -347,6 +368,8 @@ class CStyleParser(Parser):
         values: dict[str, int] = {}
 
         while not self._at(TokenType.RBRACE):
+            if self._handle_preprocessor():
+                continue
             self._assert_not_eof()
 
             member_name = self._expect(TokenType.IDENTIFIER).value
@@ -385,6 +408,8 @@ class CStyleParser(Parser):
         fields: list[Field] = []
 
         while not self._at(TokenType.RBRACE):
+            if self._handle_preprocessor():
+                continue
             self._assert_not_eof()
 
             fields.append(self._parse_field())
@@ -419,7 +444,7 @@ class CStyleParser(Parser):
             type_ = self.cs._make_pointer(type_)
 
         # Field name
-        name = self._expect(*_IDENTIFIER_TYPES).value
+        name = self._expect(*IDENTIFIER_TYPES).value
 
         # Array dimensions
         type_ = self._parse_array_dimensions(type_)

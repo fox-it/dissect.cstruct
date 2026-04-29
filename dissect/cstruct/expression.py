@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from dissect.cstruct.exceptions import ExpressionParserError
-from dissect.cstruct.lexer import _IDENTIFIER_TYPES, Lexer, TokenCursor, TokenType
+from dissect.cstruct.lexer import IDENTIFIER_TYPES, Lexer, TokenCursor, TokenType
 from dissect.cstruct.utils import offsetof, sizeof
 
 if TYPE_CHECKING:
@@ -11,7 +11,6 @@ if TYPE_CHECKING:
 
     from dissect.cstruct import cstruct
     from dissect.cstruct.lexer import Token
-
 
 BINARY_OPERATORS: dict[TokenType, Callable[[int, int], int]] = {
     TokenType.PIPE: lambda a, b: a | b,
@@ -155,15 +154,32 @@ class Expression(TokenCursor):
                 # Evaluate immediately
                 self._evaluate_expression(cs)
 
-            elif token.type in _IDENTIFIER_TYPES:
-                if token.value in context:
-                    self._queue.append(int(context[self._take().value]))
+            elif token.type in IDENTIFIER_TYPES:
+                ident = self._take().value
 
-                elif token.value in cs.consts:
-                    self._queue.append(int(cs.consts[self._take().value]))
+                obj = None
+                for i, part in enumerate(ident.split(".")):
+                    if i == 0:
+                        if part in context:
+                            obj = context[part]
+                        elif part in cs.consts:
+                            obj = cs.consts[part]
+                        elif part in cs.typedefs:
+                            obj = cs.resolve(part)
+                        else:
+                            raise self._error(f"Unknown identifier: '{ident}'", token=token)
+                    else:
+                        if isinstance(obj, dict) and part in obj:
+                            obj = obj[part]
+                        elif hasattr(obj, part):
+                            obj = getattr(obj, part)
+                        else:
+                            raise self._error(f"Unknown identifier: '{ident}'", token=token)
 
-                else:
-                    raise self._error(f"Unknown identifier: '{token.value}'", token=token)
+                try:
+                    self._queue.append(int(obj))
+                except (ValueError, TypeError):
+                    raise self._error(f"Identifier '{ident}' does not resolve to an integer", token=token)
 
             elif token.type == TokenType.LPAREN:
                 if self._previous().type == TokenType.NUMBER:
