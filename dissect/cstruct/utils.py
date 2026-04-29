@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import pprint
 import string
 import sys
@@ -13,15 +14,29 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from typing import Literal
 
-COLOR_RED = "\033[1;31m"
-COLOR_GREEN = "\033[1;32m"
-COLOR_YELLOW = "\033[1;33m"
-COLOR_BLUE = "\033[1;34m"
-COLOR_PURPLE = "\033[1;35m"
-COLOR_CYAN = "\033[1;36m"
-COLOR_WHITE = "\033[1;37m"
-COLOR_NORMAL = "\033[1;0m"
+# Regular ANSI colors
+COLOR_RED = "\033[0;31m"
+COLOR_GREEN = "\033[0;32m"
+COLOR_YELLOW = "\033[0;93m"
+COLOR_BLUE = "\033[0;34m"
+COLOR_PURPLE = "\033[0;35m"
+COLOR_CYAN = "\033[0;36m"
+COLOR_WHITE = "\033[0;37m"
+COLOR_BLACK = "\033[0;30m"
+COLOR_GREY = "\033[0;90m"
 
+# Bold ANSI colors
+COLOR_RED_BOLD = "\033[1;31m"
+COLOR_GREEN_BOLD = "\033[1;32m"
+COLOR_YELLOW_BOLD = "\033[1;33m"
+COLOR_BLUE_BOLD = "\033[1;34m"
+COLOR_PURPLE_BOLD = "\033[1;35m"
+COLOR_CYAN_BOLD = "\033[1;36m"
+COLOR_WHITE_BOLD = "\033[1;37m"
+COLOR_BLACK_BOLD = "\033[1;30m"
+COLOR_GREY_BOLD = "\033[1;90m"
+
+# Background ANSI colors
 COLOR_BG_RED = "\033[1;41m\033[1;37m"
 COLOR_BG_GREEN = "\033[1;42m\033[1;37m"
 COLOR_BG_YELLOW = "\033[1;43m\033[1;37m"
@@ -29,6 +44,10 @@ COLOR_BG_BLUE = "\033[1;44m\033[1;37m"
 COLOR_BG_PURPLE = "\033[1;45m\033[1;37m"
 COLOR_BG_CYAN = "\033[1;46m\033[1;37m"
 COLOR_BG_WHITE = "\033[1;47m\033[1;30m"
+
+# Reset ANSI codes
+COLOR_CLEAR = "\033[0m"
+COLOR_CLEAR_BOLD = "\033[1;0m"
 
 PRINTABLE = string.digits + string.ascii_letters + string.punctuation + " "
 
@@ -44,17 +63,54 @@ ENDIANNESS_MAP: dict[str, Literal["big", "little"]] = {
 Palette = list[tuple[int, str]]
 
 
-def _hexdump(data: bytes, palette: Palette | None = None, offset: int = 0, prefix: str = "") -> Iterator[str]:
+def _human_colors() -> dict[str, str]:
+    """Generates a dictionary of characters with a human-readable ANSI color they should be in a hexdump.
+
+    Coloring logic implementation derived from HexFriend and ImHex.
+    """
+    # Make all characters not in any rules below light green
+    colors = {chr(char): COLOR_GREEN for char in range(256)}
+
+    # Make all ASCII extended characters yellow
+    for char in colors:
+        if ord(char) & 0x80 == 0:
+            colors[char] = COLOR_YELLOW
+
+    # Make null bytes grey
+    colors["\00"] = COLOR_GREY
+
+    # Make printable ASCII characters bold white (0x32-0x7E)
+    for char in PRINTABLE:
+        colors[char] = COLOR_WHITE_BOLD
+
+    # Make ASCII whitespace characters green bold (0x9, 0xA, 0xB, 0xC, 0xD, 0x20)
+    for char in ("\t", "\n", "\11", "\12", "\r", "\20"):
+        colors[char] = COLOR_GREEN_BOLD
+
+    return colors
+
+
+HUMAN_COLORS = _human_colors()
+
+
+def _hexdump(
+    data: bytes, palette: Palette | None = None, offset: int = 0, prefix: str = "", pretty: bool | None = False
+) -> Iterator[str]:
     """Hexdump some data.
 
     Args:
         data: Bytes to hexdump.
+        palette: Colorize the hexdump using this color pattern.
         offset: Byte offset of the hexdump.
         prefix: Optional prefix.
-        palette: Colorize the hexdump using this color pattern.
+        pretty: Use pretty colors, mutual exclusive with palette.
     """
     if palette:
         palette = palette[::-1]
+
+    # only happy little accidents
+    if pretty and palette:
+        raise ValueError("Cannot use argument 'pretty' in combination with 'palette', please pick one")
 
     remaining = 0
     active = None
@@ -87,20 +143,24 @@ def _hexdump(data: bytes, palette: Palette | None = None, offset: int = 0, prefi
 
                 if active:
                     values += f"{ord(char):02x}"
-                    chars.append(active + print_char + COLOR_NORMAL)
+                    chars.append(active + print_char + COLOR_CLEAR_BOLD)
                 else:
-                    values += f"{ord(char):02x}"
-                    chars.append(print_char)
+                    if pretty and (color := HUMAN_COLORS.get(char, "")):
+                        values += f"{color}{ord(char):02x}{COLOR_CLEAR}"
+                        chars.append(color + print_char + COLOR_CLEAR)
+                    else:
+                        values += f"{ord(char):02x}"
+                        chars.append(print_char)
 
                 remaining -= 1
                 if remaining == 0:
                     active = None
 
                     if palette is not None:
-                        values += COLOR_NORMAL
+                        values += COLOR_CLEAR_BOLD
 
                 if j == 15 and palette is not None:
-                    values += COLOR_NORMAL
+                    values += COLOR_CLEAR_BOLD
 
             values += " "
             if j == 7:
@@ -111,9 +171,17 @@ def _hexdump(data: bytes, palette: Palette | None = None, offset: int = 0, prefi
 
 
 def hexdump(
-    data: bytes, palette: Palette | None = None, offset: int = 0, prefix: str = "", output: str = "print"
+    data: bytes,
+    palette: Palette | None = None,
+    offset: int = 0,
+    prefix: str = "",
+    output: str = "print",
+    pretty: bool | None = None,
 ) -> Iterator[str] | str | None:
     """Hexdump some data.
+
+    Uses colored ANSI output with output type "print" by default. Disable with ``pretty=False``
+    or set the environment variable ``NO_COLOR``.
 
     Args:
         data: Bytes to hexdump.
@@ -121,8 +189,18 @@ def hexdump(
         offset: Byte offset of the hexdump.
         prefix: Optional prefix.
         output: Output format, can be 'print', 'generator' or 'string'.
+        pretty: Use pretty colors for improved human readability.
     """
-    generator = _hexdump(data, palette, offset, prefix)
+    # Enable pretty colors by default if ...
+    if (
+        output == "print"  # the output type is set to 'print'
+        and not palette  # no palette is given (structdump only)
+        and pretty is not False  # pretty was not explicitly set to False
+        and not os.environ.get("NO_COLOR")  # and the environment allows colors
+    ):
+        pretty = True
+
+    generator = _hexdump(data, palette, offset, prefix, pretty)
     if output == "print":
         print("\n".join(generator))
         return None
@@ -142,13 +220,13 @@ def _dumpstruct(
 ) -> str | None:
     palette = []
     colors = [
-        (COLOR_RED, COLOR_BG_RED),
-        (COLOR_GREEN, COLOR_BG_GREEN),
-        (COLOR_YELLOW, COLOR_BG_YELLOW),
-        (COLOR_BLUE, COLOR_BG_BLUE),
-        (COLOR_PURPLE, COLOR_BG_PURPLE),
-        (COLOR_CYAN, COLOR_BG_CYAN),
-        (COLOR_WHITE, COLOR_BG_WHITE),
+        (COLOR_RED_BOLD, COLOR_BG_RED),
+        (COLOR_GREEN_BOLD, COLOR_BG_GREEN),
+        (COLOR_YELLOW_BOLD, COLOR_BG_YELLOW),
+        (COLOR_BLUE_BOLD, COLOR_BG_BLUE),
+        (COLOR_PURPLE_BOLD, COLOR_BG_PURPLE),
+        (COLOR_CYAN_BOLD, COLOR_BG_CYAN),
+        (COLOR_WHITE_BOLD, COLOR_BG_WHITE),
     ]
     ci = 0
     out = [f"struct {structure.__class__.__name__}:"]
@@ -172,7 +250,7 @@ def _dumpstruct(
             size = structure.__sizes__[field._name]
             palette.append((size, background))
             ci += 1
-            out.append(f"- {foreground}{field._name}{COLOR_NORMAL}: {value}")
+            out.append(f"- {foreground}{field._name}{COLOR_CLEAR_BOLD}: {value}")
         else:
             out.append(f"- {field._name}: {value}")
 

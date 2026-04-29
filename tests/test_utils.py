@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 def test_hexdump(capsys: pytest.CaptureFixture) -> None:
-    utils.hexdump(b"\x00" * 16)
+    utils.hexdump(b"\x00" * 16, pretty=False)
     captured = capsys.readouterr()
     assert captured.out == "00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00   ................\n"
 
@@ -28,6 +28,49 @@ def test_hexdump(capsys: pytest.CaptureFixture) -> None:
         ValueError, match=re.escape("Invalid output argument: 'str' (should be 'print', 'generator' or 'string').")
     ):
         utils.hexdump("b\x00", output="str")
+
+
+def test_hexdump_pretty(capsys: pytest.CaptureFixture) -> None:
+    """Check if we can create a pretty hexdump."""
+    c = utils.COLOR_CLEAR
+    g = utils.COLOR_GREY
+    w = utils.COLOR_WHITE_BOLD
+    y = utils.COLOR_YELLOW
+
+    utils.hexdump((b"\x00" * 5) + b"\x01\x02\x03abc" + (b"\x00" * 5), pretty=True)
+    captured = capsys.readouterr()
+    assert (
+        captured.out
+        == "00000000  "
+        + (f"{g}00{c} " * 5)
+        + f"{y}01{c} {y}02{c} {y}03{c}  {w}61{c} {w}62{c} {w}63{c} "
+        + (f"{g}00{c} " * 5)
+        + "  "
+        + (f"{g}.{c}" * 5)
+        + f"{y}.{c}{y}.{c}{y}.{c}{w}a{c}{w}b{c}{w}c{c}"
+        + (f"{g}.{c}" * 5)
+        + "\n"
+    )
+
+
+def test_hexdump_pretty_print_conditions(capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test if we respec the ``NO_COLOR`` environment variable and ``pretty=False`` argument."""
+    # Test regular print output behavior
+    utils.hexdump(b"\x00" * 16)
+    captured = capsys.readouterr()
+    assert captured.out.startswith("00000000  \x1b[0;90m00")
+
+    # Test explicit disable using NO_COLOR
+    with monkeypatch.context() as m:
+        m.setenv("NO_COLOR", "1")
+        utils.hexdump(b"\x00" * 16)
+        captured = capsys.readouterr()
+        assert captured.out.startswith("00000000  00")
+
+    # Test explicit disable using pretty=False
+    utils.hexdump(b"\x00" * 16, pretty=False)
+    captured = capsys.readouterr()
+    assert captured.out.startswith("00000000  00")
 
 
 def test_dumpstruct(cs: cstruct, capsys: pytest.CaptureFixture, compiled: bool) -> None:
