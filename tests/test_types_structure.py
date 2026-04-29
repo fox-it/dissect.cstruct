@@ -14,8 +14,7 @@ from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.pointer import Pointer
 from dissect.cstruct.types.structure import Field, Structure, StructureMetaType
-
-from .utils import verify_compiled
+from tests.util import verify_compiled
 
 
 @pytest.fixture

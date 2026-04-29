@@ -7,8 +7,7 @@ import pytest
 
 from dissect.cstruct.exception import ArraySizeError
 from dissect.cstruct.types.base import BaseArray, BaseType
-
-from .utils import verify_compiled
+from tests.util import verify_compiled
 
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import Endianness, cstruct
