@@ -55,7 +55,7 @@ ENDIANNESS_MAP: dict[str, Literal["big", "little"]] = {
 Palette = list[tuple[int, str]]
 
 
-def human_colors() -> dict[str, str]:
+def _human_colors() -> dict[str, str]:
     """Generates a dictionary of characters with a human-readable ANSI color they should be in a hexdump.
 
     Coloring logic implementation derived from HexFriend and ImHex.
@@ -82,7 +82,7 @@ def human_colors() -> dict[str, str]:
     return colors
 
 
-HUMAN_COLORS = human_colors()
+HUMAN_COLORS = _human_colors()
 
 
 def _hexdump(
