@@ -14,21 +14,27 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from typing import Literal
 
-# Bold ANSI colors
-COLOR_RED = "\033[1;31m"
-COLOR_GREEN = "\033[1;32m"
-COLOR_YELLOW = "\033[1;33m"
-COLOR_BLUE = "\033[1;34m"
-COLOR_PURPLE = "\033[1;35m"
-COLOR_CYAN = "\033[1;36m"
-COLOR_WHITE = "\033[1;37m"
-COLOR_NORMAL = "\033[1;0m"
-
 # Regular ANSI colors
-COLOR_BLACK_REG = "\033[0;30m"
-COLOR_GREY_REG = "\033[0;90m"
-COLOR_GREEN_REG = "\033[0;32m"
-COLOR_YELLOW_REG = "\033[0;93m"
+COLOR_RED = ""
+COLOR_GREEN = "\033[0;32m"
+COLOR_YELLOW = "\033[0;93m"
+COLOR_BLUE = "\033[0;34m"
+COLOR_PURPLE = "\033[0;35m"
+COLOR_CYAN = "\033[0;36m"
+COLOR_WHITE = "\033[0;37m"
+COLOR_BLACK = "\033[0;30m"
+COLOR_GREY = "\033[0;90m"
+
+# Bold ANSI colors
+COLOR_RED_BOLD = "\033[1;31m"
+COLOR_GREEN_BOLD = "\033[1;32m"
+COLOR_YELLOW_BOLD = "\033[1;33m"
+COLOR_BLUE_BOLD = "\033[1;34m"
+COLOR_PURPLE_BOLD = "\033[1;35m"
+COLOR_CYAN_BOLD = "\033[1;36m"
+COLOR_WHITE_BOLD = "\033[1;37m"
+COLOR_BLACK_BOLD = "\033[1;30m"
+COLOR_GREY_BOLD = "\033[1;90m"
 
 # Background ANSI colors
 COLOR_BG_RED = "\033[1;41m\033[1;37m"
@@ -39,7 +45,9 @@ COLOR_BG_PURPLE = "\033[1;45m\033[1;37m"
 COLOR_BG_CYAN = "\033[1;46m\033[1;37m"
 COLOR_BG_WHITE = "\033[1;47m\033[1;30m"
 
+# Reset ANSI codes
 COLOR_CLEAR = "\033[0m"
+COLOR_CLEAR_BOLD = "\033[1;0m"
 
 PRINTABLE = string.digits + string.ascii_letters + string.punctuation + " "
 
@@ -61,23 +69,23 @@ def _human_colors() -> dict[str, str]:
     Coloring logic implementation derived from HexFriend and ImHex.
     """
     # Make all characters not in any rules below light green
-    colors = {chr(char): COLOR_GREEN_REG for char in range(256)}
+    colors = {chr(char): COLOR_GREEN for char in range(256)}
 
     # Make all ASCII extended characters yellow
     for char in colors:
         if ord(char) & 0x80 == 0:
-            colors[char] = COLOR_YELLOW_REG
+            colors[char] = COLOR_YELLOW
 
     # Make null bytes grey
-    colors["\00"] = COLOR_GREY_REG
+    colors["\00"] = COLOR_GREY
 
     # Make printable ASCII characters bold white (0x32-0x7E)
     for char in PRINTABLE:
-        colors[char] = COLOR_WHITE
+        colors[char] = COLOR_WHITE_BOLD
 
     # Make ASCII whitespace characters green bold (0x9, 0xA, 0xB, 0xC, 0xD, 0x20)
     for char in ("\t", "\n", "\11", "\12", "\r", "\20"):
-        colors[char] = COLOR_GREEN
+        colors[char] = COLOR_GREEN_BOLD
 
     return colors
 
@@ -135,7 +143,7 @@ def _hexdump(
 
                 if active:
                     values += f"{ord(char):02x}"
-                    chars.append(active + print_char + COLOR_CLEAR)
+                    chars.append(active + print_char + COLOR_CLEAR_BOLD)
                 else:
                     if pretty and (color := HUMAN_COLORS.get(char, "")):
                         values += f"{color}{ord(char):02x}{COLOR_CLEAR}"
@@ -149,10 +157,10 @@ def _hexdump(
                     active = None
 
                     if palette is not None:
-                        values += COLOR_CLEAR
+                        values += COLOR_CLEAR_BOLD
 
                 if j == 15 and palette is not None:
-                    values += COLOR_CLEAR
+                    values += COLOR_CLEAR_BOLD
 
             values += " "
             if j == 7:
@@ -207,13 +215,13 @@ def _dumpstruct(
 ) -> str | None:
     palette = []
     colors = [
-        (COLOR_RED, COLOR_BG_RED),
-        (COLOR_GREEN, COLOR_BG_GREEN),
-        (COLOR_YELLOW, COLOR_BG_YELLOW),
-        (COLOR_BLUE, COLOR_BG_BLUE),
-        (COLOR_PURPLE, COLOR_BG_PURPLE),
-        (COLOR_CYAN, COLOR_BG_CYAN),
-        (COLOR_WHITE, COLOR_BG_WHITE),
+        (COLOR_RED_BOLD, COLOR_BG_RED),
+        (COLOR_GREEN_BOLD, COLOR_BG_GREEN),
+        (COLOR_YELLOW_BOLD, COLOR_BG_YELLOW),
+        (COLOR_BLUE_BOLD, COLOR_BG_BLUE),
+        (COLOR_PURPLE_BOLD, COLOR_BG_PURPLE),
+        (COLOR_CYAN_BOLD, COLOR_BG_CYAN),
+        (COLOR_WHITE_BOLD, COLOR_BG_WHITE),
     ]
     ci = 0
     out = [f"struct {structure.__class__.__name__}:"]
@@ -237,7 +245,7 @@ def _dumpstruct(
             size = structure.__sizes__[field._name]
             palette.append((size, background))
             ci += 1
-            out.append(f"- {foreground}{field._name}{COLOR_NORMAL}: {value}")
+            out.append(f"- {foreground}{field._name}{COLOR_CLEAR_BOLD}: {value}")
         else:
             out.append(f"- {field._name}: {value}")
 
