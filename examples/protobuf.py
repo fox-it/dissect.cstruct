@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["dissect.cstruct"]
+# ///
 from __future__ import annotations
 
 from typing import Any, BinaryIO

@@ -5,8 +5,7 @@ import io
 import pytest
 
 from dissect.cstruct.cstruct import cstruct
-
-from .utils import source_lines, verify_compiled
+from tests.util import source_lines, verify_compiled
 
 
 def test_bitfield(cs: cstruct, compiled: bool) -> None:

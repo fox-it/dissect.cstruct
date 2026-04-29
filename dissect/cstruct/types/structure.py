@@ -535,7 +535,8 @@ class Structure(BaseType, metaclass=StructureMetaType):
 
     @property
     def __sizes__(self) -> Mapping[str, int | None]:
-        return ChainMap(self.__class__.__static_sizes__, self.__dynamic_sizes__)
+        # Structures created from values instead of parsed have no dynamic sizes
+        return ChainMap(self.__class__.__static_sizes__, getattr(self, "__dynamic_sizes__", {}))
 
 
 class StructureValuesProxy(MutableMapping):

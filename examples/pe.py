@@ -1,5 +1,11 @@
-#!/usr/bin/env python
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["dissect.cstruct"]
+# ///
+from __future__ import annotations
+
 import sys
+from pathlib import Path
 
 from dissect.cstruct import cstruct, dumpstruct
 
@@ -130,31 +136,30 @@ pestruct = cstruct()
 pestruct.load(PE_DEF)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     if len(sys.argv) != 2:
         sys.exit("usage: pe.py <pe file>")
 
-    fh = open(sys.argv[1], 'rb')
+    with Path(sys.argv[1]).open("rb") as fh:
+        mz = pestruct.IMAGE_DOS_HEADER(fh)
+        if mz.e_magic != 0x5A4D:
+            sys.exit("Invalid PE")
 
-    mz = pestruct.IMAGE_DOS_HEADER(fh)
-    if mz.e_magic != 0x5a4d:
-        sys.exit("Invalid PE")
+        fh.seek(mz.e_lfanew)
+        signature = pestruct.uint32(fh)
+        if signature != 0x4550:
+            sys.exit("Invalid PE")
 
-    fh.seek(mz.e_lfanew)
-    signature = pestruct.uint32(fh)
-    if signature != 0x4550:
-        sys.exit("Invalid PE")
+        file_header = pestruct.IMAGE_FILE_HEADER(fh)
+        if file_header.Machine == 0x8664:
+            optional_header = pestruct.IMAGE_OPTIONAL_HEADER64(fh)
+        else:
+            optional_header = pestruct.IMAGE_OPTIONAL_HEADER(fh)
 
-    file_header = pestruct.IMAGE_FILE_HEADER(fh)
-    if file_header.Machine == 0x8664:
-        optional_header = pestruct.IMAGE_OPTIONAL_HEADER64(fh)
-    else:
-        optional_header = pestruct.IMAGE_OPTIONAL_HEADER(fh)
+        dumpstruct(mz)
+        dumpstruct(file_header)
+        dumpstruct(optional_header)
 
-    dumpstruct(mz)
-    dumpstruct(file_header)
-    dumpstruct(optional_header)
-
-    sections = [pestruct.IMAGE_SECTION_HEADER(fh) for _ in range(file_header.NumberOfSections)]
-    for s in sections:
-        dumpstruct(s)
+        sections = [pestruct.IMAGE_SECTION_HEADER(fh) for _ in range(file_header.NumberOfSections)]
+        for s in sections:
+            dumpstruct(s)
