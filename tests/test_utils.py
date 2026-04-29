@@ -33,9 +33,9 @@ def test_hexdump(capsys: pytest.CaptureFixture) -> None:
 def test_hexdump_pretty(capsys: pytest.CaptureFixture) -> None:
     """Check if we can create a pretty hexdump."""
     c = utils.COLOR_CLEAR
-    g = utils.COLOR_GREY_REG
-    w = utils.COLOR_WHITE
-    y = utils.COLOR_YELLOW_REG
+    g = utils.COLOR_GREY
+    w = utils.COLOR_WHITE_BOLD
+    y = utils.COLOR_YELLOW
 
     utils.hexdump((b"\x00" * 5) + b"\x01\x02\x03abc" + (b"\x00" * 5), pretty=True)
     captured = capsys.readouterr()

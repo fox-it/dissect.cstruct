@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from typing import Literal
 
 # Regular ANSI colors
-COLOR_RED = ""
+COLOR_RED = "\033[0;31m"
 COLOR_GREEN = "\033[0;32m"
 COLOR_YELLOW = "\033[0;93m"
 COLOR_BLUE = "\033[0;34m"
@@ -191,9 +191,14 @@ def hexdump(
         output: Output format, can be 'print', 'generator' or 'string'.
         pretty: Use pretty colors for improved human readability.
     """
-    pretty = (
-        True if output == "print" and not palette and pretty is not False and not os.environ.get("NO_COLOR") else pretty
-    )
+    # Enable pretty colors by default if ...
+    if (
+        output == "print"  # the output type is set to 'print'
+        and not palette  # no palette is given (structdump only)
+        and pretty is not False  # pretty was not explicitly set to False
+        and not os.environ.get("NO_COLOR")  # and the environment allows colors
+    ):
+        pretty = True
 
     generator = _hexdump(data, palette, offset, prefix, pretty)
     if output == "print":
