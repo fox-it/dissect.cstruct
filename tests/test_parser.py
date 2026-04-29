@@ -199,6 +199,26 @@ def test_typedef_pointer(cs: cstruct) -> None:
     assert cs.PIMAGE_DATA_DIRECTORY.type == cs._IMAGE_DATA_DIRECTORY
 
 
+def test_define(cs: cstruct) -> None:
+    cdef = """
+    #define MY_CONST 42
+    #define MY_EXPR (1 + 2 * 3)
+    #define MY_STR "hello"
+    #define MY_BYTES b"world"
+    #define MY_FUNC(x) ( x == 0 )
+    #define MY_TERNARY(x) ( x ? 1 : 0 )
+    """
+    cs.load(cdef)
+
+    assert cs.consts["MY_CONST"] == 42
+    assert cs.consts["MY_EXPR"] == 7
+    assert cs.consts["MY_STR"] == "hello"
+    assert cs.consts["MY_BYTES"] == b"world"
+    # We don't evaluate function-like macros yet, so they should be stored as their raw string representation
+    assert cs.consts["MY_FUNC"] == "(x)(x==0)"
+    assert cs.consts["MY_TERNARY"] == "(x)(x?1:0)"
+
+
 def test_undef(cs: cstruct) -> None:
     cdef = """
     #define MY_CONST 42

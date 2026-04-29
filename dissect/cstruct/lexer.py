@@ -27,6 +27,7 @@ class TokenType(enum.Enum):
     SEMICOLON = ";"
     COMMA = ","
     COLON = ":"
+    QUESTION = "?"
     STAR = "*"
     EQUALS = "="
 
@@ -63,7 +64,6 @@ class TokenType(enum.Enum):
     PP_FLAGS = "PP_FLAGS"
 
     # Special
-    LOOKUP = "LOOKUP"
     EOF = "EOF"
 
 
@@ -112,6 +112,7 @@ _SINGLE_CHARS = {
     ";": TokenType.SEMICOLON,
     ",": TokenType.COMMA,
     ":": TokenType.COLON,
+    "?": TokenType.QUESTION,
     "*": TokenType.STAR,
     "=": TokenType.EQUALS,
     "+": TokenType.PLUS,
@@ -203,7 +204,7 @@ class Lexer:
 
         return result
 
-    def _expect(self, *chars: str) -> None:
+    def _expect(self, *chars: str) -> str:
         """Consume the expected characters or raise an error."""
         if self._current() not in chars:
             actual = "end of input" if self.eof else repr(self._current())
@@ -287,11 +288,11 @@ class Lexer:
         return ""
 
     def _read_number(self) -> str:
-        """Read a numeric literal, supporting decimal, hex (0x), octal (0), binary (0b), and C-style suffixes."""
+        """Read a numeric literal, supporting decimal, hex (0x), octal (0, 0o), binary (0b), and C-style suffixes."""
         start = self._pos
         is_float = False
 
-        if self._current() == "0" and self._peek() in ("x", "X", "b", "B"):
+        if self._current() == "0" and self._peek() in ("x", "X", "b", "B", "o", "O"):
             self._expect("0")  # Consume leading 0
             suffix = self._take().lower()
 
@@ -300,6 +301,9 @@ class Lexer:
 
             if suffix == "b" and not self._read_while("01"):
                 raise self._error("invalid binary literal")
+
+            if suffix == "o" and not self._read_while("01234567"):
+                raise self._error("invalid octal literal")
 
         else:
             # Consume decimal/octal digits
@@ -318,7 +322,9 @@ class Lexer:
             self._read_while("uUlL")
 
             # Convert octal: leading 0 without 0x/0b → insert 'o'
-            if len(raw) > 1 and raw[0] == "0" and raw[1].lower() not in ("x", "b"):
+            if len(raw) > 1 and raw[0] == "0" and raw[1].lower() not in ("x", "b", "o"):
+                if raw[1] not in "01234567":
+                    raise self._error("invalid octal literal")
                 raw = raw[0] + "o" + raw[1:]
 
         return raw
@@ -396,30 +402,6 @@ class Lexer:
 
             self._emit(TokenType.STRING, value, line)
 
-    def _read_lookup(self) -> None:
-        """Read a lookup definition: ``$name = { dict }``."""
-        line = self._line
-        col = self._column
-        start = self._pos
-
-        self._expect("$")  # Consume `$`
-
-        # Read until end of the {...} block
-        brace_depth = 0
-        while not self.eof:
-            ch = self._current()
-            if ch == "{":
-                brace_depth += 1
-            elif ch == "}":
-                brace_depth -= 1
-                if brace_depth == 0:
-                    self._expect("}")  # Consume final `}`
-                    break
-            self._take()
-
-        value = self._get(start, self._pos)
-        self._emit(TokenType.LOOKUP, value.strip(), line, col)
-
     def tokenize(self) -> list[Token]:
         """Tokenize the input data and return a list of tokens."""
         while not self.eof:
@@ -489,10 +471,6 @@ class Lexer:
 
             elif ch in _SINGLE_CHARS:
                 self._emit(_SINGLE_CHARS[ch], self._take(), line, col)
-
-            elif ch == "$":
-                # Custom lookup definition
-                self._read_lookup()
 
             else:
                 raise self._error(f"unexpected character {ch!r}", line=line)

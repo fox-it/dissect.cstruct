@@ -112,9 +112,9 @@ def test_expression(cs_with_consts: cstruct, expression: str, answer: int) -> No
         ),
         pytest.param(
             "$",
-            ExpressionParserError,
-            "Unmatched token: '\\$'",
-            id="invalid-token",
+            LexerError,
+            "unexpected character '\\$'",
+            id="unexpected-character",
         ),
         pytest.param(
             "-",

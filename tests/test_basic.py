@@ -150,16 +150,6 @@ def test_typedef(cs: cstruct) -> None:
     assert cs.resolve("test") == cs.uint32
 
 
-def test_lookups(cs: cstruct, compiled: bool) -> None:
-    cdef = """
-    #define test_1 1
-    #define test_2 2
-    $a = {'test_1': 3, 'test_2': 4}
-    """
-    cs.load(cdef, compiled=compiled)
-    assert cs.lookups["a"] == {1: 3, 2: 4}
-
-
 def test_config_flag_nocompile(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct compiled_global
