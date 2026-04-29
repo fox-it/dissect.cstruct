@@ -191,11 +191,11 @@ def hexdump(
         output: Output format, can be 'print', 'generator' or 'string'.
         pretty: Use pretty colors for improved human readability.
     """
-    _pretty = (
+    pretty = (
         True if output == "print" and not palette and pretty is not False and not os.environ.get("NO_COLOR") else pretty
     )
 
-    generator = _hexdump(data, palette, offset, prefix, _pretty)
+    generator = _hexdump(data, palette, offset, prefix, pretty)
     if output == "print":
         print("\n".join(generator))
         return None
