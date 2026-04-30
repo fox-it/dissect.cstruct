@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import json
 import os
 import pprint
 import string
 import sys
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from dissect.cstruct.types.base import BaseArray
 from dissect.cstruct.types.pointer import Pointer
-from dissect.cstruct.types.structure import Structure
+from dissect.cstruct.types.structure import Structure, Union
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -47,7 +49,6 @@ COLOR_BG_WHITE = "\033[1;47m\033[1;30m"
 
 # Reset ANSI codes
 COLOR_CLEAR = "\033[0m"
-COLOR_CLEAR_BOLD = "\033[1;0m"
 
 PRINTABLE = string.digits + string.ascii_letters + string.punctuation + " "
 
@@ -143,7 +144,7 @@ def _hexdump(
 
                 if active:
                     values += f"{ord(char):02x}"
-                    chars.append(active + print_char + COLOR_CLEAR_BOLD)
+                    chars.append(active + print_char + COLOR_CLEAR)
                 else:
                     if pretty and (color := HUMAN_COLORS.get(char, "")):
                         values += f"{color}{ord(char):02x}{COLOR_CLEAR}"
@@ -157,10 +158,10 @@ def _hexdump(
                     active = None
 
                     if palette is not None:
-                        values += COLOR_CLEAR_BOLD
+                        values += COLOR_CLEAR
 
                 if j == 15 and palette is not None:
-                    values += COLOR_CLEAR_BOLD
+                    values += COLOR_CLEAR
 
             values += " "
             if j == 7:
@@ -211,14 +212,214 @@ def hexdump(
     raise ValueError(f"Invalid output argument: {output!r} (should be 'print', 'generator' or 'string').")
 
 
-def _dumpstruct(
+def _format_value(value: Any) -> str:
+    """Format a structure field value for human-readable display."""
+    if isinstance(value, (str, Pointer, Enum)):
+        return repr(value)
+    if isinstance(value, int):
+        return hex(value)
+    if isinstance(value, list):
+        return pprint.pformat(value)
+    return str(value)
+
+
+def _collect_struct_data(
+    structure: Structure,
+    types: dict[str, list[dict[str, Any]]],
+    prefix: str = "",
+) -> tuple[list[dict[str, Any]], dict[str, int], dict[str, str]]:
+    """Walk structure fields to build type descriptors, sizes, and values in a single pass.
+
+    Note: ``types`` is mutated in place, named sub-structure types encountered
+    during traversal are registered directly into this dict.
+
+    Returns ``(field_descriptors, sizes, values)``.
+    """
+    fields: list[dict[str, Any]] = []
+    sizes: dict[str, int] = {}
+    values: dict[str, str] = {}
+    instance_sizes = structure.__sizes__
+    bitfield_group: dict[str, Any] | None = None
+
+    for field in structure.__class__.__fields__:
+        value = getattr(structure, field._name)
+
+        if field.bits:
+            key = f"{prefix}.{field._name}" if prefix else field._name
+
+            # Type descriptors: group consecutive bitfields into a single entry
+            if field.offset is not None:
+                if bitfield_group is not None:
+                    fields.append(bitfield_group)
+                bitfield_group = {
+                    "type": field.type.__name__,
+                    "bitfields": [],
+                }
+                # Sizes: emit once per bitfield group (keyed by first member)
+                size = instance_sizes.get(field._name)
+                if size is not None:
+                    sizes[key] = size
+
+            if bitfield_group is None:
+                raise ValueError(
+                    f"bitfield {field._name!r} without a preceding storage unit (offset is None but no group started)"
+                )
+
+            bitfield_group["bitfields"].append(
+                {
+                    "name": field._name,
+                    "bits": field.bits,
+                }
+            )
+
+            # Values: individual entry per bitfield
+            values[key] = _format_value(value)
+            continue
+
+        # Flush any pending bitfield group
+        if bitfield_group is not None:
+            fields.append(bitfield_group)
+            bitfield_group = None
+
+        # Unwrap all array levels and resolve type information
+        field_type = field.type
+        counts: list[int | None] = []
+        while issubclass(field_type, BaseArray):
+            counts.append(field_type.num_entries)
+            field_type = field_type.type
+
+        if issubclass(field_type, Union):
+            type_name = "union" if getattr(field_type, "__anonymous__", False) else field_type.__name__
+        elif issubclass(field_type, Structure):
+            type_name = "struct" if getattr(field_type, "__anonymous__", False) else field_type.__name__
+        else:
+            type_name = field_type.__name__
+
+        suffix = "".join(f"[{c if c is not None else ''}]" for c in counts)
+        display_name = f"{field._name}{suffix}" if suffix else field._name
+        key = f"{prefix}.{display_name}" if prefix else display_name
+
+        descriptor: dict[str, Any] = {"name": display_name, "type": type_name}
+
+        if field.name is None and issubclass(field_type, Structure):
+            # Anonymous struct/union: inline child descriptors, promote sizes/values
+            child_fields, child_sizes, child_values = _collect_struct_data(value, types, prefix)
+            descriptor["fields"] = child_fields
+            descriptor["anonymous"] = True
+            sizes.update(child_sizes)
+            values.update(child_values)
+        elif isinstance(value, Structure):
+            # Named struct/union instance: collect container size, recurse for children
+            size = instance_sizes.get(field._name)
+            if size is not None:
+                sizes[key] = size
+            child_fields, child_sizes, child_values = _collect_struct_data(value, types, key)
+            sizes.update(child_sizes)
+            values.update(child_values)
+            if getattr(field_type, "__anonymous__", False):
+                # Anonymous type with named field (e.g. `union { ... } u`): inline descriptors
+                descriptor["fields"] = child_fields
+            elif field_type.__name__ not in types:
+                # Named type: register in types dict
+                types[field_type.__name__] = child_fields
+        elif isinstance(value, list) and value and isinstance(value[0], Structure):
+            # Array of structs: register the element type, keep value as repr
+            size = instance_sizes.get(field._name)
+            if size is not None:
+                sizes[key] = size
+            if field_type.__name__ not in types:
+                child_fields, _, _ = _collect_struct_data(value[0], types)
+                types[field_type.__name__] = child_fields
+            values[key] = _format_value(value)
+        else:
+            # Leaf field (scalars, arrays, etc.)
+            size = instance_sizes.get(field._name)
+            if size is not None:
+                sizes[key] = size
+            values[key] = _format_value(value)
+
+        fields.append(descriptor)
+
+    # Flush trailing bitfield group
+    if bitfield_group is not None:
+        fields.append(bitfield_group)
+
+    return fields, sizes, values
+
+
+def _build_dumpstruct_dict(
     structure: Structure,
     data: bytes,
-    offset: int,
-    color: bool,
-    output: str,
-) -> str | None:
-    palette = []
+) -> dict[str, Any]:
+    """Build a dictionary representation of a structure dump.
+
+    The dictionary has the following shape:
+        - bytes: hex string of raw data
+        - root: name of the root structure type
+        - types: mapping of type names to lists of field descriptors (purely structural)
+        - sizes: mapping of dot-paths to byte sizes
+        - values: mapping of dot-paths to human-readable values
+    """
+    root_name = structure.__class__.__name__
+    types: dict[str, list[dict[str, Any]]] = {}
+    root_fields, sizes, values = _collect_struct_data(structure, types)
+
+    # Put root first, then referenced types
+    ordered_types: dict[str, list[dict[str, Any]]] = {root_name: root_fields}
+    ordered_types.update(types)
+
+    return {
+        "bytes": data.hex(),
+        "root": root_name,
+        "types": ordered_types,
+        "sizes": sizes,
+        "values": values,
+    }
+
+
+def dumpstruct(
+    obj: Structure | type[Structure],
+    data: bytes | None = None,
+    offset: int = 0,
+    color: bool = True,
+    output: str = "print",
+) -> str | dict[str, Any] | None:
+    """Dump a structure or parsed structure instance.
+
+    Prints a colorized hexdump and parsed structure output.
+
+    Args:
+        obj: :class:`~dissect.cstruct.types.structure.Structure` to dump.
+        data: Bytes to parse the :class:`~dissect.cstruct.types.structure.Structure` on,
+            if obj is not a parsed :class:`~dissect.cstruct.types.structure.Structure` already.
+        offset: Byte offset of the hexdump.
+        color: Colorize the output.
+        output: Output format, can be ``print``, ``string``, ``dict`` or ``json``.
+
+    Returns:
+        Formatted string when ``output="string"``, a dict when ``output="dict"``,
+        or ``None`` when ``output="print"``.
+    """
+    if output not in ("print", "string", "dict", "json"):
+        raise ValueError(f"Invalid output argument: {output!r} (should be 'print', 'string', 'dict' or 'json').")
+
+    if isinstance(obj, Structure):
+        data = obj.dumps() if data is None else data
+    elif isinstance(obj, type) and issubclass(obj, Structure) and data is not None:
+        obj = obj(data)
+    else:
+        raise ValueError("Invalid arguments: expected a Structure instance, or a Structure class with data.")
+
+    result = _build_dumpstruct_dict(obj, data)
+
+    if output == "dict":
+        return result
+
+    if output == "json":
+        return json.dumps(result, indent=4)
+
+    # Build palette and field listing from the dict
+    palette = [] if color else None
     colors = [
         (COLOR_RED_BOLD, COLOR_BG_RED),
         (COLOR_GREEN_BOLD, COLOR_BG_GREEN),
@@ -229,30 +430,92 @@ def _dumpstruct(
         (COLOR_WHITE_BOLD, COLOR_BG_WHITE),
     ]
     ci = 0
-    out = [f"struct {structure.__class__.__name__}:"]
-    foreground, background = None, None
-    for field in structure.__class__.__fields__:
-        if getattr(field.type, "anonymous", False):
-            continue
+    out = [f"struct {result['root']}:"]
 
-        value = getattr(structure, field._name)
-        if isinstance(value, (str, Pointer, Enum)):
-            value = repr(value)
-        elif isinstance(value, int):
-            value = hex(value)
-        elif isinstance(value, list):
-            value = pprint.pformat(value)
-            if "\n" in value:
-                value = value.replace("\n", f"\n{' ' * (len(field._name) + 4)}")
+    def _render_fields(
+        field_descs: list[dict[str, Any]],
+        prefix: str = "",
+        indent: int = 0,
+        emit_palette: bool = True,
+    ) -> None:
+        nonlocal ci
+        pad = "  " * indent
 
-        if color:
-            foreground, background = colors[ci % len(colors)]
-            size = structure.__sizes__[field._name]
-            palette.append((size, background))
-            ci += 1
-            out.append(f"- {foreground}{field._name}{COLOR_CLEAR_BOLD}: {value}")
-        else:
-            out.append(f"- {field._name}: {value}")
+        for field_desc in field_descs:
+            # Anonymous structs/unions: flatten children into parent
+            if field_desc.get("anonymous"):
+                _render_fields(field_desc["fields"], prefix, indent, emit_palette)
+                continue
+
+            # Bitfield groups: render each bitfield as a separate line
+            if "bitfields" in field_desc:
+                first = True
+                for bf in field_desc["bitfields"]:
+                    key = f"{prefix}.{bf['name']}" if prefix else bf["name"]
+                    value = result["values"].get(key, "")
+
+                    if color:
+                        foreground, background = colors[ci % len(colors)]
+                        if first and emit_palette:
+                            size = result["sizes"].get(key, 0)
+                            palette.append((size, background))
+                            first = False
+                        ci += 1
+                        out.append(f"{pad}- {foreground}{bf['name']}{COLOR_CLEAR}: {value}")
+                    else:
+                        out.append(f"{pad}- {bf['name']}: {value}")
+                continue
+
+            name = field_desc["name"]
+            key = f"{prefix}.{name}" if prefix else name
+
+            # Named struct/union with inlined fields (anonymous type, named field)
+            if "fields" in field_desc:
+                is_union = field_desc["type"] == "union"
+                if color:
+                    foreground, background = colors[ci % len(colors)]
+                    if emit_palette and is_union:
+                        # Union: one palette entry for the whole container (children overlap)
+                        size = result["sizes"].get(key, 0)
+                        palette.append((size, background))
+                    ci += 1
+                    out.append(f"{pad}- {foreground}{name}{COLOR_CLEAR}:")
+                else:
+                    out.append(f"{pad}- {name}:")
+                # Struct children emit palette (sequential), union children don't (overlapping)
+                _render_fields(field_desc["fields"], key, indent + 1, emit_palette=not is_union)
+                continue
+
+            # Named struct type reference
+            if field_desc["type"] in result["types"]:
+                if color:
+                    foreground, background = colors[ci % len(colors)]
+                    # Struct: skip container palette, children handle their own bytes
+                    ci += 1
+                    out.append(f"{pad}- {foreground}{name}{COLOR_CLEAR}:")
+                else:
+                    out.append(f"{pad}- {name}:")
+                _render_fields(result["types"][field_desc["type"]], key, indent + 1, emit_palette)
+                continue
+
+            # Leaf field
+            value = result["values"].get(key, "")
+
+            # Handle multi-line values with indentation
+            if "\n" in str(value):
+                value = str(value).replace("\n", f"\n{pad}{' ' * (len(name) + 4)}")
+
+            if color:
+                foreground, background = colors[ci % len(colors)]
+                if emit_palette:
+                    size = result["sizes"].get(key, 0)
+                    palette.append((size, background))
+                ci += 1
+                out.append(f"{pad}- {foreground}{name}{COLOR_CLEAR}: {value}")
+            else:
+                out.append(f"{pad}- {name}: {value}")
+
+    _render_fields(result["types"][result["root"]])
 
     out = "\n".join(out)
 
@@ -261,36 +524,9 @@ def _dumpstruct(
         hexdump(data, palette, offset=offset)
         print()
         print(out)
-    elif output == "string":
-        return f"\n{hexdump(data, palette, offset=offset, output='string')}\n\n{out}"
-    return None
+        return None
 
-
-def dumpstruct(
-    obj: Structure | type[Structure],
-    data: bytes | None = None,
-    offset: int = 0,
-    color: bool = True,
-    output: str = "print",
-) -> str | None:
-    """Dump a structure or parsed structure instance.
-
-    Prints a colorized hexdump and parsed structure output.
-
-    Args:
-        obj: Structure to dump.
-        data: Bytes to parse the Structure on, if obj is not a parsed Structure already.
-        offset: Byte offset of the hexdump.
-        output: Output format, can be 'print' or 'string'.
-    """
-    if output not in ("print", "string"):
-        raise ValueError(f"Invalid output argument: {output!r} (should be 'print' or 'string').")
-
-    if isinstance(obj, Structure):
-        return _dumpstruct(obj, obj.dumps(), offset, color, output)
-    if issubclass(obj, Structure) and data is not None:
-        return _dumpstruct(obj(data), data, offset, color, output)
-    raise ValueError("Invalid arguments")
+    return f"\n{hexdump(data, palette, offset=offset, output='string')}\n\n{out}"
 
 
 def pack(value: int, size: int | None = None, endian: str = "little") -> bytes:
