@@ -854,7 +854,7 @@ def test_dumpstruct_coloring(cs: cstruct, compiled: bool) -> None:
     # Extract background+foreground color regions from the hex portion of the hexdump line.
     hexline = lines[1]
     bg_pattern = re.compile(
-        r"(" + "|".join(re.escape(bg) for bg in BG) + r")((?:[0-9a-f]{2}\s*)+)" + re.escape(utils.COLOR_CLEAR_BOLD)
+        r"(" + "|".join(re.escape(bg) for bg in BG) + r")((?:[0-9a-f]{2}\s*)+)" + re.escape(utils.COLOR_CLEAR)
     )
     bg_regions = [(bg, hexbytes.split()) for bg, hexbytes in bg_pattern.findall(hexline)]
 

@@ -49,7 +49,6 @@ COLOR_BG_WHITE = "\033[1;47m\033[1;30m"
 
 # Reset ANSI codes
 COLOR_CLEAR = "\033[0m"
-COLOR_CLEAR_BOLD = "\033[1;0m"
 
 PRINTABLE = string.digits + string.ascii_letters + string.punctuation + " "
 
@@ -145,7 +144,7 @@ def _hexdump(
 
                 if active:
                     values += f"{ord(char):02x}"
-                    chars.append(active + print_char + COLOR_CLEAR_BOLD)
+                    chars.append(active + print_char + COLOR_CLEAR)
                 else:
                     if pretty and (color := HUMAN_COLORS.get(char, "")):
                         values += f"{color}{ord(char):02x}{COLOR_CLEAR}"
@@ -159,10 +158,10 @@ def _hexdump(
                     active = None
 
                     if palette is not None:
-                        values += COLOR_CLEAR_BOLD
+                        values += COLOR_CLEAR
 
                 if j == 15 and palette is not None:
-                    values += COLOR_CLEAR_BOLD
+                    values += COLOR_CLEAR
 
             values += " "
             if j == 7:
