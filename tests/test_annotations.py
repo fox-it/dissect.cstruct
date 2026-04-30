@@ -8,12 +8,15 @@ import pytest
 from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.types.base import BaseType
 
+CS = cstruct()
+
 
 @pytest.mark.parametrize(
     "name",
-    [name for name in cstruct().typedefs if " " not in name],
+    [name for name in CS.types | CS.typedefs if " " not in name],
 )
 def test_cstruct_type_annotation(name: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that all default types defined in cstruct have type annotations."""
     with (
         patch("typing.TYPE_CHECKING", True),
         patch("dissect.cstruct.types.base.MetaType.__getitem__", lambda self, item: self),
