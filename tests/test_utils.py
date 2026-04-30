@@ -876,7 +876,7 @@ def test_dumpstruct_coloring(cs: cstruct, compiled: bool) -> None:
         f"Expected {len(expected)} palette regions, got {len(bg_regions)}: {bg_regions}"
     )
 
-    for (actual_bg, actual_bytes), (exp_bg, exp_bytes, label) in zip(bg_regions, expected):
+    for (actual_bg, actual_bytes), (exp_bg, exp_bytes, label) in zip(bg_regions, expected, strict=False):
         assert actual_bg == exp_bg, f"{label}: expected bg={exp_bg!r}, got {actual_bg!r}"
         assert actual_bytes == exp_bytes, f"{label}: expected bytes {exp_bytes}, got {actual_bytes}"
 
