@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import enum
-import functools
-import operator
 import re
 from typing import TYPE_CHECKING
 
