@@ -222,12 +222,15 @@ class Lexer:
         """Emit a token with the given type and value at the specified line and column."""
         self._tokens.append(Token(type, value, line, column))
 
-    def _read_conditional(self, condition: Callable[[str], bool], *, or_eof: bool = True) -> str:
-        """Read until the current character matches the condition.
+    def _read_conditional(
+        self, condition: str | Callable[[str], bool], *, or_eof: bool = True, invert: bool = False
+    ) -> str:
+        """Read while or until the current character matches the condition.
 
         Args:
             condition: A function that returns ``True`` to stop.
             or_eof: If True, also stop if EOF is reached. If False, EOF will not stop the read and will raise an error.
+            invert: If True, invert the condition (i.e. read while it matches instead of until it matches).
         """
         start = self._pos
         while True:
@@ -236,8 +239,13 @@ class Lexer:
                     self._assert_not_eof()
                 break
 
-            if condition(self.data[self._pos]):
-                break
+            ch = self.data[self._pos]
+            if isinstance(condition, str):
+                if (ch in condition) != invert:
+                    break
+            else:
+                if condition(ch) != invert:
+                    break
 
             self._pos += 1
 
@@ -252,9 +260,6 @@ class Lexer:
             condition: Characters to match, or a function that returns ``True`` to stop.
             or_eof: If True, also stop if EOF is reached. If False, EOF will not stop the read and will raise an error.
         """
-        if isinstance(condition, str):
-            condition = functools.partial(operator.contains, condition)
-
         return self._read_conditional(condition, or_eof=or_eof)
 
     def _read_while(self, condition: str | Callable[[str], bool], *, or_eof: bool = True) -> str:
@@ -264,14 +269,7 @@ class Lexer:
             condition: Characters to match, or a function that returns ``True`` to continue.
             or_eof: If True, also stop if EOF is reached. If False, EOF will not stop the read and will raise an error.
         """
-
-        def _invert(condition: Callable[[str], bool], ch: str) -> bool:
-            return not condition(ch)
-
-        if isinstance(condition, str):
-            condition = functools.partial(operator.contains, condition)
-
-        return self._read_conditional(functools.partial(_invert, condition), or_eof=or_eof)
+        return self._read_conditional(condition, or_eof=or_eof, invert=True)
 
     def _skip_whitespace(self) -> None:
         """Skip whitespace characters."""
