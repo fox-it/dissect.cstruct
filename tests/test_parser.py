@@ -497,6 +497,7 @@ def test_preprocessor_define_from_enum_in_struct() -> None:
         };
 
         #define FLAG_SYNACK flags.SYN | flags.ACK
+        #define FLAG_BIG flags.PSH | YOMOMMA
 
         #ifndef NO_PAYLOAD
         #ifdef HAS_OPTIONS
@@ -516,6 +517,7 @@ def test_preprocessor_define_from_enum_in_struct() -> None:
 
     assert cs.consts["PROTO"] == 6
     assert cs.consts["FLAG_SYNACK"] == 3
+    assert cs.consts["FLAG_BIG"] == "flags.PSH|YOMOMMA"
 
     assert "type" in cs.packet.fields
     assert "options" in cs.packet.fields
