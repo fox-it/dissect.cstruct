@@ -274,6 +274,38 @@ class Lexer:
         if match := _RE_WHITESPACE.match(self.data, self._pos):
             self._take(match.end() - self._pos)
 
+    def _skip_comment(self) -> None:
+        """Skip a comment starting at the current position, if present."""
+        if self._current() == "/":
+            peek = self._peek()
+
+            if peek == "*":
+                self._take(2)  # Consume /*
+                end = self.data.find("*/", self._pos)
+                if end != -1:
+                    self._take(end - self._pos + 2)
+                else:
+                    self._take(len(self.data) - self._pos)
+
+            elif peek == "/":
+                self._take(2)  # Consume //
+                end = self.data.find("\n", self._pos)
+                if end != -1:
+                    self._take(end - self._pos)
+                else:
+                    self._take(len(self.data) - self._pos)
+
+    def _skip_whitespace_and_comments(self) -> None:
+        """Skip whitespace and comments."""
+        while True:
+            start_pos = self._pos
+            self._skip_whitespace()
+            if self.eof:
+                break
+            self._skip_comment()
+            if self.eof or self._pos == start_pos:
+                break
+
     def _read_identifier(self) -> str:
         """Read an identifier starting with a letter or underscore, followed by letters, digits, or underscores."""
         if match := _RE_IDENTIFIER.match(self.data, self._pos):
@@ -348,13 +380,6 @@ class Lexer:
 
         return result
 
-    def _read_angle_string(self) -> str:
-        """Read an angle-bracket string for ``#include <...>``."""
-        self._expect("<")  # Consume `<`
-        value = self._read_until(">", or_eof=False)
-        self._expect(">")  # Consume closing `>`
-        return f"<{value}>"
-
     def _read_preprocessor(self) -> None:
         """Read a preprocessor directive starting with ``#``."""
         line = self._line
@@ -373,7 +398,7 @@ class Lexer:
             return
 
         # Read the keyword after #
-        self._skip_whitespace()
+        self._skip_whitespace_and_comments()
         keyword = self._read_identifier()
 
         if (token_type := _PP_KEYWORDS.get(keyword)) is None:
@@ -381,15 +406,33 @@ class Lexer:
 
         self._emit(token_type, keyword, line, col)
 
-        if token_type == TokenType.PP_INCLUDE:
+        if token_type == TokenType.PP_DEFINE:
+            self._skip_whitespace_and_comments()
+
+            if not (name := self._read_identifier()):
+                raise self._error("expected identifier after '#define'", line=line)
+            self._emit(TokenType.IDENTIFIER, name, line)
+
+            self._skip_whitespace_and_comments()
+            if self.eof or self._line != line:
+                # No value, just a simple macro definition
+                return
+
+            if (value := self._read_until("\n")).strip():
+                self._emit(TokenType.STRING, value, line)
+
+        elif token_type == TokenType.PP_INCLUDE:
             # Read include path — either "..." or <...>
-            self._skip_whitespace()
+            self._skip_whitespace_and_comments()
 
             ch = self._current()
             if ch == '"' or ch == "'":
                 value = self._read_string()
             elif ch == "<":
-                value = self._read_angle_string()
+                self._expect("<")  # Consume `<`
+                value = self._read_until(">", or_eof=False)
+                self._expect(">")  # Consume closing `>`
+                value = f"<{value}>"
             else:
                 raise self._error("expected include path after '#include'", line=line)
 
@@ -398,34 +441,11 @@ class Lexer:
     def tokenize(self) -> list[Token]:
         """Tokenize the input data and return a list of tokens."""
         while not self.eof:
-            self._skip_whitespace()
+            self._skip_whitespace_and_comments()
             if self.eof:
                 break
 
             ch = self._current()
-
-            # Skip comments
-            if ch == "/":
-                peek = self._peek()
-
-                if peek == "*":
-                    self._take(2)  # Consume /*
-                    end = self.data.find("*/", self._pos)
-                    if end != -1:
-                        self._take(end - self._pos + 2)
-                    else:
-                        self._take(len(self.data) - self._pos)
-                    continue
-
-                if peek == "/":
-                    self._take(2)  # Consume //
-                    end = self.data.find("\n", self._pos)
-                    if end != -1:
-                        self._take(end - self._pos)
-                    else:
-                        self._take(len(self.data) - self._pos)
-                    continue
-
             line = self._line
             col = self._column
 
@@ -439,7 +459,7 @@ class Lexer:
             elif ch in ("b", "B") and self._peek() in ("'", '"'):
                 # Binary string literal like `b"..."` or `b'...'`
                 self._take()  # Consume `b`
-                self._emit(TokenType.BYTES, f"b'{self._read_string()}'", line, col)
+                self._emit(TokenType.BYTES, f"b{self._read_string()!r}", line, col)
 
             elif ch.isdigit():
                 self._emit(TokenType.NUMBER, self._read_number(), line, col)

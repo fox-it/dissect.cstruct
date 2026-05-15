@@ -159,25 +159,38 @@ class CStyleParser(Parser):
 
         name_token = self._expect(TokenType.IDENTIFIER)
 
-        # Collect all tokens on the same line as the #define
-        parts = []
-        while (token := self._current()).type != TokenType.EOF and token.line == name_token.line:
-            parts.append(self._take().value)
+        # If there's a value, it's emitted as a single raw STRING token
+        value = ""
+        if (token := self._current()).type == TokenType.STRING and token.line == name_token.line:
+            value = self._take().value
 
-        value = "".join(parts).strip()
-        try:
-            # Lazy mode, try to evaluate as a Python literal first (for simple constants)
-            value = ast.literal_eval(value)
-        except (ValueError, SyntaxError):
-            pass
+        if value:
+            if value[0] in ('"', "'"):
+                quote = value[0]
+                if value[-1] != quote:
+                    raise self._error("unterminated string literal", token=token)
 
-        # If it's still a string, try to evaluate it as an expression in the context of current constants
-        if isinstance(value, str):
-            try:
-                value = Expression(value).evaluate(self.cs)
-            except (LexerError, ExpressionParserError):
-                # If evaluation fails, just keep it as a string (e.g. for macro-like constants)
-                pass
+                # Remove the surrounding and any duplicate quotes
+                value = "".join(ch for ch in value if ch != quote)
+            elif value[:2].lower() in ("b'", 'b"'):
+                quote = value[1]
+                if value[-1] != quote:
+                    raise self._error("unterminated bytes literal", token=token)
+
+                # Remove the leading b and surrounding quotes
+                value = ast.literal_eval(f"b{value[2:-1]!r}")
+            else:
+                try:
+                    # Lazy mode, try to evaluate as a Python literal first (for simple constants)
+                    value = ast.literal_eval(value)
+                except (ValueError, SyntaxError):
+                    # Try to evaluate it as an expression in the context of current constants
+                    if isinstance(value, str):
+                        try:
+                            value = Expression(value).evaluate(self.cs)
+                        except (LexerError, ExpressionParserError):
+                            # If evaluation fails, just keep it as a string (e.g. for macro-like constants)
+                            pass
 
         self.cs.consts[name_token.value] = value
 

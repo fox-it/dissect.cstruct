@@ -216,22 +216,36 @@ def test_typedef_enum(cs: cstruct) -> None:
 
 def test_define(cs: cstruct) -> None:
     cdef = """
-    #define MY_CONST 42
-    #define MY_EXPR (1 + 2 * 3)
-    #define MY_STR "hello"
-    #define MY_BYTES b"world"
-    #define MY_FUNC(x) ( x == 0 )
-    #define MY_TERNARY(x) ( x ? 1 : 0 )
+    #define CONST 42
+    #define EXPR (1 + 2 * 3)
+    #define RAW somevalue
+    #define STR "hello"
+    #define BYTES b"world"
+    #define NULLRAW ADCRYPT\00
+    #define NULLSTR "ADCRYPT\00"
+    #define NULLBYTES b"ADCRYPT\00"
+    #define ARBITRARYBYTES b"\x00\x01\x02"
+    #define MULTILINE (1 + \
+                        2 + \
+                        3)
+    #define FUNC(x) ( x == 0 )
+    #define TERNARY(x) ( x ? 1 : 0 )
     """
     cs.load(cdef)
 
-    assert cs.consts["MY_CONST"] == 42
-    assert cs.consts["MY_EXPR"] == 7
-    assert cs.consts["MY_STR"] == "hello"
-    assert cs.consts["MY_BYTES"] == b"world"
+    assert cs.consts["CONST"] == 42
+    assert cs.consts["EXPR"] == 7
+    assert cs.consts["RAW"] == "somevalue"
+    assert cs.consts["STR"] == "hello"
+    assert cs.consts["BYTES"] == b"world"
+    assert cs.consts["NULLRAW"] == "ADCRYPT\00"
+    assert cs.consts["NULLSTR"] == "ADCRYPT\00"
+    assert cs.consts["NULLBYTES"] == b"ADCRYPT\00"
+    assert cs.consts["ARBITRARYBYTES"] == b"\x00\x01\x02"
+    assert cs.consts["MULTILINE"] == 6
     # We don't evaluate function-like macros yet, so they should be stored as their raw string representation
-    assert cs.consts["MY_FUNC"] == "(x)(x==0)"
-    assert cs.consts["MY_TERNARY"] == "(x)(x?1:0)"
+    assert cs.consts["FUNC"] == "(x) ( x == 0 )"
+    assert cs.consts["TERNARY"] == "(x) ( x ? 1 : 0 )"
 
 
 def test_define_flag_value(cs: cstruct) -> None:
@@ -517,7 +531,7 @@ def test_preprocessor_define_from_enum_in_struct() -> None:
 
     assert cs.consts["PROTO"] == 6
     assert cs.consts["FLAG_SYNACK"] == 3
-    assert cs.consts["FLAG_BIG"] == "flags.PSH|YOMOMMA"
+    assert cs.consts["FLAG_BIG"] == "flags.PSH | YOMOMMA"
 
     assert "type" in cs.packet.fields
     assert "options" in cs.packet.fields
