@@ -76,7 +76,26 @@ from dissect.cstruct.lexer import TokenType, tokenize
         ),
         ("1 - 1", [TokenType.NUMBER, TokenType.MINUS, TokenType.NUMBER], ["1", "-", "1"]),
         # Preprocessor directives
-        ("#define", [TokenType.PP_DEFINE], ["define"]),
+        ("#define FOO", [TokenType.PP_DEFINE, TokenType.IDENTIFIER], ["define", "FOO"]),
+        ("#define FOO 42", [TokenType.PP_DEFINE, TokenType.IDENTIFIER, TokenType.STRING], ["define", "FOO", "42"]),
+        (
+            '#define FOO "hello"',
+            [TokenType.PP_DEFINE, TokenType.IDENTIFIER, TokenType.STRING],
+            ["define", "FOO", '"hello"'],
+        ),
+        (
+            "#define FOO ADCRYPT\00",
+            [TokenType.PP_DEFINE, TokenType.IDENTIFIER, TokenType.STRING],
+            ["define", "FOO", "ADCRYPT\00"],
+        ),
+        (
+            """
+            #define FOO (1 \
+            + 2)
+            """,
+            [TokenType.PP_DEFINE, TokenType.IDENTIFIER, TokenType.STRING],
+            ["define", "FOO", "(1             + 2)"],
+        ),
         ("#undef", [TokenType.PP_UNDEF], ["undef"]),
         ("#ifdef", [TokenType.PP_IFDEF], ["ifdef"]),
         ("#ifndef", [TokenType.PP_IFNDEF], ["ifndef"]),
