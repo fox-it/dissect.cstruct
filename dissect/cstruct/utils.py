@@ -94,7 +94,13 @@ HUMAN_COLORS = _human_colors()
 
 
 def _hexdump(
-    data: bytes, palette: Palette | None = None, offset: int = 0, prefix: str = "", pretty: bool | None = False
+    data: bytes,
+    *,
+    palette: Palette | None = None,
+    offset: int = 0,
+    prefix: str = "",
+    pretty: bool | None = False,
+    autoskip: bool = False,
 ) -> Iterator[str]:
     """Hexdump some data.
 
@@ -104,6 +110,7 @@ def _hexdump(
         offset: Byte offset of the hexdump.
         prefix: Optional prefix.
         pretty: Use pretty colors, mutual exclusive with palette.
+        autoskip: A single '*' replaces NUL-lines in the output.
     """
     if palette:
         palette = palette[::-1]
@@ -114,6 +121,9 @@ def _hexdump(
 
     remaining = 0
     active = None
+    in_null_run = False
+    in_collapsed_null_run = False
+    last_offset = len(data) - 16
 
     for i in range(0, len(data), 16):
         values = ""
@@ -166,17 +176,32 @@ def _hexdump(
             if j == 7:
                 values += " "
 
+        if autoskip and 0 < i < last_offset and data[i : i + 16] == b"\x00" * 16:
+            if in_null_run:
+                if not in_collapsed_null_run:
+                    yield "*"
+                    in_collapsed_null_run = True
+                continue
+
+            # Keep the first interior NUL line visible, collapse from the second onwards.
+            in_null_run = True
+        else:
+            in_null_run = False
+            in_collapsed_null_run = False
+
         chars = "".join(chars)
         yield f"{prefix}{offset + i:08x}  {values:48s}  {chars}"
 
 
 def hexdump(
     data: bytes,
+    *,
     palette: Palette | None = None,
     offset: int = 0,
     prefix: str = "",
     output: str = "print",
     pretty: bool | None = None,
+    autoskip: bool = False,
 ) -> Iterator[str] | str | None:
     """Hexdump some data.
 
@@ -190,6 +215,7 @@ def hexdump(
         prefix: Optional prefix.
         output: Output format, can be 'print', 'generator' or 'string'.
         pretty: Use pretty colors for improved human readability.
+        autoskip: A single '*' replaces NUL-lines in the output.
     """
     # Enable pretty colors by default if ...
     if (
@@ -200,7 +226,7 @@ def hexdump(
     ):
         pretty = True
 
-    generator = _hexdump(data, palette, offset, prefix, pretty)
+    generator = _hexdump(data, palette=palette, offset=offset, prefix=prefix, pretty=pretty, autoskip=autoskip)
     if output == "print":
         print("\n".join(generator))
         return None
@@ -217,6 +243,7 @@ def _dumpstruct(
     offset: int,
     color: bool,
     output: str,
+    autoskip: bool,
 ) -> str | None:
     palette = []
     colors = [
@@ -258,11 +285,11 @@ def _dumpstruct(
 
     if output == "print":
         print()
-        hexdump(data, palette, offset=offset)
+        hexdump(data, palette=palette, offset=offset, autoskip=autoskip)
         print()
         print(out)
     elif output == "string":
-        return f"\n{hexdump(data, palette, offset=offset, output='string')}\n\n{out}"
+        return f"\n{hexdump(data, palette=palette, offset=offset, output='string', autoskip=autoskip)}\n\n{out}"
     return None
 
 
@@ -271,6 +298,7 @@ def dumpstruct(
     data: bytes | None = None,
     offset: int = 0,
     color: bool = True,
+    autoskip: bool = False,
     output: str = "print",
 ) -> str | None:
     """Dump a structure or parsed structure instance.
@@ -281,15 +309,17 @@ def dumpstruct(
         obj: Structure to dump.
         data: Bytes to parse the Structure on, if obj is not a parsed Structure already.
         offset: Byte offset of the hexdump.
+        color: Colorize the hexdump and structure output.
+        autoskip: A single '*' replaces NUL-lines in the output.
         output: Output format, can be 'print' or 'string'.
     """
     if output not in ("print", "string"):
         raise ValueError(f"Invalid output argument: {output!r} (should be 'print' or 'string').")
 
     if isinstance(obj, Structure):
-        return _dumpstruct(obj, obj.dumps(), offset, color, output)
+        return _dumpstruct(obj, obj.dumps(), offset, color, output, autoskip)
     if issubclass(obj, Structure) and data is not None:
-        return _dumpstruct(obj(data), data, offset, color, output)
+        return _dumpstruct(obj(data), data, offset, color, output, autoskip)
     raise ValueError("Invalid arguments")
 
 

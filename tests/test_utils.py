@@ -53,6 +53,94 @@ def test_hexdump_pretty(capsys: pytest.CaptureFixture) -> None:
     )
 
 
+def test_hexdump_autoskip_collapses_middle_null_run() -> None:
+    """Keep first interior NUL line, then collapse the rest of that run to '*'."""
+    # Layout: [A data line] [3 NUL lines] [B data line]
+    # Expected: [A line] [first NUL line] [*] [B line] = 4 lines
+    data = (b"A" * 16) + (b"\x00" * 48) + (b"B" * 16)
+
+    out = utils.hexdump(data, output="string", pretty=False, autoskip=True)
+    assert out is not None
+
+    lines = out.splitlines()
+    assert len(lines) == 4
+    assert lines[0].startswith("00000000")  # A line
+    assert lines[1].startswith("00000010")  # First NUL line is kept
+    assert lines[2] == "*"  # Remaining NUL lines collapsed
+    assert lines[3].startswith("00000040")  # B line
+
+
+def test_hexdump_autoskip_keeps_edge_null_lines() -> None:
+    """Do not collapse first/last hexdump lines even when they are all NUL bytes."""
+    # Layout: [3 NUL lines]
+    # Expected: all lines are kept (only one interior line, so nothing is repeated there)
+    data = b"\x00" * 48
+
+    out = utils.hexdump(data, output="string", pretty=False, autoskip=True)
+    assert out is not None
+
+    lines = out.splitlines()
+    assert len(lines) == 3
+    assert lines[0].startswith("00000000")  # First line kept (edge)
+    assert lines[1].startswith("00000010")  # Single interior NUL line is kept
+    assert lines[2].startswith("00000020")  # Last line kept (edge)
+
+
+def test_hexdump_autoskip_separate_null_runs() -> None:
+    """Emit one '*' per interior NUL run, after keeping each run's first interior NUL line."""
+    # Layout: [A data] [2 NUL lines] [B data] [2 NUL lines] [C data]
+    # Expected: [A line] [NUL line] [*] [B line] [NUL line] [*] [C line] = 7 lines
+    data = (b"A" * 16) + (b"\x00" * 32) + (b"B" * 16) + (b"\x00" * 32) + (b"C" * 16)
+
+    out = utils.hexdump(data, output="string", pretty=False, autoskip=True)
+    assert out is not None
+
+    lines = out.splitlines()
+    assert len(lines) == 7
+    assert lines[0].startswith("00000000")  # A line
+    assert lines[1].startswith("00000010")  # First NUL line of first run kept
+    assert lines[2] == "*"  # Remaining NUL lines of first run collapsed
+    assert lines[3].startswith("00000030")  # B line
+    assert lines[4].startswith("00000040")  # First NUL line of second run kept
+    assert lines[5] == "*"  # Remaining NUL lines of second run collapsed
+    assert lines[6].startswith("00000060")  # C line
+
+
+def test_hexdump_autoskip_single_interior_null_line_is_not_collapsed() -> None:
+    """Keep a single interior all-NUL line visible when autoskip is enabled."""
+    # Layout: [A data line] [1 NUL line] [B data line]
+    # Expected: [A line] [NUL line] [B line] = 3 lines (no repeated interior NUL line)
+    data = (b"A" * 16) + (b"\x00" * 16) + (b"B" * 16)
+
+    out = utils.hexdump(data, output="string", pretty=False, autoskip=True)
+    assert out is not None
+
+    lines = out.splitlines()
+    assert len(lines) == 3
+    assert lines[0].startswith("00000000")  # A line
+    assert lines[1].startswith("00000010")  # Single NUL line is kept
+    assert lines[2].startswith("00000020")  # B line
+
+
+def test_hexdump_autoskip_false_does_not_collapse() -> None:
+    """Keep all lines expanded and never emit '*' when autoskip is disabled."""
+    # Layout: [A data line] [3 NUL lines] [B data line]
+    # Expected: [A line] [NUL line] [NUL line] [NUL line] [B line] = 5 lines (no * when disabled)
+    data = (b"A" * 16) + (b"\x00" * 48) + (b"B" * 16)
+
+    out = utils.hexdump(data, output="string", pretty=False, autoskip=False)
+    assert out is not None
+
+    lines = out.splitlines()
+    assert len(lines) == 5
+    assert all(line != "*" for line in lines)  # No * when autoskip disabled
+    assert lines[0].startswith("00000000")  # A line
+    assert lines[1].startswith("00000010")  # First NUL line (expanded)
+    assert lines[2].startswith("00000020")  # Second NUL line (expanded)
+    assert lines[3].startswith("00000030")  # Third NUL line (expanded)
+    assert lines[4].startswith("00000040")  # B line
+
+
 def test_hexdump_pretty_print_conditions(capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test if we respec the ``NO_COLOR`` environment variable and ``pretty=False`` argument."""
     # Test regular print output behavior
