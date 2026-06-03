@@ -170,8 +170,8 @@ class CStyleParser(Parser):
                 if value[-1] != quote:
                     raise self._error("unterminated string literal", token=token)
 
-                # Remove the surrounding and any duplicate quotes
-                value = "".join(ch for ch in value if ch != quote)
+                # Remove the surrounding quotes and flatten escape sequences
+                value = value[1:-1].encode().decode("unicode_escape")
             elif value[:2].lower() in ("b'", 'b"'):
                 quote = value[1]
                 if value[-1] != quote:

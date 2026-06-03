@@ -228,6 +228,8 @@ def test_define(cs: cstruct) -> None:
     #define MULTILINE (1 + \
                         2 + \
                         3)
+    #define QUOTES "\'\"a'b\""
+    #define ESCAPE "\\'\\"a'b\\"\\n"
     #define FUNC(x) ( x == 0 )
     #define TERNARY(x) ( x ? 1 : 0 )
     """
@@ -243,6 +245,8 @@ def test_define(cs: cstruct) -> None:
     assert cs.consts["NULLBYTES"] == b"ADCRYPT\00"
     assert cs.consts["ARBITRARYBYTES"] == b"\x00\x01\x02"
     assert cs.consts["MULTILINE"] == 6
+    assert cs.consts["QUOTES"] == "'\"a'b\""
+    assert cs.consts["ESCAPE"] == "'\"a'b\"\n"
     # We don't evaluate function-like macros yet, so they should be stored as their raw string representation
     assert cs.consts["FUNC"] == "(x) ( x == 0 )"
     assert cs.consts["TERNARY"] == "(x) ( x ? 1 : 0 )"
