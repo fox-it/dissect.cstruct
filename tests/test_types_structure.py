@@ -4,7 +4,7 @@ import inspect
 from io import BytesIO
 from textwrap import dedent
 from types import MethodType
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import call, patch
 
 import pytest
 
@@ -160,11 +160,8 @@ def test_structure_single_byte_field(cs: cstruct) -> None:
     obj = TestStruct(b"aaaa")
     assert obj.a == b"a"
 
-    cs.char._read = MagicMock()
-
     obj = TestStruct(b"a")
     assert obj.a == b"a"
-    cs.char._read.assert_not_called()
 
 
 def test_structure_same_name_method(cs: cstruct) -> None:
@@ -1064,3 +1061,46 @@ def test_cdef_round_trip(cs: cstruct) -> None:
         if hasattr(original, "__fields__"):
             assert [f._name for f in original.__fields__] == [f._name for f in result.__fields__]
             assert [f.offset for f in original.__fields__] == [f.offset for f in result.__fields__]
+
+
+def test_structure_changing_endian(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    struct test {
+        uint32 a;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+    assert cs.endian == "<"
+
+    buf = b"\x01\x02\x03\x04"
+    obj = cs.test(buf)
+
+    assert obj.a == 0x04030201
+
+    assert obj.dumps() == buf
+
+    obj = cs.test(buf, endian=">")
+    assert obj.a == 0x01020304
+
+    assert obj.dumps(endian=">") == buf
+
+
+def test_structure_endian_name_conflict(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    struct test {
+        uint32 endian;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+    assert cs.endian == "<"
+
+    assert cs.test(endian=69).endian == 69
+    assert cs.test(b"\x45\x00\x00\x00").endian == 69
+    assert cs.test(b"\x45\x00\x00\x00", endian=">").endian == 0x45000000
+
+    with pytest.raises(EOFError):
+        cs.test(b"", endian=">")

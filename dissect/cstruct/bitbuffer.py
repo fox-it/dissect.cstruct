@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 class BitBuffer:
     """Implements a bit buffer that can read and write bit fields."""
 
-    def __init__(self, stream: BinaryIO, endian: str):
+    def __init__(self, stream: BinaryIO, *, endian: str):
         self.stream = stream
         self.endian = endian
 
@@ -24,7 +24,7 @@ class BitBuffer:
 
             self._type = field_type
             self._remaining = field_type.size * 8
-            self._buffer = field_type._read(self.stream)
+            self._buffer = field_type._read(self.stream, endian=self.endian)
 
         if isinstance(self._buffer, bytes):
             if self.endian == "<":
@@ -71,7 +71,7 @@ class BitBuffer:
 
     def flush(self) -> None:
         if self._type is not None:
-            self._type._write(self.stream, self._buffer)
+            self._type._write(self.stream, self._buffer, endian=self.endian)
         self._type = None
         self._remaining = 0
         self._buffer = 0

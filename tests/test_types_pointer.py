@@ -27,7 +27,7 @@ def test_pointer(cs: cstruct) -> None:
     assert str(obj) == "255"
 
     with pytest.raises(NullPointerDereference):
-        ptr(0, None).dereference()
+        ptr(0, None, endian=cs.endian).dereference()
 
 
 def test_pointer_char(cs: cstruct) -> None:
@@ -251,3 +251,21 @@ def test_pointer_default(cs: cstruct) -> None:
 
     with pytest.raises(NullPointerDereference):
         ptr.__default__().dereference()
+
+
+def test_pointer_changing_endian(cs: cstruct) -> None:
+    cs.pointer = cs.uint16
+
+    ptr = cs._make_pointer(cs.uint32)
+    assert issubclass(ptr, Pointer)
+    assert ptr.__name__ == "uint32*"
+
+    assert cs.endian == "<"
+
+    obj = ptr(b"\x00\x02\x01\x02\x03\x04", endian=">")
+    assert repr(obj) == "<uint32* @ 0x2>"
+
+    assert obj == 2
+    assert obj.dumps(endian=">") == b"\x00\x02"
+    assert obj.dereference() == 0x01020304
+    assert obj.dereference(endian="<") == 0x04030201

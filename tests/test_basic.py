@@ -15,6 +15,8 @@ from .utils import verify_compiled
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from dissect.cstruct.cstruct import Endianness
+
 
 def test_duplicate_type(cs: cstruct, compiled: bool) -> None:
     cdef = """
@@ -250,12 +252,12 @@ def test_half_compiled_struct(cs: cstruct) -> None:
         type: BaseType
 
         @classmethod
-        def _read(cls, stream: BinaryIO, context: dict | None = None) -> OffByOne:
-            return cls(cls.type._read(stream, context) + 1)
+        def _read(cls, stream: BinaryIO, *, context: dict | None = None, endian: Endianness) -> OffByOne:
+            return cls(cls.type._read(stream, context=context, endian=endian) + 1)
 
         @classmethod
-        def _write(cls, stream: BinaryIO, data: int) -> OffByOne:
-            return cls(cls.type._write(stream, data - 1))
+        def _write(cls, stream: BinaryIO, data: int, *, endian: Endianness) -> OffByOne:
+            return cls(cls.type._write(stream, data - 1, endian=endian))
 
     # Add an unsupported type for the cstruct compiler
     # so that it returns the original struct,
@@ -679,3 +681,24 @@ def test_cdef_defines(cs: cstruct) -> None:
     reparsed = cstruct()
     reparsed.load(src)
     assert reparsed.consts == cs.consts
+
+
+def test_endianness(cs: cstruct) -> None:
+    """Test that the endianness context manager works correctly."""
+    with cs.endianness(">") as big_endian_cs:
+        assert big_endian_cs.endian == ">"
+        assert big_endian_cs.uint32(b"\x00\x00\x00\x01") == 1
+
+        assert cs.endian == ">"
+
+    with cs.endianness("<") as little_endian_cs:
+        assert little_endian_cs.endian == "<"
+        assert little_endian_cs.uint32(b"\x01\x00\x00\x00") == 1
+
+    with cs.big_endian() as big_endian_cs:
+        assert big_endian_cs.endian == ">"
+        assert big_endian_cs.uint32(b"\x00\x00\x00\x01") == 1
+
+    with cs.little_endian() as little_endian_cs:
+        assert little_endian_cs.endian == "<"
+        assert little_endian_cs.uint32(b"\x01\x00\x00\x00") == 1

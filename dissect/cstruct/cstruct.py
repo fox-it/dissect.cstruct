@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import copy
 import ctypes as _ctypes
+import inspect
 import struct
 import sys
 import types
+import warnings
+from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO, TypeVar, cast
+from typing import TYPE_CHECKING, Any, BinaryIO, Literal, TypeVar, cast
 
 from dissect.cstruct.exception import ResolveError
 from dissect.cstruct.expression import Expression
@@ -26,9 +29,10 @@ from dissect.cstruct.types import (
     Void,
     Wchar,
 )
+from dissect.cstruct.types.base import normalize_endianness
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Iterator
     from typing import TypeAlias
 
     from dissect.cstruct.types import (
@@ -39,20 +43,23 @@ if TYPE_CHECKING:
 
 T = TypeVar("T", bound=BaseType)
 
+AllowedEndianness: TypeAlias = Literal["little", "big", "network", "<", ">", "!", "@", "="]
+Endianness: TypeAlias = Literal["<", ">", "!", "@", "="]
+
 
 class cstruct:
     """Main class of cstruct. All types are registered in here.
 
     Args:
-        endian: The endianness to use when parsing.
+        endian: The endianness to use when parsing (little, big, network, <, >, !, @ or =).
         pointer: The pointer type to use for pointers.
     """
 
     DEF_CSTYLE = 1
     DEF_LEGACY = 2
 
-    def __init__(self, load: str = "", *, endian: str = "<", pointer: str | None = None):
-        self.endian = endian
+    def __init__(self, load: str = "", *, endian: AllowedEndianness = "<", pointer: str | None = None):
+        self.endian = normalize_endianness(endian)
 
         self.consts: dict[str, int | str | bytes] = {}
         self.types: dict[str, type[BaseType]] = {}
@@ -279,6 +286,25 @@ class cstruct:
             alignment: The alignment of the type.
             **kwargs: Additional attributes to add to the type.
         """
+        # In cstruct 5.0 we changed the function signature of _read and _write
+        # Check if the function signature is compatible, and warn if not
+        for type_to_check in (type_, type_.ArrayType):
+            type_name = type_.__name__ + (f".{type_.ArrayType.__name__}" if type_to_check is type_.ArrayType else "")
+
+            for method in ("_read", "_read_array", "_read_0", "_write", "_write_array", "_write_0"):
+                if not hasattr(type_to_check, method):
+                    continue
+
+                signature = inspect.signature(getattr(type_to_check, method))
+
+                # Only warn if the method doesn't accept an endian parameter
+                if "endian" not in signature.parameters:
+                    warnings.warn(
+                        f"Custom type {type_name} is missing the 'endian' keyword-only parameter in its {method} method. "  # noqa: E501
+                        "Please refer to the changelog of dissect.cstruct 5.0 for more information.",
+                        stacklevel=2,
+                    )
+
         self.add_type(name, self._make_type(name, (type_,), size, alignment=alignment, attrs=kwargs))
 
     def add_const(self, name: str, value: Any) -> None:
@@ -416,6 +442,28 @@ class cstruct:
             A new cstruct instance with the same types and settings as this one.
         """
         return copy.copy(self)
+
+    @contextmanager
+    def endianness(self, endian: AllowedEndianness) -> Iterator[cstruct]:
+        """Context manager for temporarily changing the endianness of this cstruct instance."""
+        original = self.endian
+        self.endian = normalize_endianness(endian)
+        try:
+            yield self
+        finally:
+            self.endian = original
+
+    @contextmanager
+    def big_endian(self) -> Iterator[cstruct]:
+        """Context manager for temporarily changing the endianness to big endian."""
+        with self.endianness(">") as cs:
+            yield cs
+
+    @contextmanager
+    def little_endian(self) -> Iterator[cstruct]:
+        """Context manager for temporarily changing the endianness to little endian."""
+        with self.endianness("<") as cs:
+            yield cs
 
     def _make_type(
         self,

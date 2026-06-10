@@ -31,6 +31,8 @@ if TYPE_CHECKING:
 
     from typing_extensions import Self
 
+    from dissect.cstruct.cstruct import Endianness
+
 
 class Field:
     """Structure field."""
@@ -74,15 +76,6 @@ class StructureMetaType(MetaType):
         return super().__new__(metacls, name, bases, classdict)
 
     def __call__(cls, *args, **kwargs) -> Self:  # type: ignore
-        if (
-            cls.__fields__
-            and len(args) == len(cls.__fields__) == 1
-            and isinstance(args[0], bytes)
-            and issubclass(cls.__fields__[0].type, bytes)
-            and len(args[0]) == cls.__fields__[0].type.size
-        ):
-            # Shortcut for single char/bytes type
-            return type.__call__(cls, *args, **kwargs)
         if not args and not kwargs:
             obj = type.__call__(cls)
             object.__setattr__(obj, "__dynamic_sizes__", {})
@@ -249,8 +242,8 @@ class StructureMetaType(MetaType):
         # The structure size is whatever the currently calculated offset is
         return offset, alignment
 
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:  # type: ignore
-        bit_buffer = BitBuffer(stream, cls.cs.endian)
+    def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:  # type: ignore
+        bit_buffer = BitBuffer(stream, endian=endian)
         struct_start = stream.tell()
 
         result = {}
@@ -279,7 +272,7 @@ class StructureMetaType(MetaType):
 
             bit_buffer.reset()
 
-            value = field.type._read(stream, result)
+            value = field.type._read(stream, context=result, endian=endian)
 
             result[field._name] = value
             if field.type.dynamic:
@@ -295,16 +288,16 @@ class StructureMetaType(MetaType):
         obj.__dynamic_sizes__ = sizes
         return obj
 
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:  # type: ignore
+    def _read_0(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> list[Self]:  # type: ignore
         result = []
 
-        while obj := cls._read(stream, context):
+        while obj := cls._read(stream, context=context, endian=endian):
             result.append(obj)
 
         return result
 
-    def _write(cls, stream: BinaryIO, data: Structure) -> int:
-        bit_buffer = BitBuffer(stream, cls.cs.endian)
+    def _write(cls, stream: BinaryIO, data: Structure, *, endian: Endianness) -> int:
+        bit_buffer = BitBuffer(stream, endian=endian)
         struct_start = stream.tell()
         num = 0
 
@@ -349,7 +342,7 @@ class StructureMetaType(MetaType):
                 else:
                     bit_buffer.write(field_type, value, field.bits)
             else:
-                field_type._write(stream, value)
+                field_type._write(stream, value, endian=endian)
                 num += stream.tell() - offset
 
         if bit_buffer._type is not None:
@@ -558,6 +551,12 @@ class UnionMetaType(StructureMetaType):
     def __call__(cls, *args, **kwargs) -> Self:  # type: ignore
         obj: Union = super().__call__(*args, **kwargs)
 
+        if not hasattr(obj, "_buf"):
+            # If we don't have a _buf attribute, we haven't read from a stream and are initializing with values
+            # Set default internal attributes
+            object.__setattr__(obj, "_buf", None)
+            object.__setattr__(obj, "_endian", cls.cs.endian)
+
         # Calling with non-stream args or kwargs means we are initializing with values
         if (args and not (len(args) == 1 and (_is_readable_type(args[0]) or _is_buffer_type(args[0])))) or kwargs:
             # We don't support user initialization of dynamic unions yet
@@ -601,7 +600,7 @@ class UnionMetaType(StructureMetaType):
         return size, alignment
 
     def _read_fields(
-        cls, stream: BinaryIO, context: dict[str, Any] | None = None
+        cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness
     ) -> tuple[dict[str, Any], dict[str, int]]:
         result = {}
         sizes = {}
@@ -621,7 +620,7 @@ class UnionMetaType(StructureMetaType):
                 start = field.offset
 
             buf.seek(offset + start)
-            value = field_type._read(buf, result)
+            value = field_type._read(buf, context=result, endian=endian)
 
             result[field._name] = value
             if field.type.dynamic:
@@ -629,10 +628,10 @@ class UnionMetaType(StructureMetaType):
 
         return result, sizes
 
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:  # type: ignore
+    def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:  # type: ignore
         if cls.size is None:
             start = stream.tell()
-            result, sizes = cls._read_fields(stream, context)
+            result, sizes = cls._read_fields(stream, context=context, endian=endian)
             size = stream.tell() - start
             stream.seek(start)
             buf = stream.read(size)
@@ -649,6 +648,7 @@ class UnionMetaType(StructureMetaType):
         obj: Union = type.__call__(cls, **result)
         object.__setattr__(obj, "__dynamic_sizes__", sizes)
         object.__setattr__(obj, "_buf", buf)
+        object.__setattr__(obj, "_endian", endian)
 
         if cls.size is not None:
             obj._update()
@@ -658,7 +658,7 @@ class UnionMetaType(StructureMetaType):
 
         return obj
 
-    def _write(cls, stream: BinaryIO, data: Union) -> int:
+    def _write(cls, stream: BinaryIO, data: Union, *, endian: Endianness) -> int:
         if cls.dynamic:
             raise NotImplementedError("Writing dynamic unions is not yet supported")
 
@@ -677,12 +677,12 @@ class UnionMetaType(StructureMetaType):
                 continue
 
             # Write the value
-            field.type._write(stream, getattr(data, field._name))
+            field.type._write(stream, getattr(data, field._name), endian=endian)
             break
 
         # If we haven't written anything yet and we initially skipped an anonymous struct, write it now
         if stream.tell() == offset and anonymous_struct:
-            anonymous_struct._write(stream, data)
+            anonymous_struct._write(stream, data, endian=endian)
 
         # If we haven't filled the union size yet, pad it
         if remaining := expected_offset - stream.tell():
@@ -695,6 +695,7 @@ class Union(Structure, metaclass=UnionMetaType):
     """Base class for cstruct union type classes."""
 
     _buf: bytes
+    _endian: Endianness
 
     def __eq__(self, other: object) -> bool:
         return self.__class__ is other.__class__ and bytes(self) == bytes(other)
@@ -718,7 +719,7 @@ class Union(Structure, metaclass=UnionMetaType):
         if (value := getattr(self, attr)) is None:
             value = field.type.__default__()
 
-        field.type._write(buf, value)
+        field.type._write(buf, value, endian=self._endian)
 
         object.__setattr__(self, "_buf", buf.getvalue())
         self._update()
@@ -727,7 +728,7 @@ class Union(Structure, metaclass=UnionMetaType):
         self._proxify()
 
     def _update(self) -> None:
-        result, sizes = self.__class__._read_fields(io.BytesIO(self._buf))
+        result, sizes = self.__class__._read_fields(io.BytesIO(self._buf), endian=self._endian)
         self.__dict__.update(result)
         object.__setattr__(self, "__dynamic_sizes__", sizes)
 
