@@ -15,7 +15,6 @@ jobs:
     with:
       run-benchmarks: true
 
-
   publish:
     if: ${{ github.ref_type == 'tag' }}
     needs: [ci]
