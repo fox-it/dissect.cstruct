@@ -126,6 +126,8 @@ strict = true
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
 "tests/_docs/**" = ["INP001"]
+# To allow testing for all syntax variations, disable some linting on type hinting
+"tests/test_declarative.py" = ["F821", "TC001", "UP037"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["dissect.cstruct"]
