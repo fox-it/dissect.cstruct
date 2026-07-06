@@ -69,11 +69,11 @@ class StructureMetaType(MetaType):
     __compiled__ = False
     __static_sizes__: dict[str, int]  # Cache of static sizes by field name
 
-    def __new__(metacls, name: str, bases: tuple[type, ...], classdict: dict[str, Any]) -> Self:  # type: ignore
+    def __new__(metacls, name: str, bases: tuple[type, ...], classdict: dict[str, Any], **kwargs) -> Self:  # type: ignore
         if (fields := classdict.pop("__members__", None)) is not None:
             metacls._update_fields(metacls, fields, align=classdict.get("__align__", False), classdict=classdict)
 
-        return super().__new__(metacls, name, bases, classdict)
+        return super().__new__(metacls, name, bases, classdict, **kwargs)
 
     def __call__(cls, *args, **kwargs) -> Self:  # type: ignore
         if len(args) == 1 and not kwargs:

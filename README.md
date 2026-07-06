@@ -101,13 +101,67 @@ assert instance.dumps() == b"\x05loremipsum\x05\x00\x00\x00"
 
 ```
 
-By default, all structures are compiled into classes that provide optimised performance. You can disable this by passing a `compiled=False` keyword argument to the `.load()` call. You can also inspect the resulting source code by accessing the source attribute of the structure: `print(c_parser.some_struct.source)`.
+By default, all structures are compiled into classes that provide optimised performance. You can disable this by passing a `compiled=False` keyword argument to the `.load()` call. You can inspect the resulting source code by accessing the source attribute of the structure: `print(c_parser.some_struct._read.__source__)` or `print(c_parser.some_struct._write_.__source__)`.
 
 More examples can be found in the `examples` directory.
 
 ## Features
 ### Structure parsing
 Write simple C-like structures and use them to parse binary data, as can be seen in the examples.
+
+### Declarative structure definitions
+Instead of with a C-like definition, structures can also be defined in Python by subclassing `Struct` (or `Union`) and annotating the fields. The resulting classes are regular cstruct structures.
+
+```python
+from typing import Annotated
+
+from dissect.cstruct import cstruct
+from dissect.cstruct.declarative import EOF, Struct, char, field, pointer, uint8, uint16, uint32
+
+
+class Header(Struct):
+    magic: uint8[4]
+    size: uint32
+    data: char["size"]  # Array sizes can refer to other fields
+    flags: Annotated[uint16, field(bits=4)]  # Or field(uint16, bits=4)
+    trailer: char[EOF]  # Reads until the end of the data
+
+
+data = b"ohai\x0c\x00\x00\x00KUSJESVANSRT\x05\x00<3"
+header = Header(data)
+assert header.data == b"KUSJESVANSRT"
+assert header.flags == 5
+assert header.trailer == b"<3"
+assert header.dumps() == data
+
+cs = cstruct(endian=">")
+
+
+class Node(Struct, cs=cs):
+    value: uint32
+    next: pointer["Node"]  # A structure can point to itself
+
+
+class NamedNode(Node):  # A subclass starts with the fields of its parent
+    name: char[None]  # A list index of None means null terminated
+
+
+cs.load("struct list { uint32 count; NamedNode head; };")  # Usable in C-like definitions
+
+node = cs.list(b"\x00\x00\x00\x01" + b"\x00\x00\x00\x07" + b"\x00" * 8 + b"<3\x00").head
+assert node.value == 7
+assert node.name == b"<3"
+```
+
+Each structure is registered in a cstruct instance, which can be passed with the `cs` class keyword argument, together with `align=True` for aligned structures. Without one, a structure uses the cstruct instance of the first bound type or structure in its annotations, or a new cstruct instance.
+
+> [!NOTE]
+> Field annotations are evaluated when the class is created. If your project uses Ruff's `flake8-type-checking` (`TC`) rules, add `Struct` and `Union` to the runtime-evaluated base classes, so that imports only used in field annotations are not moved into a `TYPE_CHECKING` block:
+>
+> ```toml
+> [tool.ruff.lint.flake8-type-checking]
+> runtime-evaluated-base-classes = ["dissect.cstruct.declarative.Struct", "dissect.cstruct.declarative.Union"]
+> ```
 
 ### Type parsing
 Aside from loading structure definitions, any of the supported types can be used individually for parsing data. For example, the following is all supported:

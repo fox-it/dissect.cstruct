@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Declarative syntax for structures and unions in `dissect.cstruct.declarative`, using classes with type annotations.
+
 ### Changed
 
 - Optimize storage of field sizes.

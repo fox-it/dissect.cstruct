@@ -191,6 +191,16 @@ def test_truthy_type(cs: cstruct) -> None:
     assert dynamic_type
 
 
+def test_array_string_count(cs: cstruct) -> None:
+    """Test that a string array count is an expression, like an array count in a definition."""
+    cs.add_const("SIZE", 4)
+    assert cs.uint8["SIZE * 2"] is cs.uint8[8]
+
+    array_type = cs.uint8["size"]
+    assert array_type.__dynamic__
+    assert array_type.__num_entries__.expression == "size"
+
+
 def test_array_type_cache(cs: cstruct) -> None:
     """Test that array types are cached, and created again when the element type changes."""
     assert cs.uint32[4] is cs.uint32[4]
