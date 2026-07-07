@@ -7,12 +7,12 @@ import sys
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from dissect.cstruct.types.pointer import Pointer
-from dissect.cstruct.types.structure import Structure
-
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from typing import Literal
+
+    from dissect.cstruct.types.base import BaseType
+    from dissect.cstruct.types.structure import Structure
 
 # Regular ANSI colors
 COLOR_RED = "\033[0;31m"
@@ -263,14 +263,15 @@ def _dumpstruct(
             continue
 
         value = getattr(structure, field._name)
-        if isinstance(value, (str, Pointer, Enum)):
-            value = repr(value)
-        elif isinstance(value, int):
+
+        if isinstance(value, int) and not isinstance(value, Enum):
             value = hex(value)
         elif isinstance(value, list):
             value = pprint.pformat(value)
             if "\n" in value:
                 value = value.replace("\n", f"\n{' ' * (len(field._name) + 4)}")
+        else:
+            value = repr(value)
 
         if color:
             foreground, background = colors[ci % len(colors)]
@@ -316,11 +317,10 @@ def dumpstruct(
     if output not in ("print", "string"):
         raise ValueError(f"Invalid output argument: {output!r} (should be 'print' or 'string').")
 
-    if isinstance(obj, Structure):
-        return _dumpstruct(obj, obj.dumps(), offset, color, output, autoskip)
-    if issubclass(obj, Structure) and data is not None:
+    if isinstance(obj, type) and data is not None:
         return _dumpstruct(obj(data), data, offset, color, output, autoskip)
-    raise ValueError("Invalid arguments")
+
+    return _dumpstruct(obj, obj.dumps(), offset, color, output, autoskip)
 
 
 def pack(value: int, size: int | None = None, endian: str = "little") -> bytes:
@@ -468,3 +468,17 @@ def swap64(value: int) -> int:
         value: Integer to swap.
     """
     return swap(value, 64)
+
+
+def sizeof(type_: type[BaseType] | BaseType) -> int:
+    """Get the size of a type in bytes."""
+    return len(type_)
+
+
+def offsetof(type_: type[Structure], name: str) -> int:
+    """Get the offset of a field in a structure."""
+    if (field := type_.fields.get(name)) is None:
+        raise ValueError(f"Structure '{type_.__name__}' does not have a field named '{name}'")
+    if (offset := field.offset) is None:
+        raise ValueError(f"Field '{field._name}' of structure '{type_.__name__}' does not have a known offset")
+    return offset

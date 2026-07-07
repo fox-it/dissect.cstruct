@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, BinaryIO, TypeVar, cast
 
 from dissect.cstruct.exceptions import ResolveError
 from dissect.cstruct.expression import Expression
-from dissect.cstruct.parser import CStyleParser, TokenParser
+from dissect.cstruct.parser import CStyleParser
 from dissect.cstruct.types import (
     LEB128,
     BaseArray,
@@ -56,7 +56,6 @@ class cstruct:
         self.endian = endian
 
         self.consts = {}
-        self.lookups = {}
         self.includes = []
         # fmt: off
         self.typedefs = {
@@ -212,7 +211,6 @@ class cstruct:
         cs = cstruct(endian=self.endian, pointer=self.pointer.__name__)
         cs._anonymous_count = self._anonymous_count
         cs.consts = self.consts.copy()
-        cs.lookups = self.lookups.copy()
         cs.includes = self.includes.copy()
 
         # Update typedefs to point to the new cstruct instance
@@ -274,11 +272,7 @@ class cstruct:
         Definitions can be parsed using different parsers. Currently, there's
         only one supported parser - DEF_CSTYLE. Parsers can add types and
         modify this cstruct instance. Arguments can be passed to parsers
-        using kwargs.
-
-        The CSTYLE parser was recently replaced with token based parser,
-        instead of a strictly regex based one. The old parser is still available
-        by using DEF_LEGACY.
+        using ``kwargs``.
 
         Args:
             definition: The definition to parse.
@@ -288,9 +282,9 @@ class cstruct:
         deftype = deftype or cstruct.DEF_CSTYLE
 
         if deftype == cstruct.DEF_CSTYLE:
-            TokenParser(self, **kwargs).parse(definition)
-        elif deftype == cstruct.DEF_LEGACY:
             CStyleParser(self, **kwargs).parse(definition)
+        else:
+            raise ValueError(f"Unknown definition type: {deftype}")
 
         return self
 

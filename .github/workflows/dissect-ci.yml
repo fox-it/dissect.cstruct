@@ -15,9 +15,8 @@ jobs:
     with:
       run-benchmarks: true
 
-
   publish:
-    if: ${{ github.ref_name == 'main' || github.ref_type == 'tag' }}
+    if: ${{ github.ref_type == 'tag' }}
     needs: [ci]
     runs-on: ubuntu-latest
     environment: dissect_publish
