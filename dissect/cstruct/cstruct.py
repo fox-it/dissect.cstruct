@@ -302,6 +302,42 @@ class cstruct:
         with Path(path).open() as fh:
             self.load(fh.read(), deftype, **kwargs)
 
+    def cdef(self) -> str:
+        """Render all constants, structure, union, enum and flag definitions back to their C-style definitions.
+
+        Note that the result is semantically equivalent to the original definitions, but not necessarily identical.
+
+        Returns:
+            The C-style definitions as a string.
+        """
+        empty = cstruct()
+
+        blocks = []
+
+        defines = []
+        for name, value in self.consts.items():
+            if name in empty.consts:
+                continue
+
+            defines.append(f"#define {name} {value!r}")
+
+        if defines:
+            blocks.append("\n".join(defines))
+
+        for name, typedef in self.typedefs.items():
+            if name in empty.typedefs or not isinstance(typedef, type):
+                continue
+
+            if not issubclass(typedef, (Structure, Enum, Flag)):
+                continue
+
+            if typedef.__name__ == name:
+                blocks.append(typedef.cdef())
+            else:
+                blocks.append(f"typedef {typedef.__name__} {name};")
+
+        return "\n\n".join(blocks)
+
     def read(self, name: str, stream: BinaryIO) -> Any:
         """Parse data using a given type.
 

@@ -551,3 +551,86 @@ def test_copy(cs: cstruct) -> None:
     # Verify that types in the copied cstruct reference the copied cstruct
     assert cs_copy.resolve("test").cs is cs_copy
     assert cs_copy.resolve("test2").cs is cs_copy
+
+
+def test_cdef(cs: cstruct) -> None:
+    """Test that a cstruct instance can render all its definitions back to C-style definitions."""
+    cs.load(
+        """
+        #define MAGIC_LENGTH 4
+        enum Color : uint16 { RED = 1, GREEN = 2, BLUE = 4 };
+        struct Point { int32 x; int32 y; };
+        union Val { uint32 as_int; float as_float; };
+        typedef Point Coord;
+        struct Header {
+            char magic[MAGIC_LENGTH];
+            Color color;
+            Point points[2];
+            Val v;
+        };
+        """
+    )
+
+    assert cs.cdef() == textwrap.dedent(
+        """\
+        #define MAGIC_LENGTH 4
+
+        enum Color : uint16 {
+            RED = 1,
+            GREEN = 2,
+            BLUE = 4,
+        };
+
+        struct Point {
+            int32 x;
+            int32 y;
+        };
+
+        union Val {
+            uint32 as_int;
+            float as_float;
+        };
+
+        typedef Point Coord;
+
+        struct Header {
+            char magic[4];
+            Color color;
+            Point points[2];
+            Val v;
+        };"""
+    )
+
+    # The full dump should be parseable on its own into equivalent types
+    reparsed = cstruct()
+    reparsed.load(cs.cdef())
+    assert reparsed.consts == cs.consts
+    for name in ("Color", "Point", "Val", "Coord", "Header"):
+        assert getattr(cs, name).size == getattr(reparsed, name).size
+
+
+def test_cdef_defines(cs: cstruct) -> None:
+    """Test that ``#define`` constants (including those referenced in expressions) are dumped and round-trip."""
+    cs.load(
+        """
+        #define INT_CONST 8
+        #define STR_CONST "hello"
+        #define BYTES_CONST b"world"
+
+        struct Test {
+            uint32 count;
+            uint8 data[count * INT_CONST];
+        };
+        """
+    )
+
+    src = cs.cdef()
+    assert "#define INT_CONST 8" in src
+    assert "#define STR_CONST 'hello'" in src
+    assert "#define BYTES_CONST b'world'" in src
+    # The constant referenced in the (dynamic) array expression must be emitted
+    assert "uint8 data[count * INT_CONST];" in src
+
+    reparsed = cstruct()
+    reparsed.load(src)
+    assert reparsed.consts == cs.consts

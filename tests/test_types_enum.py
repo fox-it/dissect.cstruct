@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum as StdEnum
+from textwrap import dedent
 from typing import TYPE_CHECKING
 
 import pytest
@@ -448,3 +449,16 @@ def test_enum_default_default(cs: cstruct) -> None:
     cs.load(cdef)
 
     assert cs.test.__default__() == cs.test.default == cs.test(0)
+
+
+def test_cdef_enum(cs: cstruct) -> None:
+    cs.load("enum Color : uint16 { RED = 1, GREEN = 2, BLUE = 4 };")
+
+    assert cs.Color.cdef() == dedent(
+        """\
+        enum Color : uint16 {
+            RED = 1,
+            GREEN = 2,
+            BLUE = 4,
+        };"""
+    )

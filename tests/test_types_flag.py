@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Flag as StdFlag
+from textwrap import dedent
 from typing import TYPE_CHECKING
 
 import pytest
@@ -282,3 +283,16 @@ def test_flag_default(cs: cstruct) -> None:
     assert cs.test.__default__() == cs.test(0)
     assert cs.test[1].__default__() == [cs.test(0)]
     assert cs.test[None].__default__() == []
+
+
+def test_cdef_flag(cs: cstruct) -> None:
+    cs.load("flag Perm : uint8 { R, W, X };")
+
+    assert cs.Perm.cdef() == dedent(
+        """\
+        flag Perm : uint8 {
+            R = 0x1,
+            W = 0x2,
+            X = 0x4,
+        };"""
+    )
