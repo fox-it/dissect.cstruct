@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, BinaryIO
 import pytest
 
 from dissect.cstruct.cstruct import cstruct
-from dissect.cstruct.exceptions import ArraySizeError, ParserError, ResolveError
+from dissect.cstruct.exception import ArraySizeError, ParserError, ResolveError
 from dissect.cstruct.types import BaseType
 
 from .utils import verify_compiled

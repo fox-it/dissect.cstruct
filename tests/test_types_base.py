@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, BinaryIO
 
 import pytest
 
-from dissect.cstruct.exceptions import ArraySizeError
+from dissect.cstruct.exception import ArraySizeError
 from dissect.cstruct.types.base import BaseArray, BaseType
 
 from .utils import verify_compiled

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.types.base import BaseType
-from dissect.cstruct.utils import ENDIANNESS_MAP
+from dissect.cstruct.util import ENDIANNESS_MAP
 
 if TYPE_CHECKING:
     from typing_extensions import Self

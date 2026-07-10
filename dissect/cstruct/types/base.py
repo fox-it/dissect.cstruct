@@ -4,7 +4,7 @@ import functools
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, TypeVar
 
-from dissect.cstruct.exceptions import ArraySizeError
+from dissect.cstruct.exception import ArraySizeError
 from dissect.cstruct.expression import Expression
 
 if TYPE_CHECKING:

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from dissect.cstruct.exceptions import ExpressionParserError, LexerError, ResolveError
+from dissect.cstruct.exception import ExpressionParserError, LexerError, ResolveError
 from dissect.cstruct.expression import Expression
 
 if TYPE_CHECKING:
