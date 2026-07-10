@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from dissect.cstruct.exceptions import LexerError
+from dissect.cstruct.exception import LexerError
 from dissect.cstruct.lexer import TokenType, tokenize
 
 

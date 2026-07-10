@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from dissect.cstruct.exceptions import ResolveError
+from dissect.cstruct.exception import ResolveError
 from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.pointer import Pointer

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from dissect.cstruct import cstruct
-from dissect.cstruct.exceptions import ParserError, ResolveError
+from dissect.cstruct.exception import ParserError, ResolveError
 from dissect.cstruct.lexer import tokenize
 from dissect.cstruct.parser import CStyleParser
 from dissect.cstruct.types import BaseArray, Pointer, Structure

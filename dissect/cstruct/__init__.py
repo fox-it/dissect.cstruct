@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.cstruct import cstruct, ctypes, ctypes_type
-from dissect.cstruct.exceptions import (
+from dissect.cstruct.exception import (
     Error,
     NullPointerDereference,
     ParserError,
@@ -28,7 +28,7 @@ from dissect.cstruct.types import (
     Wchar,
     WcharArray,
 )
-from dissect.cstruct.utils import (
+from dissect.cstruct.util import (
     dumpstruct,
     hexdump,
     p8,

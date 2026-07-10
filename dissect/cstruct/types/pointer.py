@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, BinaryIO, Generic, TypeVar
 
-from dissect.cstruct.exceptions import NullPointerDereference
+from dissect.cstruct.exception import NullPointerDereference
 from dissect.cstruct.types.base import BaseType
 from dissect.cstruct.types.char import Char
 from dissect.cstruct.types.void import Void

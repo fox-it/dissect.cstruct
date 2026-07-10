@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from dissect.cstruct.cstruct import cstruct
-from dissect.cstruct.exceptions import NullPointerDereference
+from dissect.cstruct.exception import NullPointerDereference
 from dissect.cstruct.types.pointer import Pointer
 
 from .utils import verify_compiled

@@ -5,7 +5,7 @@ import re
 from typing import TYPE_CHECKING
 
 from dissect.cstruct import compiler
-from dissect.cstruct.exceptions import (
+from dissect.cstruct.exception import (
     ExpressionParserError,
     LexerError,
     ParserError,

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from dissect.cstruct import utils
+from dissect.cstruct import util
 
 from .utils import verify_compiled
 
@@ -14,30 +14,30 @@ if TYPE_CHECKING:
 
 
 def test_hexdump(capsys: pytest.CaptureFixture) -> None:
-    utils.hexdump(b"\x00" * 16, pretty=False)
+    util.hexdump(b"\x00" * 16, pretty=False)
     captured = capsys.readouterr()
     assert captured.out == "00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00   ................\n"
 
-    out = utils.hexdump(b"\x00" * 16, output="string")
+    out = util.hexdump(b"\x00" * 16, output="string")
     assert out == "00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00   ................"
 
-    out = utils.hexdump(b"\x00" * 16, output="generator")
+    out = util.hexdump(b"\x00" * 16, output="generator")
     assert next(out) == "00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00   ................"
 
     with pytest.raises(
         ValueError, match=re.escape("Invalid output argument: 'str' (should be 'print', 'generator' or 'string').")
     ):
-        utils.hexdump("b\x00", output="str")
+        util.hexdump("b\x00", output="str")
 
 
 def test_hexdump_pretty(capsys: pytest.CaptureFixture) -> None:
     """Check if we can create a pretty hexdump."""
-    c = utils.COLOR_CLEAR
-    g = utils.COLOR_GREY
-    w = utils.COLOR_WHITE_BOLD
-    y = utils.COLOR_YELLOW
+    c = util.COLOR_CLEAR
+    g = util.COLOR_GREY
+    w = util.COLOR_WHITE_BOLD
+    y = util.COLOR_YELLOW
 
-    utils.hexdump((b"\x00" * 5) + b"\x01\x02\x03abc" + (b"\x00" * 5), pretty=True)
+    util.hexdump((b"\x00" * 5) + b"\x01\x02\x03abc" + (b"\x00" * 5), pretty=True)
     captured = capsys.readouterr()
     assert (
         captured.out
@@ -59,7 +59,7 @@ def test_hexdump_autoskip_collapses_middle_null_run() -> None:
     # Expected: [A line] [first NUL line] [*] [B line] = 4 lines
     data = (b"A" * 16) + (b"\x00" * 48) + (b"B" * 16)
 
-    out = utils.hexdump(data, output="string", pretty=False, autoskip=True)
+    out = util.hexdump(data, output="string", pretty=False, autoskip=True)
     assert out is not None
 
     lines = out.splitlines()
@@ -76,7 +76,7 @@ def test_hexdump_autoskip_keeps_edge_null_lines() -> None:
     # Expected: all lines are kept (only one interior line, so nothing is repeated there)
     data = b"\x00" * 48
 
-    out = utils.hexdump(data, output="string", pretty=False, autoskip=True)
+    out = util.hexdump(data, output="string", pretty=False, autoskip=True)
     assert out is not None
 
     lines = out.splitlines()
@@ -92,7 +92,7 @@ def test_hexdump_autoskip_separate_null_runs() -> None:
     # Expected: [A line] [NUL line] [*] [B line] [NUL line] [*] [C line] = 7 lines
     data = (b"A" * 16) + (b"\x00" * 32) + (b"B" * 16) + (b"\x00" * 32) + (b"C" * 16)
 
-    out = utils.hexdump(data, output="string", pretty=False, autoskip=True)
+    out = util.hexdump(data, output="string", pretty=False, autoskip=True)
     assert out is not None
 
     lines = out.splitlines()
@@ -112,7 +112,7 @@ def test_hexdump_autoskip_single_interior_null_line_is_not_collapsed() -> None:
     # Expected: [A line] [NUL line] [B line] = 3 lines (no repeated interior NUL line)
     data = (b"A" * 16) + (b"\x00" * 16) + (b"B" * 16)
 
-    out = utils.hexdump(data, output="string", pretty=False, autoskip=True)
+    out = util.hexdump(data, output="string", pretty=False, autoskip=True)
     assert out is not None
 
     lines = out.splitlines()
@@ -128,7 +128,7 @@ def test_hexdump_autoskip_false_does_not_collapse() -> None:
     # Expected: [A line] [NUL line] [NUL line] [NUL line] [B line] = 5 lines (no * when disabled)
     data = (b"A" * 16) + (b"\x00" * 48) + (b"B" * 16)
 
-    out = utils.hexdump(data, output="string", pretty=False, autoskip=False)
+    out = util.hexdump(data, output="string", pretty=False, autoskip=False)
     assert out is not None
 
     lines = out.splitlines()
@@ -144,19 +144,19 @@ def test_hexdump_autoskip_false_does_not_collapse() -> None:
 def test_hexdump_pretty_print_conditions(capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test if we respec the ``NO_COLOR`` environment variable and ``pretty=False`` argument."""
     # Test regular print output behavior
-    utils.hexdump(b"\x00" * 16)
+    util.hexdump(b"\x00" * 16)
     captured = capsys.readouterr()
     assert captured.out.startswith("00000000  \x1b[0;90m00")
 
     # Test explicit disable using NO_COLOR
     with monkeypatch.context() as m:
         m.setenv("NO_COLOR", "1")
-        utils.hexdump(b"\x00" * 16)
+        util.hexdump(b"\x00" * 16)
         captured = capsys.readouterr()
         assert captured.out.startswith("00000000  00")
 
     # Test explicit disable using pretty=False
-    utils.hexdump(b"\x00" * 16, pretty=False)
+    util.hexdump(b"\x00" * 16, pretty=False)
     captured = capsys.readouterr()
     assert captured.out.startswith("00000000  00")
 
@@ -174,23 +174,23 @@ def test_dumpstruct(cs: cstruct, capsys: pytest.CaptureFixture, compiled: bool) 
     buf = b"\x39\x05\x00\x00"
     obj = cs.test(buf)
 
-    utils.dumpstruct(cs.test, buf)
+    util.dumpstruct(cs.test, buf)
     captured_1 = capsys.readouterr()
 
-    utils.dumpstruct(obj)
+    util.dumpstruct(obj)
     captured_2 = capsys.readouterr()
 
     assert captured_1.out == captured_2.out
 
-    out_1 = utils.dumpstruct(cs.test, buf, output="string")
-    out_2 = utils.dumpstruct(obj, output="string")
+    out_1 = util.dumpstruct(cs.test, buf, output="string")
+    out_2 = util.dumpstruct(obj, output="string")
 
     assert out_1 == out_2
 
     with pytest.raises(
         ValueError, match=re.escape("Invalid output argument: 'generator' (should be 'print' or 'string').")
     ):
-        utils.dumpstruct(obj, output="generator")
+        util.dumpstruct(obj, output="generator")
 
 
 def test_dumpstruct_anonymous(cs: cstruct, capsys: pytest.CaptureFixture, compiled: bool) -> None:
@@ -208,23 +208,23 @@ def test_dumpstruct_anonymous(cs: cstruct, capsys: pytest.CaptureFixture, compil
     buf = b"\x39\x05\x00\x00"
     obj = cs.test(buf)
 
-    utils.dumpstruct(cs.test, buf)
+    util.dumpstruct(cs.test, buf)
     captured_1 = capsys.readouterr()
 
-    utils.dumpstruct(obj)
+    util.dumpstruct(obj)
     captured_2 = capsys.readouterr()
 
     assert captured_1.out == captured_2.out
 
-    out_1 = utils.dumpstruct(cs.test, buf, output="string")
-    out_2 = utils.dumpstruct(obj, output="string")
+    out_1 = util.dumpstruct(cs.test, buf, output="string")
+    out_2 = util.dumpstruct(obj, output="string")
 
     assert out_1 == out_2
 
     with pytest.raises(
         ValueError, match=re.escape("Invalid output argument: 'generator' (should be 'print' or 'string').")
     ):
-        utils.dumpstruct(obj, output="generator")
+        util.dumpstruct(obj, output="generator")
 
 
 def test_dumpstruct_enum(cs: cstruct, compiled: bool) -> None:
@@ -245,8 +245,8 @@ def test_dumpstruct_enum(cs: cstruct, compiled: bool) -> None:
     buf = b"\x02\x00"
     obj = cs.test(buf)
 
-    out1 = utils.dumpstruct(cs.test, buf, output="string")
-    out2 = utils.dumpstruct(obj, output="string")
+    out1 = util.dumpstruct(cs.test, buf, output="string")
+    out2 = util.dumpstruct(obj, output="string")
 
     assert "<Test16.B: 2>" in out1
     assert "<Test16.B: 2>" in out2
@@ -255,67 +255,67 @@ def test_dumpstruct_enum(cs: cstruct, compiled: bool) -> None:
 def test_pack_unpack() -> None:
     endian = "little"
     sign = False
-    assert utils.p8(1, endian) == b"\x01"
-    assert utils.p16(1, endian) == b"\x01\x00"
-    assert utils.p32(1, endian) == b"\x01\x00\x00\x00"
-    assert utils.p64(1, endian) == b"\x01\x00\x00\x00\x00\x00\x00\x00"
-    assert utils.u8(b"\x01", endian, sign) == 1
-    assert utils.u16(b"\x01\x00", endian, sign) == 1
-    assert utils.u32(b"\x01\x00\x00\x00", endian, sign) == 1
-    assert utils.u64(b"\x01\x00\x00\x00\x00\x00\x00\x00", endian, sign) == 1
+    assert util.p8(1, endian) == b"\x01"
+    assert util.p16(1, endian) == b"\x01\x00"
+    assert util.p32(1, endian) == b"\x01\x00\x00\x00"
+    assert util.p64(1, endian) == b"\x01\x00\x00\x00\x00\x00\x00\x00"
+    assert util.u8(b"\x01", endian, sign) == 1
+    assert util.u16(b"\x01\x00", endian, sign) == 1
+    assert util.u32(b"\x01\x00\x00\x00", endian, sign) == 1
+    assert util.u64(b"\x01\x00\x00\x00\x00\x00\x00\x00", endian, sign) == 1
 
     endian = "big"
     sign = False
-    assert utils.p8(1, endian) == b"\x01"
-    assert utils.p16(1, endian) == b"\x00\x01"
-    assert utils.p32(1, endian) == b"\x00\x00\x00\x01"
-    assert utils.p64(1, endian) == b"\x00\x00\x00\x00\x00\x00\x00\x01"
-    assert utils.u8(b"\x01", endian, sign) == 1
-    assert utils.u16(b"\x00\x01", endian, sign) == 1
-    assert utils.u32(b"\x00\x00\x00\x01", endian, sign) == 1
-    assert utils.u64(b"\x00\x00\x00\x00\x00\x00\x00\x01", endian, sign) == 1
+    assert util.p8(1, endian) == b"\x01"
+    assert util.p16(1, endian) == b"\x00\x01"
+    assert util.p32(1, endian) == b"\x00\x00\x00\x01"
+    assert util.p64(1, endian) == b"\x00\x00\x00\x00\x00\x00\x00\x01"
+    assert util.u8(b"\x01", endian, sign) == 1
+    assert util.u16(b"\x00\x01", endian, sign) == 1
+    assert util.u32(b"\x00\x00\x00\x01", endian, sign) == 1
+    assert util.u64(b"\x00\x00\x00\x00\x00\x00\x00\x01", endian, sign) == 1
 
     endian = "network"
     sign = False
-    assert utils.p8(1, endian) == b"\x01"
-    assert utils.p16(1, endian) == b"\x00\x01"
-    assert utils.p32(1, endian) == b"\x00\x00\x00\x01"
-    assert utils.p64(1, endian) == b"\x00\x00\x00\x00\x00\x00\x00\x01"
-    assert utils.u8(b"\x01", endian, sign) == 1
-    assert utils.u16(b"\x00\x01", endian, sign) == 1
-    assert utils.u32(b"\x00\x00\x00\x01", endian, sign) == 1
-    assert utils.u64(b"\x00\x00\x00\x00\x00\x00\x00\x01", endian, sign) == 1
+    assert util.p8(1, endian) == b"\x01"
+    assert util.p16(1, endian) == b"\x00\x01"
+    assert util.p32(1, endian) == b"\x00\x00\x00\x01"
+    assert util.p64(1, endian) == b"\x00\x00\x00\x00\x00\x00\x00\x01"
+    assert util.u8(b"\x01", endian, sign) == 1
+    assert util.u16(b"\x00\x01", endian, sign) == 1
+    assert util.u32(b"\x00\x00\x00\x01", endian, sign) == 1
+    assert util.u64(b"\x00\x00\x00\x00\x00\x00\x00\x01", endian, sign) == 1
 
     endian = "little"
     sign = True
-    assert utils.p8(-120, endian) == b"\x88"
-    assert utils.p16(-120, endian) == b"\x88\xff"
-    assert utils.p32(-120, endian) == b"\x88\xff\xff\xff"
-    assert utils.p64(-120, endian) == b"\x88\xff\xff\xff\xff\xff\xff\xff"
-    assert utils.u8(b"\x88", endian, sign) == -120
-    assert utils.u16(b"\x88\xff", endian, sign) == -120
-    assert utils.u32(b"\x88\xff\xff\xff", endian, sign) == -120
-    assert utils.u64(b"\x88\xff\xff\xff\xff\xff\xff\xff", endian, sign) == -120
+    assert util.p8(-120, endian) == b"\x88"
+    assert util.p16(-120, endian) == b"\x88\xff"
+    assert util.p32(-120, endian) == b"\x88\xff\xff\xff"
+    assert util.p64(-120, endian) == b"\x88\xff\xff\xff\xff\xff\xff\xff"
+    assert util.u8(b"\x88", endian, sign) == -120
+    assert util.u16(b"\x88\xff", endian, sign) == -120
+    assert util.u32(b"\x88\xff\xff\xff", endian, sign) == -120
+    assert util.u64(b"\x88\xff\xff\xff\xff\xff\xff\xff", endian, sign) == -120
 
     endian = "big"
     sign = True
-    assert utils.p8(-120, endian) == b"\x88"
-    assert utils.p16(-120, endian) == b"\xff\x88"
-    assert utils.p32(-120, endian) == b"\xff\xff\xff\x88"
-    assert utils.p64(-120, endian) == b"\xff\xff\xff\xff\xff\xff\xff\x88"
-    assert utils.u8(b"\x88", endian, sign) == -120
-    assert utils.u16(b"\xff\x88", endian, sign) == -120
-    assert utils.u32(b"\xff\xff\xff\x88", endian, sign) == -120
-    assert utils.u64(b"\xff\xff\xff\xff\xff\xff\xff\x88", endian, sign) == -120
+    assert util.p8(-120, endian) == b"\x88"
+    assert util.p16(-120, endian) == b"\xff\x88"
+    assert util.p32(-120, endian) == b"\xff\xff\xff\x88"
+    assert util.p64(-120, endian) == b"\xff\xff\xff\xff\xff\xff\xff\x88"
+    assert util.u8(b"\x88", endian, sign) == -120
+    assert util.u16(b"\xff\x88", endian, sign) == -120
+    assert util.u32(b"\xff\xff\xff\x88", endian, sign) == -120
+    assert util.u64(b"\xff\xff\xff\xff\xff\xff\xff\x88", endian, sign) == -120
 
-    assert utils.pack(1, 24) == b"\x01\x00\x00"
-    assert utils.unpack(b"\x01\x00\x00", 24) == 1
+    assert util.pack(1, 24) == b"\x01\x00\x00"
+    assert util.unpack(b"\x01\x00\x00", 24) == 1
 
-    assert utils.pack(213928798) == b"^K\xc0\x0c"
-    assert utils.unpack(b"^K\xc0\x0c") == 213928798
+    assert util.pack(213928798) == b"^K\xc0\x0c"
+    assert util.unpack(b"^K\xc0\x0c") == 213928798
 
 
 def test_swap() -> None:
-    assert utils.swap16(0x0001) == 0x0100
-    assert utils.swap32(0x00000001) == 0x01000000
-    assert utils.swap64(0x0000000000000001) == 0x0100000000000000
+    assert util.swap16(0x0001) == 0x0100
+    assert util.swap32(0x00000001) == 0x01000000
+    assert util.swap64(0x0000000000000001) == 0x0100000000000000

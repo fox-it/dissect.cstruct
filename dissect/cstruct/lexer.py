@@ -4,7 +4,7 @@ import enum
 import re
 from typing import TYPE_CHECKING
 
-from dissect.cstruct.exceptions import LexerError
+from dissect.cstruct.exception import LexerError
 
 if TYPE_CHECKING:
     from collections.abc import Callable

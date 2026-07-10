@@ -8,7 +8,7 @@ import types
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, BinaryIO, TypeVar, cast
 
-from dissect.cstruct.exceptions import ResolveError
+from dissect.cstruct.exception import ResolveError
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.parser import CStyleParser
 from dissect.cstruct.types import (
@@ -171,15 +171,16 @@ class cstruct:
             "_OWORD": "uint128",
 
             # Other convenience types
-            "u1": "uint8",
-            "u2": "uint16",
-            "u4": "uint32",
-            "u8": "uint64",
-            "u16": "uint128",
+            "u8": "uint8",
+            "u16": "uint16",
+            "u32": "uint32",
+            "u64": "uint64",
+            "u128": "uint128",
             "__u8": "uint8",
             "__u16": "uint16",
             "__u32": "uint32",
             "__u64": "uint64",
+            "__u128": "uint128",
             "uchar": "uint8",
             "ushort": "uint16",
             "uint": "uint32",
@@ -583,15 +584,16 @@ class cstruct:
         _QWORD: TypeAlias = uint64
         _OWORD: TypeAlias = uint128
 
-        u1: TypeAlias = uint8
-        u2: TypeAlias = uint16
-        u4: TypeAlias = uint32
-        u8: TypeAlias = uint64
-        u16: TypeAlias = uint128
+        u8: TypeAlias = uint8
+        u16: TypeAlias = uint16
+        u32: TypeAlias = uint32
+        u64: TypeAlias = uint64
+        u128: TypeAlias = uint128
         __u8: TypeAlias = uint8
         __u16: TypeAlias = uint16
         __u32: TypeAlias = uint32
         __u64: TypeAlias = uint64
+        __u128: TypeAlias = uint128
         uchar: TypeAlias = uint8
         ushort: TypeAlias = uint16
         uint: TypeAlias = uint32

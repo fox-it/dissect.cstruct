@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from dissect.cstruct.exceptions import ExpressionParserError
+from dissect.cstruct.exception import ExpressionParserError
 from dissect.cstruct.lexer import IDENTIFIER_TYPES, Lexer, TokenCursor, TokenType
-from dissect.cstruct.utils import offsetof, sizeof
+from dissect.cstruct.util import offsetof, sizeof
 
 if TYPE_CHECKING:
     from collections.abc import Callable
