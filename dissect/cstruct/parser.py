@@ -177,8 +177,9 @@ class CStyleParser(Parser):
                 if value[-1] != quote:
                     raise self._error("unterminated bytes literal", token=token)
 
-                # Remove the leading b and surrounding quotes
-                value = ast.literal_eval(f"b{value[2:-1]!r}")
+                # Remove the leading b and surrounding quotes and flatten escape sequences
+                value = value[2:-1].encode().decode("unicode_escape")
+                value = ast.literal_eval(f"b{value!r}")
             else:
                 try:
                     # Lazy mode, try to evaluate as a Python literal first (for simple constants)
@@ -385,7 +386,15 @@ class CStyleParser(Parser):
                 continue
             self._assert_not_eof()
 
-            member_name = self._expect(TokenType.IDENTIFIER).value
+            # For historical reasons, we allow enum/flag member names to start with a digit
+            # E.g. `32BIT`
+            member_name = ""
+            if token := self._match(TokenType.NUMBER):
+                member_name += token.value
+                if token := self._match(TokenType.IDENTIFIER):
+                    member_name += token.value
+            else:
+                member_name = self._expect(TokenType.IDENTIFIER).value
 
             if self._match(TokenType.EQUALS):
                 expression = self._collect_until(TokenType.COMMA, TokenType.RBRACE)

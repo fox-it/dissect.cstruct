@@ -182,6 +182,18 @@ def test_error(src: str, match: str) -> None:
         tokenize(src)
 
 
+def test_error_context() -> None:
+    """Test that a LexerError includes the surrounding lines as context."""
+    src = "struct test {\n    uint32 a;\n    @invalid;\n    uint32 b;\n};"
+    with pytest.raises(LexerError, match="line 3: unexpected character '@'") as exc_info:
+        tokenize(src)
+
+    message = str(exc_info.value)
+    assert "  2:     uint32 a;" in message
+    assert "  3:     @invalid;" in message
+    assert "  4:     uint32 b;" in message
+
+
 def test_line_and_column_tracking() -> None:
     """Test that the lexer correctly tracks line and column numbers."""
     src = "a\n  b\nc"

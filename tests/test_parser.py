@@ -214,6 +214,27 @@ def test_typedef_enum(cs: cstruct) -> None:
     assert cs.test_enum.VAL3 == 4
 
 
+def test_enum_flag_digit_member_name(cs: cstruct) -> None:
+    # For historical reasons, we allow enum/flag member names to start with a digit, e.g. `32BIT`
+    cdef = """
+    enum test_enum : uint8 {
+        32BIT = 1,
+        64BIT = 2
+    };
+
+    flag test_flag : uint8 {
+        32BIT = 1,
+        64BIT = 2
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test_enum["32BIT"] == 1
+    assert cs.test_enum["64BIT"] == 2
+    assert cs.test_flag["32BIT"] == 1
+    assert cs.test_flag["64BIT"] == 2
+
+
 def test_define(cs: cstruct) -> None:
     cdef = """
     #define CONST 42
@@ -230,6 +251,7 @@ def test_define(cs: cstruct) -> None:
                         3)
     #define QUOTES "\'\"a'b\""
     #define ESCAPE "\\'\\"a'b\\"\\n"
+    #define BYTES_ESCAPE b"`\\n"
     #define FUNC(x) ( x == 0 )
     #define TERNARY(x) ( x ? 1 : 0 )
     """
@@ -247,6 +269,7 @@ def test_define(cs: cstruct) -> None:
     assert cs.consts["MULTILINE"] == 6
     assert cs.consts["QUOTES"] == "'\"a'b\""
     assert cs.consts["ESCAPE"] == "'\"a'b\"\n"
+    assert cs.consts["BYTES_ESCAPE"] == b"`\n"
     # We don't evaluate function-like macros yet, so they should be stored as their raw string representation
     assert cs.consts["FUNC"] == "(x) ( x == 0 )"
     assert cs.consts["TERNARY"] == "(x) ( x ? 1 : 0 )"
