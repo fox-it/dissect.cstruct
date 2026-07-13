@@ -4,11 +4,11 @@ import inspect
 from io import BytesIO
 from textwrap import dedent
 from types import MethodType
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 
+from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exception import ResolveError
 from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
@@ -16,9 +16,6 @@ from dissect.cstruct.types.pointer import Pointer
 from dissect.cstruct.types.structure import Field, Structure, StructureMetaType
 
 from .utils import verify_compiled
-
-if TYPE_CHECKING:
-    from dissect.cstruct.cstruct import cstruct
 
 
 @pytest.fixture
@@ -848,3 +845,222 @@ def test_structure_definition_newline(cs: cstruct, compiled: bool) -> None:
     obj.wstring = "test"
 
     assert obj.dumps() == buf
+
+
+def test_cdef_struct(cs: cstruct) -> None:
+    cs.load("struct Point { int32 x; int32 y; };")
+
+    assert cs.Point.cdef() == dedent(
+        """\
+        struct Point {
+            int32 x;
+            int32 y;
+        };"""
+    )
+
+
+def test_cdef_arrays_pointers_bitfields(cs: cstruct) -> None:
+    cs.load(
+        """
+        struct Test {
+            char magic[4];
+            uint32 dynamic[len];
+            uint8 terminated[];
+            uint32 *ptr;
+            uint16 field : 4;
+        };
+        """
+    )
+
+    assert cs.Test.cdef() == dedent(
+        """\
+        struct Test {
+            char magic[4];
+            uint32 dynamic[len];
+            uint8 terminated[];
+            uint32 *ptr;
+            uint16 field : 4;
+        };"""
+    )
+
+
+def test_cdef_anonymous_nested(cs: cstruct) -> None:
+    cs.load(
+        """
+        struct Test {
+            struct {
+                uint8 a;
+                uint8 b;
+            } named;
+            struct {
+                uint32 c;
+            };
+        };
+        """
+    )
+
+    assert cs.Test.cdef() == dedent(
+        """\
+        struct Test {
+            struct {
+                uint8 a;
+                uint8 b;
+            } named;
+            struct {
+                uint32 c;
+            };
+        };"""
+    )
+
+
+def test_cdef_referenced_define(cs: cstruct) -> None:
+    cs.load(
+        """
+        #define HEADER_SIZE 8
+        #define UNUSED 99
+        struct Test {
+            uint32 count;
+            uint8 data[count * HEADER_SIZE];
+        };
+        """
+    )
+
+    # Only the constant referenced in the array size should be emitted
+    assert cs.Test.cdef(recursive=True) == dedent(
+        """\
+        #define HEADER_SIZE 8
+
+        struct Test {
+            uint32 count;
+            uint8 data[count * HEADER_SIZE];
+        };"""
+    )
+
+    reparsed = cstruct()
+    reparsed.load(cs.Test.cdef(recursive=True))
+    assert reparsed.consts["HEADER_SIZE"] == 8
+    assert "UNUSED" not in reparsed.consts
+
+
+def test_cdef_referenced_define_deduplicated(cs: cstruct) -> None:
+    """Constants referenced from multiple fields or nested structs should be emitted once,
+    as a single contiguous block (no blank lines between ``#define`` entries).
+    """
+    cs.load(
+        """
+        #define HEADER_SIZE 8
+        #define TRAILER_SIZE 4
+        struct Inner {
+            uint32 n;
+            uint8 payload[n * HEADER_SIZE];
+        };
+        struct Test {
+            uint32 count;
+            uint8 data[count * HEADER_SIZE];
+            uint8 tail[count * TRAILER_SIZE];
+            uint8 pad[count * HEADER_SIZE + count];
+            Inner inner;
+        };
+        """
+    )
+
+    assert cs.Test.cdef(recursive=True) == dedent(
+        """\
+        #define HEADER_SIZE 8
+        #define TRAILER_SIZE 4
+
+        struct Inner {
+            uint32 n;
+            uint8 payload[n * HEADER_SIZE];
+        };
+
+        struct Test {
+            uint32 count;
+            uint8 data[count * HEADER_SIZE];
+            uint8 tail[count * TRAILER_SIZE];
+            uint8 pad[count * HEADER_SIZE + count];
+            Inner inner;
+        };"""
+    )
+
+
+def test_cdef_non_recursive_references_by_name(cs: cstruct) -> None:
+    cs.load("struct Inner { uint32 a; }; struct Outer { Inner inner; };")
+
+    assert cs.Outer.cdef() == dedent(
+        """\
+        struct Outer {
+            Inner inner;
+        };"""
+    )
+
+
+def test_cdef_recursive(cs: cstruct) -> None:
+    cs.load(
+        """
+        enum Color : uint16 { RED = 1, GREEN = 2 };
+        struct Inner { uint32 a; };
+        struct Outer { Inner inner; Color color; };
+        """
+    )
+
+    assert cs.Outer.cdef(recursive=True) == dedent(
+        """\
+        struct Inner {
+            uint32 a;
+        };
+
+        enum Color : uint16 {
+            RED = 1,
+            GREEN = 2,
+        };
+
+        struct Outer {
+            Inner inner;
+            Color color;
+        };"""
+    )
+
+
+def test_cdef_recursive_self_reference(cs: cstruct) -> None:
+    cs.load("struct Node { uint32 value; Node *next; };")
+
+    # Should not recurse infinitely on self-referencing structures
+    assert cs.Node.cdef(recursive=True) == dedent(
+        """\
+        struct Node {
+            uint32 value;
+            Node *next;
+        };"""
+    )
+
+
+def test_cdef_round_trip(cs: cstruct) -> None:
+    cs.load(
+        """
+        enum Color : uint16 { RED = 1, GREEN = 2, BLUE = 4 };
+        struct Point { int32 x; int32 y; };
+        union Val { uint32 as_int; float as_float; };
+        struct Header {
+            char magic[4];
+            uint32 version;
+            Color color;
+            Point points[2];
+            Val v;
+            uint32 *ptr;
+            struct { uint8 a : 3; uint8 b : 5; } bits;
+        };
+        """
+    )
+
+    reparsed = cstruct()
+    reparsed.load(cs.Header.cdef(recursive=True))
+
+    for name in ("Header", "Point", "Color", "Val"):
+        original = getattr(cs, name)
+        result = getattr(reparsed, name)
+        assert original.size == result.size
+
+        if hasattr(original, "__fields__"):
+            assert [f._name for f in original.__fields__] == [f._name for f in result.__fields__]
+            assert [f.offset for f in original.__fields__] == [f.offset for f in result.__fields__]

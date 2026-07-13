@@ -13,7 +13,10 @@ from types import FunctionType
 from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.bitbuffer import BitBuffer
+from dissect.cstruct.expression import Expression
+from dissect.cstruct.lexer import IDENTIFIER_TYPES
 from dissect.cstruct.types.base import (
+    BaseArray,
     BaseType,
     MetaType,
     _is_buffer_type,
@@ -379,6 +382,102 @@ class StructureMetaType(MetaType):
 
         for key, value in classdict.items():
             setattr(cls, key, value)
+
+    def cdef(cls, *, recursive: bool = False) -> str:
+        """Render this structure (or union) back to its C-style definition.
+
+        When ``recursive=True``, any ``#define`` constants referenced in array sizes are emitted as well, so that the
+        result can be parsed on its own. Note that the result is semantically equivalent to the original definition,
+        but not necessarily identical.
+
+        Args:
+            recursive: Also emit the definitions of any types referenced by this structure.
+
+        Returns:
+            The C-style definition as a string.
+        """
+
+        def _decompose(type_: MetaType) -> tuple[MetaType, int, list[int | Expression | None]]:
+            dimensions = []
+            while issubclass(type_, BaseArray):
+                dimensions.append(type_.num_entries)
+                type_ = type_.type
+
+            stars = 0
+            while issubclass(type_, Pointer):
+                stars += 1
+                type_ = type_.type
+
+            return type_, stars, dimensions
+
+        def _deps(type_: StructureMetaType, seen: set[MetaType]) -> list[MetaType | str]:
+            deps = []
+            for field in type_.__fields__:
+                base, _, dimensions = _decompose(field.type)
+
+                for dim in dimensions:
+                    if isinstance(dim, Expression):
+                        for token in dim._tokens:
+                            if (
+                                token.type in IDENTIFIER_TYPES
+                                and token.value in cls.cs.consts
+                                and token.value not in seen
+                            ):
+                                deps.append(token.value)
+                                seen.add(token.value)
+
+                if isinstance(base, StructureMetaType) and base not in seen:
+                    if base.__anonymous__:
+                        # Anonymous structures are not emitted, but their dependencies are
+                        deps.extend(_deps(base, seen))
+                    else:
+                        seen.add(base)
+                        deps.extend(_deps(base, seen))
+                        deps.append(base)
+
+                elif isinstance(base, EnumMetaType) and base not in seen:
+                    seen.add(base)
+                    deps.append(base)
+
+            return deps
+
+        def _render_struct(type_: StructureMetaType, name: str) -> list[str]:
+            keyword = "union" if isinstance(type_, UnionMetaType) else "struct"
+            title = f"{keyword} {name}" if name else keyword
+
+            lines = [f"{title} {{"]
+            for field in type_.__fields__:
+                base, stars, dimensions = _decompose(field.type)
+
+                declarator = "*" * stars + (field.name or "") + "".join(f"[{dim or ''}]" for dim in dimensions)
+                if field.bits is not None:
+                    declarator = f"{declarator} : {field.bits}" if declarator else f": {field.bits}"
+
+                if isinstance(base, StructureMetaType) and base.__anonymous__:
+                    # Anonymous struct/union: inline the full definition
+                    lines.extend(f"    {line}" for line in _render_struct(base, ""))
+                    lines[-1] = f"{lines[-1]} {declarator};" if declarator else f"{lines[-1]};"
+                else:
+                    prefix = f"{base.__name__} " if declarator else base.__name__
+                    lines.append(f"    {prefix}{declarator};")
+
+            lines.append("}")
+            return lines
+
+        deps = _deps(cls, {cls}) if recursive else []
+        deps.append(cls)
+
+        consts = []
+        blocks = []
+        for type_ in deps:
+            if isinstance(type_, str):
+                consts.append(f"#define {type_} {cls.cs.consts[type_]!r}")
+            elif isinstance(type_, EnumMetaType):
+                blocks.append(type_.cdef())
+            else:
+                blocks.append("\n".join(_render_struct(type_, type_.__name__)) + ";")
+
+        return ("\n".join(consts) + "\n\n" if consts else "") + ("\n\n".join(blocks) if blocks else "")
 
 
 class Structure(BaseType, metaclass=StructureMetaType):

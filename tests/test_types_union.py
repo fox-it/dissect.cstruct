@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from textwrap import dedent
 from typing import TYPE_CHECKING
 
 import pytest
@@ -547,3 +548,15 @@ def test_codegen_hashable(cs: cstruct) -> None:
 
     assert hash(structure._generate_union__init__(hashable_fields).__code__)
     assert hash(structure._generate_union__init__(unhashable_fields).__code__)
+
+
+def test_cdef_union(cs: cstruct) -> None:
+    cs.load("union Val { uint32 as_int; float as_float; };")
+
+    assert cs.Val.cdef() == dedent(
+        """\
+        union Val {
+            uint32 as_int;
+            float as_float;
+        };"""
+    )

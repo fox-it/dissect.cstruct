@@ -104,6 +104,24 @@ class EnumMetaType(EnumMeta, MetaType):
         data = [entry.value if isinstance(entry, _Enum) else entry for entry in array]
         return cls._write_array(stream, [*data, cls.type.__default__()])
 
+    def cdef(cls) -> str:
+        """Render this enum (or flag) back to its C-style definition.
+
+        Returns:
+            The C-style definition as a string.
+        """
+        keyword = "flag" if issubclass(cls, IntFlag) else "enum"
+        underlying = cls.type.__name__
+        title = f"{keyword} {cls.__name__} : {underlying}" if cls.__name__ else f"{keyword} : {underlying}"
+
+        lines = [f"{title} {{"]
+        for member_name, member in cls.__members__.items():
+            value = hex(member.value) if keyword == "flag" else member.value
+            lines.append(f"    {member_name} = {value},")
+        lines.append("};")
+
+        return "\n".join(lines)
+
 
 def _fix_alias_members(cls: type[Enum]) -> None:
     # Emulate aenum NoAlias behaviour
