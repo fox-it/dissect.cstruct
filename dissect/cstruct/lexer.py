@@ -218,7 +218,7 @@ class Lexer:
         context = self.data.splitlines()[line - 2 : line + 2]
         no_len = len(str(line)) + 2
         content = "\n".join(f"{i + line - 1:>{no_len}}: {l}" for i, l in enumerate(context))
-        return LexerError(f"line {line}: {msg}\n{line}: {content}")
+        return LexerError(f"line {line}: {msg}\n{content}")
 
     def _emit(self, type: TokenType, value: str, line: int, column: int = 0) -> None:
         """Emit a token with the given type and value at the specified line and column."""
