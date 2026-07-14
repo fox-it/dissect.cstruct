@@ -11,7 +11,7 @@ from dissect.cstruct.exception import (
     ParserError,
 )
 from dissect.cstruct.expression import Expression
-from dissect.cstruct.lexer import IDENTIFIER_TYPES, TokenCursor, TokenType, tokenize
+from dissect.cstruct.lexer import IDENTIFIER_TYPES, TokenCursor, TokenType, format_error_context, tokenize
 from dissect.cstruct.types import BaseArray, BaseType, Field, Structure
 
 if TYPE_CHECKING:
@@ -58,6 +58,7 @@ class CStyleParser(Parser):
         super().__init__(cs)
         self.compiled = compiled
         self.align = align
+        self._data = None
 
         self._flags: list[str] = []
         self._conditional_stack: list[tuple[Token, bool]] = []
@@ -74,6 +75,8 @@ class CStyleParser(Parser):
 
         data = _join_line_continuations(data)
 
+        # Keep a reference for error messages
+        self._data = data
         self._reset_tokens(tokenize(data))
         self._parse()
 
@@ -88,7 +91,12 @@ class CStyleParser(Parser):
         return self._tokens[self._pos].type in types
 
     def _error(self, msg: str, *, token: Token | None = None) -> ParserError:
-        return ParserError(f"line {(token if token is not None else self._tokens[self._pos]).line}: {msg}")
+        lineno = (token if token is not None else self._tokens[self._pos]).line
+        if self._data is None:
+            return ParserError(f"line {lineno}: {msg}")
+
+        content = format_error_context(self._data, lineno)
+        return ParserError(f"line {lineno}: {msg}\n{content}")
 
     def _in_false_branch(self) -> bool:
         """Return whether we're currently in a false conditional branch."""

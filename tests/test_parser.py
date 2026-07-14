@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import textwrap
+
 import pytest
 
 from dissect.cstruct import cstruct
@@ -513,7 +515,7 @@ def test_preprocessor_in_struct_body(cs: cstruct) -> None:
     assert cs.test.fields["bonus"].type == cs.uint64
 
 
-def test_preprocessor_define_from_enum_in_struct() -> None:
+def test_preprocessor_define_from_enum_in_struct(cs: cstruct) -> None:
     """Test #define referencing enum values used for conditional fields and array sizes."""
     cdef = """
     enum protocol : uint8 {
@@ -553,7 +555,6 @@ def test_preprocessor_define_from_enum_in_struct() -> None:
         uint16 checksum;
     };
     """
-    cs = cstruct()
     cs.load(cdef)
 
     assert cs.consts["PROTO"] == 6
@@ -567,3 +568,30 @@ def test_preprocessor_define_from_enum_in_struct() -> None:
 
     assert cs.packet.fields["options"].type.num_entries == 4
     assert cs.packet.fields["payload"].type.num_entries == 20
+
+
+def test_error_context(cs: cstruct) -> None:
+    """Test the context window around errors: 1 line before, the error line, up to 2 lines after."""
+    # Error on line 1: no preceding lines available; shows lines 1, 2, 3
+    src = "69\n#define A 1\n#define B 2\n#define C 3"
+    with pytest.raises(ParserError, match="line 1:") as exc_info:
+        cs.load(src)
+    assert str(exc_info.value) == textwrap.dedent(
+        """\
+        line 1: unexpected token '69'
+          1: 69
+        """.rstrip()
+    )
+
+    # Error on line 3: shows 2 lines of preceding context plus the error line
+    src = "#define A 1\n#define B 2\n69\n#define C 3\n#define D 4\n#define E 5"
+    with pytest.raises(ParserError, match="line 3:") as exc_info:
+        cs.load(src)
+    assert str(exc_info.value) == textwrap.dedent(
+        """\
+        line 3: unexpected token '69'
+          1: #define A 1
+          2: #define B 2
+          3: 69
+        """.rstrip()
+    )
