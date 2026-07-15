@@ -294,8 +294,10 @@ class BaseArray(BaseType):
         if cls.null_terminated:
             return cls.type._write_0(stream, data, endian=endian)
 
-        if not cls.dynamic and cls.num_entries != (actual_size := len(data)):
-            raise ArraySizeError(f"Expected static array size {cls.num_entries}, got {actual_size} instead.")
+        if not cls.dynamic and (remaining := cls.num_entries - (actual_size := len(data))):
+            if remaining < 0:
+                raise ArraySizeError(f"Expected static array size {cls.num_entries}, got {actual_size} instead.")
+            data = data + [cls.type.__default__()] * remaining
 
         return cls.type._write_array(stream, data, endian=endian)
 

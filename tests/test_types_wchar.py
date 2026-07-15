@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from dissect.cstruct.exception import ArraySizeError
+
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
 
@@ -36,6 +38,33 @@ def test_wchar_array_write(cs: cstruct) -> None:
 
     assert cs.wchar[4](buf).dumps() == b"A\x00A\x00A\x00A\x00"
     assert cs.wchar[None](buf).dumps() == b"A\x00A\x00A\x00A\x00\x00\x00"
+
+
+def test_wchar_array_write_padding(cs: cstruct) -> None:
+    buf = io.BytesIO()
+    cs.wchar[8]._write(buf, "hi", endian=cs.endian)
+    assert buf.getvalue() == b"h\x00i\x00" + b"\x00" * 12
+
+    cdef = """
+    struct test_struct {
+        int x;
+        wchar y[8];
+        wchar z[16];
+    };
+    """
+    cs.load(cdef)
+    obj = cs.test_struct()
+    obj.x = 4
+    obj.y = "hi"
+    obj.z = "bye"
+    assert len(obj.dumps()) == len(cs.test_struct)
+    assert obj.dumps() == b"\x04\x00\x00\x00h\x00i\x00" + (b"\x00" * 12) + b"b\x00y\x00e\x00" + (b"\x00" * 26)
+
+
+def test_wchar_array_write_size_error(cs: cstruct) -> None:
+    buf = io.BytesIO()
+    with pytest.raises(ArraySizeError):
+        cs.wchar[4]._write(buf, "toolong", endian=cs.endian)
 
 
 def test_wchar_be_read(cs: cstruct) -> None:
