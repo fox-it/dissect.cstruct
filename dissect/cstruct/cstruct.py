@@ -26,7 +26,6 @@ from dissect.cstruct.types import (
     Void,
     Wchar,
 )
-from dissect.cstruct.types.base import MetaType
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -55,10 +54,12 @@ class cstruct:
     def __init__(self, load: str = "", *, endian: str = "<", pointer: str | None = None):
         self.endian = endian
 
-        self.consts = {}
-        self.includes = []
+        self.consts: dict[str, int | str | bytes] = {}
+        self.types: dict[str, type[BaseType]] = {}
+        self.includes: list[str] = []
+
         # fmt: off
-        self.typedefs = {
+        initial_types = {
             # Internal types
             "int8": self._make_packed_type("int8", "b", int),
             "uint8": self._make_packed_type("uint8", "B", int),
@@ -101,6 +102,22 @@ class cstruct:
             "long long": "int64",
             "signed long long": "int64",
             "unsigned long long": "uint64",
+
+            # Other convenience types
+            "u8": "uint8",
+            "u16": "uint16",
+            "u32": "uint32",
+            "u64": "uint64",
+            "u128": "uint128",
+            "__u8": "uint8",
+            "__u16": "uint16",
+            "__u32": "uint32",
+            "__u64": "uint64",
+            "__u128": "uint128",
+            "uchar": "uint8",
+            "ushort": "uint16",
+            "uint": "uint32",
+            "ulong": "uint32",
 
             # Windows types
             "BYTE": "uint8",
@@ -169,24 +186,11 @@ class cstruct:
             "_DWORD": "uint32",
             "_QWORD": "uint64",
             "_OWORD": "uint128",
-
-            # Other convenience types
-            "u8": "uint8",
-            "u16": "uint16",
-            "u32": "uint32",
-            "u64": "uint64",
-            "u128": "uint128",
-            "__u8": "uint8",
-            "__u16": "uint16",
-            "__u32": "uint32",
-            "__u64": "uint64",
-            "__u128": "uint128",
-            "uchar": "uint8",
-            "ushort": "uint16",
-            "uint": "uint32",
-            "ulong": "uint32",
         }
         # fmt: on
+
+        for name, type_ in initial_types.items():
+            self.add_type(name, type_)
 
         pointer = pointer or ("uint64" if sys.maxsize > 2**32 else "uint32")
         self.pointer: type[BaseType] = self.resolve(pointer)
@@ -202,27 +206,25 @@ class cstruct:
             pass
 
         try:
-            return self.resolve(self.typedefs[attr])
+            return self.types[attr]
         except KeyError:
             pass
 
-        raise AttributeError(f"Invalid attribute: {attr}")
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute {attr!r}")
 
     def __copy__(self) -> cstruct:
         cs = cstruct(endian=self.endian, pointer=self.pointer.__name__)
         cs._anonymous_count = self._anonymous_count
-        cs.consts = self.consts.copy()
         cs.includes = self.includes.copy()
 
-        # Update typedefs to point to the new cstruct instance
-        for name, type in self.typedefs.items():
-            if name in cs.typedefs:
-                continue
+        # Update types to point to the new cstruct instance
+        for name, type_ in self.types.items():
+            new_type = copy.copy(type_)
+            new_type.cs = cs
+            cs.add_type(name, new_type, replace=True)
 
-            if isinstance(type, MetaType):
-                new_type = copy.copy(type)
-                new_type.cs = cs
-                cs.typedefs[name] = new_type
+        for name, value in self.consts.items():
+            cs.add_const(name, value)
 
         return cs
 
@@ -231,22 +233,34 @@ class cstruct:
         self._anonymous_count += 1
         return name
 
+    def _add_attr(self, name: str, value: Any) -> None:
+        # Names that collide with the cstruct class (e.g. a struct named ``load``) are not set as attributes
+        # to avoid breaking the instance. They remain accessible through ``resolve`` and the type dicts.
+        if name in _RESERVED_NAMES:
+            return
+        setattr(self, name, value)
+
     def add_type(self, name: str, type_: type[BaseType] | str, replace: bool = False) -> None:
-        """Add a type or type reference.
+        """Add a type or type alias.
 
         Only use this method when creating type aliases or adding already bound types.
+        All types will be resolved to their actual type objects prior to being added.
 
         Args:
             name: Name of the type to be added.
             type_: The type to be added. Can be a str reference to another type or a compatible type class.
+                   If a str is given, it will be resolved to the actual type object.
+            replace: Whether to replace the type if it already exists.
 
         Raises:
             ValueError: If the type already exists.
         """
-        if not replace and (name in self.typedefs and self.resolve(self.typedefs[name]) != self.resolve(type_)):
+        typeobj = self.resolve(type_)
+        if not replace and (existing := self.types.get(name)) is not None and existing is not typeobj:
             raise ValueError(f"Duplicate type: {name}")
 
-        self.typedefs[name] = type_
+        self.types[name] = typeobj
+        self._add_attr(name, typeobj)
 
     addtype = add_type
 
@@ -266,6 +280,28 @@ class cstruct:
             **kwargs: Additional attributes to add to the type.
         """
         self.add_type(name, self._make_type(name, (type_,), size, alignment=alignment, attrs=kwargs))
+
+    def add_const(self, name: str, value: Any) -> None:
+        """Add a constant value.
+
+        Args:
+            name: Name of the constant to be added.
+            value: The value of the constant.
+        """
+        self.consts[name] = value
+        self._add_attr(name, value)
+
+    def del_const(self, name: str) -> None:
+        """Delete a constant value.
+
+        Args:
+            name: Name of the constant to be deleted.
+
+        Raises:
+            KeyError: If the constant does not exist.
+        """
+        del self.consts[name]
+        self.__dict__.pop(name, None)
 
     def load(self, definition: str, deftype: int | None = None, **kwargs) -> cstruct:
         """Parse structures from the given definitions using the given definition type.
@@ -324,8 +360,8 @@ class cstruct:
         if defines:
             blocks.append("\n".join(defines))
 
-        for name, typedef in self.typedefs.items():
-            if name in empty.typedefs or not isinstance(typedef, type):
+        for name, typedef in self.types.items():
+            if name in empty.types or not isinstance(typedef, type):
                 continue
 
             if not issubclass(typedef, (Structure, Enum, Flag)):
@@ -365,20 +401,13 @@ class cstruct:
         Raises:
             ResolveError: If the type can't be resolved.
         """
-        type_name = name
-        if not isinstance(type_name, str):
-            return type_name
+        if not isinstance(name, str):
+            return name
 
-        for _ in range(10):
-            if type_name not in self.typedefs:
-                raise ResolveError(f"Unknown type {name}")
-
-            type_name = self.typedefs[type_name]
-
-            if not isinstance(type_name, str):
-                return type_name
-
-        raise ResolveError(f"Recursion limit exceeded while resolving type {name}")
+        try:
+            return self.types[name]
+        except KeyError:
+            raise ResolveError(f"Unknown type {name}") from None
 
     def copy(self) -> cstruct:
         """Create a copy of this cstruct instance.
@@ -555,6 +584,21 @@ class cstruct:
         # signed long long: TypeAlias = int64
         # unsigned long long: TypeAlias = uint64
 
+        u8: TypeAlias = uint8
+        u16: TypeAlias = uint16
+        u32: TypeAlias = uint32
+        u64: TypeAlias = uint64
+        u128: TypeAlias = uint128
+        __u8: TypeAlias = uint8
+        __u16: TypeAlias = uint16
+        __u32: TypeAlias = uint32
+        __u64: TypeAlias = uint64
+        __u128: TypeAlias = uint128
+        uchar: TypeAlias = uint8
+        ushort: TypeAlias = uint16
+        uint: TypeAlias = uint32
+        ulong: TypeAlias = uint32
+
         BYTE: TypeAlias = uint8
         CHAR: TypeAlias = char
         SHORT: TypeAlias = int16
@@ -620,20 +664,17 @@ class cstruct:
         _QWORD: TypeAlias = uint64
         _OWORD: TypeAlias = uint128
 
-        u8: TypeAlias = uint8
-        u16: TypeAlias = uint16
-        u32: TypeAlias = uint32
-        u64: TypeAlias = uint64
-        u128: TypeAlias = uint128
-        __u8: TypeAlias = uint8
-        __u16: TypeAlias = uint16
-        __u32: TypeAlias = uint32
-        __u64: TypeAlias = uint64
-        __u128: TypeAlias = uint128
-        uchar: TypeAlias = uint8
-        ushort: TypeAlias = uint16
-        uint: TypeAlias = uint32
-        ulong: TypeAlias = uint32
+
+# Attribute names that types and constants may never shadow: the public API and methods of the cstruct
+# class itself, plus the instance attributes created in __init__.
+_RESERVED_NAMES = frozenset(dir(cstruct)) | {
+    "endian",
+    "consts",
+    "types",
+    "includes",
+    "pointer",
+    "_anonymous_count",
+}
 
 
 def ctypes(structure: type[Structure]) -> type[_ctypes.Structure]:

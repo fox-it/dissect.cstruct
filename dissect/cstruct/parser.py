@@ -150,7 +150,8 @@ class CStyleParser(Parser):
 
                 # If it's an anonymous enum/flag, add its members to the constants for convenience
                 if not type_.__name__:
-                    self.cs.consts.update(type_.__members__)
+                    for k, v in type_.__members__.items():
+                        self.cs.add_const(k, v)
 
                 self._expect(TokenType.SEMICOLON)
             else:
@@ -201,17 +202,17 @@ class CStyleParser(Parser):
                             # If evaluation fails, just keep it as a string (e.g. for macro-like constants)
                             pass
 
-        self.cs.consts[name_token.value] = value
+        self.cs.add_const(name_token.value, value)
 
     def _parse_undef(self) -> None:
         """Parse an undef directive and remove the constant."""
         self._expect(TokenType.PP_UNDEF)
 
         name_token = self._expect(TokenType.IDENTIFIER)
-        if name_token.value in self.cs.consts:
-            del self.cs.consts[name_token.value]
-        else:
-            raise self._error(f"constant {name_token.value!r} not defined", token=name_token)
+        try:
+            self.cs.del_const(name_token.value)
+        except KeyError:
+            raise self._error(f"constant {name_token.value!r} not defined", token=name_token) from None
 
     def _parse_include(self) -> None:
         """Parse an include directive and add the included file to the includes list."""
@@ -544,7 +545,7 @@ class CStyleParser(Parser):
             ):
                 # This identifier is followed by a field delimiter, it should be the field name,
                 # UNLESS the current parts don't form a valid type yet.
-                if " ".join(parts) in self.cs.typedefs:
+                if " ".join(parts) in self.cs.types:
                     break
 
                 # Current parts don't resolve, consume and hope this completes the type name

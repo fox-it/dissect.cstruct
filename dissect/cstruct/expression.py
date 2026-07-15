@@ -12,6 +12,8 @@ if TYPE_CHECKING:
     from dissect.cstruct import cstruct
     from dissect.cstruct.lexer import Token
 
+_MISSING = object()
+
 BINARY_OPERATORS: dict[TokenType, Callable[[int, int], int]] = {
     TokenType.PIPE: lambda a, b: a | b,
     TokenType.CARET: lambda a, b: a ^ b,
@@ -164,16 +166,13 @@ class Expression(TokenCursor):
                             obj = context[part]
                         elif part in cs.consts:
                             obj = cs.consts[part]
-                        elif part in cs.typedefs:
-                            obj = cs.resolve(part)
+                        elif part in cs.types:
+                            obj = cs.types[part]
                         else:
                             raise self._error(f"Unknown identifier: '{ident}'", token=token)
                     else:
-                        if isinstance(obj, dict) and part in obj:
-                            obj = obj[part]
-                        elif hasattr(obj, part):
-                            obj = getattr(obj, part)
-                        else:
+                        obj = obj.get(part, _MISSING) if isinstance(obj, dict) else getattr(obj, part, _MISSING)
+                        if obj is _MISSING:
                             raise self._error(f"Unknown identifier: '{ident}'", token=token)
 
                 try:

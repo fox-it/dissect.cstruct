@@ -37,7 +37,7 @@ def test_load_file(cs: cstruct, compiled: bool, tmp_path: Path) -> None:
     tmp_path.joinpath("testdef.txt").write_text(textwrap.dedent(cdef))
 
     cs.loadfile(tmp_path.joinpath("testdef.txt"), compiled=compiled)
-    assert "test" in cs.typedefs
+    assert "test" in cs.types
 
 
 def test_load_init() -> None:
@@ -49,12 +49,12 @@ def test_load_init() -> None:
     """
     # load with first positional argument
     cs = cstruct(cdef)
-    assert "test" in cs.typedefs
+    assert "test" in cs.types
     assert cs.endian == "<"
 
     # load from keyword argument and big endian
     cs = cstruct(load=cdef, endian=">")
-    assert "test" in cs.typedefs
+    assert "test" in cs.types
     a = cs.test(a=0xBADC0DE, b=0xACCE55ED)
     assert len(bytes(a)) == 12
     assert bytes(a) == a.dumps()
@@ -62,7 +62,7 @@ def test_load_init() -> None:
 
     # load using positional argument and little endian
     cs = cstruct(cdef, endian="<")
-    assert "test" in cs.typedefs
+    assert "test" in cs.types
     a = cs.test(a=0xBADC0DE, b=0xACCE55ED)
     assert len(bytes(a)) == 12
     assert bytes(a) == a.dumps()
@@ -81,7 +81,7 @@ def test_load_init_kwargs_only() -> None:
         cs = cstruct(cdef, ">")
 
     cs = cstruct(cdef, endian=">")
-    assert "test" in cs.typedefs
+    assert "test" in cs.types
     assert cs.endian == ">"
 
 
@@ -96,11 +96,10 @@ def test_type_resolve(cs: cstruct) -> None:
         cs.resolve("fake")
 
     cs.add_type("ref0", "uint32")
-    for i in range(1, 15):  # Recursion limit is currently 10
+    for i in range(1, 15):
         cs.add_type(f"ref{i}", f"ref{i - 1}")
 
-    with pytest.raises(ResolveError, match="Recursion limit exceeded"):
-        cs.resolve("ref14")
+    assert cs.resolve("ref14") is cs.uint32
 
 
 def test_constants(cs: cstruct) -> None:
@@ -138,6 +137,52 @@ def test_duplicate_types(cs: cstruct) -> None:
 
     with pytest.raises(ValueError, match="Duplicate type"):
         cs.load("""typedef uint64 Test;""")
+
+
+def test_type_replace(cs: cstruct) -> None:
+    cs.add_type("BYTE", "uint16", replace=True)
+    assert cs.resolve("BYTE") is cs.uint16
+    assert cs.BYTE is cs.uint16
+
+    # Adding a conflicting type over an existing alias should raise
+    cs.add_type("foo", "uint8")
+    with pytest.raises(ValueError, match="Duplicate type"):
+        cs.load("struct foo { uint32 x; };")
+
+
+def test_reserved_attribute_names(cs: cstruct) -> None:
+    cs.load("struct load { uint8 a; };")
+    assert callable(cs.load)
+    assert cs.resolve("load").fields["a"].type is cs.uint8
+
+    cs.load("struct consts { uint8 a; };")
+    assert isinstance(cs.consts, dict)
+
+    cs.load("#define resolve 1")
+    assert callable(cs.resolve)
+    assert cs.consts["resolve"] == 1
+
+
+def test_del_const_after_copy(cs: cstruct) -> None:
+    cs.load("#define FOO 1")
+    cs_copy = cs.copy()
+
+    assert cs_copy.FOO == 1
+    cs_copy.del_const("FOO")
+    assert "FOO" not in cs_copy.consts
+    assert cs.FOO == 1
+
+
+def test_const_type_name_collision(cs: cstruct) -> None:
+    # When a constant and a type share a name, the last one added wins on attribute access
+    cs.load("#define INT 1")
+    assert cs.INT == 1
+    assert cs.resolve("INT") is cs.int32
+
+    cs.load("struct foo { uint8 a; };")
+    cs.load("#define foo 1")
+    assert cs.foo == 1
+    assert cs.resolve("foo").fields["a"].type is cs.uint8
 
 
 def test_typedef(cs: cstruct) -> None:
@@ -445,7 +490,7 @@ def test_reserved_keyword(cs: cstruct, compiled: bool) -> None:
     cs.load(cdef, compiled=compiled)
 
     for name in ["in", "class", "for"]:
-        assert name in cs.typedefs
+        assert name in cs.types
         assert verify_compiled(cs.resolve(name), compiled)
 
         assert cs.resolve(name)(b"\x01").a == 1
@@ -542,11 +587,11 @@ def test_copy(cs: cstruct) -> None:
     };
     """)
 
-    assert "test" in cs.typedefs
-    assert "test2" not in cs.typedefs
+    assert "test" in cs.types
+    assert "test2" not in cs.types
 
-    assert "test" in cs_copy.typedefs
-    assert "test2" in cs_copy.typedefs
+    assert "test" in cs_copy.types
+    assert "test2" in cs_copy.types
 
     # Verify that types in the copied cstruct reference the copied cstruct
     assert cs_copy.resolve("test").cs is cs_copy
