@@ -54,11 +54,11 @@ class EnumMetaType(EnumMeta, MetaType):
             raise TypeError("Enum can only be created from int type")
 
         enum_cls = super().__call__(name, *args, **kwargs)
-        enum_cls.cs = cs
+        enum_cls.__cs__ = cs
         enum_cls.type = type_
-        enum_cls.size = type_.size
-        enum_cls.dynamic = type_.dynamic
-        enum_cls.alignment = type_.alignment
+        enum_cls.__size__ = type_.__size__
+        enum_cls.__dynamic__ = type_.__dynamic__
+        enum_cls.__alignment__ = type_.__alignment__
 
         _fix_alias_members(enum_cls)
 

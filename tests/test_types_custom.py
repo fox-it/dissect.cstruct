@@ -18,7 +18,7 @@ class EtwPointer(BaseType):
 
     @classmethod
     def __default__(cls) -> int:
-        return cls.cs.uint64.__default__()
+        return cls.__cs__.uint64.__default__()
 
     @classmethod
     def _read(
@@ -38,13 +38,13 @@ class EtwPointer(BaseType):
 
     @classmethod
     def as_32bit(cls) -> None:
-        cls.type = cls.cs.uint32
-        cls.size = 4
+        cls.type = cls.__cs__.uint32
+        cls.__size__ = 4
 
     @classmethod
     def as_64bit(cls) -> None:
-        cls.type = cls.cs.uint64
-        cls.size = 8
+        cls.type = cls.__cs__.uint64
+        cls.__size__ = 8
 
 
 def test_adding_custom_type(cs: cstruct) -> None:

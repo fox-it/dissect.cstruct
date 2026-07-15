@@ -19,11 +19,11 @@ class BitBuffer:
 
     def read(self, field_type: type[BaseType], bits: int) -> int:
         if self._remaining == 0 or self._type != field_type:
-            if field_type.size is None:
+            if field_type.__size__ is None:
                 raise ValueError("Reading variable-length fields is unsupported")
 
             self._type = field_type
-            self._remaining = field_type.size * 8
+            self._remaining = field_type.__size__ * 8
             self._buffer = field_type._read(self.stream, endian=self.endian)
 
         if isinstance(self._buffer, bytes):
@@ -51,17 +51,17 @@ class BitBuffer:
             if self._type:
                 self.flush()
 
-            if field_type.size is None:
+            if field_type.__size__ is None:
                 raise ValueError("Writing variable-length fields is unsupported")
 
-            self._remaining = field_type.size * 8
+            self._remaining = field_type.__size__ * 8
             self._type = field_type
 
-        if self._type is None or self._type.size is None:
+        if self._type is None or self._type.__size__ is None:
             raise ValueError("Invalid state")
 
         if self.endian == "<":
-            self._buffer |= data << (self._type.size * 8 - self._remaining)
+            self._buffer |= data << (self._type.__size__ * 8 - self._remaining)
         else:
             self._buffer |= data << (self._remaining - bits)
 

@@ -243,10 +243,7 @@ def test_generate_packed_read_offsets(cs: cstruct) -> None:
 
 
 def test_generate_structure_read(cs: cstruct) -> None:
-    mock_type = Mock()
-    mock_type.__anonymous__ = False
-
-    field = Field("a", mock_type)
+    field = Field("a", Mock(__alignment__=None, __dynamic__=True, __anonymous__=False))
     code = next(compiler._ReadSourceGenerator(cs, [field])._generate_structure(field))
 
     expected = """
@@ -259,10 +256,7 @@ def test_generate_structure_read(cs: cstruct) -> None:
 
 
 def test_generate_structure_read_anonymous(cs: cstruct) -> None:
-    mock_type = Mock()
-    mock_type.__anonymous__ = True
-
-    field = Field("a", mock_type)
+    field = Field("a", Mock(__alignment__=None, __dynamic__=True, __anonymous__=True))
     code = next(compiler._ReadSourceGenerator(cs, [field])._generate_structure(field))
 
     expected = """
@@ -275,7 +269,7 @@ def test_generate_structure_read_anonymous(cs: cstruct) -> None:
 
 
 def test_generate_array_read(cs: cstruct) -> None:
-    field = Field("a", Mock())
+    field = Field("a", Mock(__alignment__=None, __dynamic__=True))
     code = next(compiler._ReadSourceGenerator(cs, [field])._generate_array(field))
 
     expected = """

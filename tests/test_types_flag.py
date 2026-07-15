@@ -22,10 +22,10 @@ def TestFlag(cs: cstruct) -> type[Flag]:
 
 def test_flag(cs: cstruct, TestFlag: type[Flag]) -> None:
     assert issubclass(TestFlag, StdFlag)
-    assert TestFlag.cs is cs
+    assert TestFlag.__cs__ is cs
     assert TestFlag.type is cs.uint8
-    assert TestFlag.size == 1
-    assert TestFlag.alignment == 1
+    assert TestFlag.__size__ == 1
+    assert TestFlag.__alignment__ == 1
 
     assert TestFlag.A == 1
     assert TestFlag.B == 2
