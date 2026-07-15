@@ -7,7 +7,7 @@ import struct
 import sys
 from enum import Enum
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -86,6 +86,14 @@ def normalize_endianness(endian: AllowedEndianness) -> Endianness:
         raise ValueError(
             f"Invalid endianness: {endian!r}, expected one of {', '.join(ENDIANNESS_MAP.keys())}"
         ) from None
+
+
+class classproperty:
+    def __init__(self, fget: classmethod) -> None:
+        self.fget = fget
+
+    def __get__(self, obj: object | None, owner: type) -> Any:
+        return self.fget(owner)
 
 
 Palette = list[tuple[int, str]]
@@ -352,8 +360,8 @@ def dumpstruct(
 
 
 @lru_cache(1024)
-def _struct(endian: str, packchar: str) -> struct.Struct:
-    return struct.Struct(f"{endian}{packchar}")
+def _struct(endian: str, fmt: str) -> struct.Struct:
+    return struct.Struct(f"{endian}{fmt}")
 
 
 def pack(value: int, size: int | None = None, endian: AllowedEndianness = "little") -> bytes:
@@ -577,7 +585,7 @@ def sizeof(type_: type[BaseType] | BaseType) -> int:
 
 def offsetof(type_: type[Structure], name: str) -> int:
     """Get the offset of a field in a structure."""
-    if (field := type_.fields.get(name)) is None:
+    if (field := type_.__members__.get(name)) is None:
         raise ValueError(f"Structure '{type_.__name__}' does not have a field named '{name}'")
     if (offset := field.offset) is None:
         raise ValueError(f"Field '{field._name}' of structure '{type_.__name__}' does not have a known offset")

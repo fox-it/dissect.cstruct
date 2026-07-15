@@ -121,9 +121,9 @@ def generate_typehint(
     if issubclass(type_, types.WcharArray):
         return f"{module_prefix}WcharArray"
     if issubclass(type_, types.Pointer):
-        return f"{module_prefix}Pointer[{generate_typehint(type_.type, prefix, module_prefix)}]"
+        return f"{module_prefix}Pointer[{generate_typehint(type_.__type__, prefix, module_prefix)}]"
     if issubclass(type_, types.Array):
-        return f"{module_prefix}Array[{generate_typehint(type_.type, prefix, module_prefix)}]"
+        return f"{module_prefix}Array[{generate_typehint(type_.__type__, prefix, module_prefix)}]"
     return f"{prefix}{type_.__name__}"
 
 
@@ -159,15 +159,15 @@ def generate_structure_stub(
     indent = " " * 4
 
     args = ["self"]
-    for field_name, field in structure.fields.items():
+    for field_name, field in structure.__members__.items():
         inlined = False
 
         # If it's a structure and not globally defined, add an inline stub for it
         nested_type = field.type
         while issubclass(nested_type, types.BaseArray):
-            nested_type = nested_type.type
+            nested_type = nested_type.__type__
 
-        if issubclass(nested_type, types.Structure) and nested_type.__name__ not in structure.cs.types:
+        if issubclass(nested_type, types.Structure) and nested_type.__name__ not in structure.__cs__.types:
             inlined = True
             inline_stub = generate_structure_stub(nested_type, cs_prefix=cs_prefix, module_prefix=module_prefix)
 

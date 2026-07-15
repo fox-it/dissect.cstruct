@@ -58,7 +58,7 @@ python_compile = compile
 
 
 def compile(structure: type[Structure]) -> type[Structure]:
-    return Compiler(structure.cs).compile(structure)
+    return Compiler(structure.__cs__).compile(structure)
 
 
 class Compiler:
@@ -163,7 +163,7 @@ class _ReadSourceGenerator:
             field_type = field.type
 
             if isinstance(field_type, EnumMetaType):
-                field_type = field_type.type
+                field_type = field_type.__type__
 
             if not issubclass(field_type, SUPPORTED_TYPES):
                 raise TypeError(f"Unsupported type for compiler: {field_type}")
@@ -188,7 +188,7 @@ class _ReadSourceGenerator:
 
             # Array of structures and multi-dimensional arrays
             elif issubclass(field_type, (Array, CharArray, WcharArray)) and (
-                issubclass(field_type.type, Structure) or issubclass(field_type.type, BaseArray) or is_dynamic
+                issubclass(field_type.__type__, Structure) or issubclass(field_type.__type__, BaseArray) or is_dynamic
             ):
                 yield from flush()
                 yield from align_to_field(field)
@@ -222,22 +222,22 @@ class _ReadSourceGenerator:
         yield from flush()
 
         if self.align:
-            yield f"stream.seek(-stream.tell() & (cls.alignment - 1), {io.SEEK_CUR})"
+            yield f"stream.seek(-stream.tell() & (cls.__alignment__ - 1), {io.SEEK_CUR})"
 
     def _generate_structure(self, field: Field) -> Iterator[str]:
         template = f"""
-        {"_s = stream.tell()" if field.type.dynamic else ""}
+        {"_s = stream.tell()" if field.type.__dynamic__ else ""}
         r["{field._name}"] = {self._map_field(field)}._read(stream, context=r, endian=endian)
-        {f's["{field._name}"] = stream.tell() - _s' if field.type.dynamic else ""}
+        {f's["{field._name}"] = stream.tell() - _s' if field.type.__dynamic__ else ""}
         """
 
         yield dedent(template)
 
     def _generate_array(self, field: Field) -> Iterator[str]:
         template = f"""
-        {"_s = stream.tell()" if field.type.dynamic else ""}
+        {"_s = stream.tell()" if field.type.__dynamic__ else ""}
         r["{field._name}"] = {self._map_field(field)}._read(stream, context=r, endian=endian)
-        {f's["{field._name}"] = stream.tell() - _s' if field.type.dynamic else ""}
+        {f's["{field._name}"] = stream.tell() - _s' if field.type.__dynamic__ else ""}
         """
 
         yield dedent(template)
@@ -247,12 +247,12 @@ class _ReadSourceGenerator:
         read_type = "_t"
         field_type = field.type
         if issubclass(field_type, (Enum, Flag)):
-            read_type += ".type"
-            field_type = field_type.type
+            read_type += ".__type__"
+            field_type = field_type.__type__
 
         if issubclass(field_type, Char):
-            field_type = field_type.cs.uint8
-            lookup = "cls.cs.uint8"
+            field_type = field_type.__cs__.uint8
+            lookup = "cls.__cs__.uint8"
 
         template = f"""
         _t = {lookup}
@@ -277,17 +277,17 @@ class _ReadSourceGenerator:
             read_type = _get_read_type(self.cs, field_type)
 
             if issubclass(field_type, (Array, CharArray, WcharArray)):
-                count = field_type.num_entries
-                read_type = _get_read_type(self.cs, field_type.type)
+                count = field_type.__num_entries__
+                read_type = _get_read_type(self.cs, field_type.__type__)
 
                 if issubclass(read_type, (Char, Wchar, Int)):
-                    count *= read_type.size
+                    count *= read_type.__size__
                     getter = f"buf[{size}:{size + count}]"
                 else:
                     getter = f"data[{slice_index}:{slice_index + count}]"
                     slice_index += count
             elif issubclass(read_type, (Char, Wchar, Int)):
-                getter = f"buf[{size}:{size + read_type.size}]"
+                getter = f"buf[{size}:{size + read_type.__size__}]"
             else:
                 getter = f"data[{slice_index}]"
                 slice_index += 1
@@ -302,13 +302,13 @@ class _ReadSourceGenerator:
             # Create the final reading code
             if issubclass(field_type, Array):
                 reads.append(f"_t = {self._map_field(field)}")
-                reads.append("_et = _t.type")
+                reads.append("_et = _t.__type__")
 
-                if issubclass(field_type.type, Int):
+                if issubclass(field_type.__type__, Int):
                     reads.append(f"_b = {getter}")
-                    item_parser = parser_template.format(type="_et", getter=f"_b[i:i + {field_type.type.size}]")
-                    list_comp = f"[{item_parser} for i in range(0, {count}, {field_type.type.size})]"
-                elif issubclass(field_type.type, Pointer):
+                    item_parser = parser_template.format(type="_et", getter=f"_b[i:i + {field_type.__type__.__size__}]")
+                    list_comp = f"[{item_parser} for i in range(0, {count}, {field_type.__type__.__size__})]"
+                elif issubclass(field_type.__type__, Pointer):
                     item_parser = "_et.__new__(_et, e, stream, context=r, endian=endian)"
                     list_comp = f"[{item_parser} for e in {getter}]"
                 else:
@@ -327,7 +327,7 @@ class _ReadSourceGenerator:
             reads.append(f'r["{field._name}"] = {parser}')
             reads.append("")  # Generates a newline in the resulting code
 
-            size += field_type.size
+            size += field_type.__size__
 
         fmt = _optimize_struct_fmt(info)
         if fmt == "x" or (len(fmt) == 2 and fmt[1] == "x"):
@@ -370,19 +370,19 @@ def _generate_struct_info(cs: cstruct, fields: list[Field], align: bool = False)
 
         # Array of more complex types are handled elsewhere
         if issubclass(read_type, (Array, CharArray, WcharArray)):
-            count = read_type.num_entries
-            read_type = _get_read_type(cs, read_type.type)
+            count = read_type.__num_entries__
+            read_type = _get_read_type(cs, read_type.__type__)
 
         # Take the pack char for Packed
         if issubclass(read_type, Packed):
-            yield field, count, read_type.packchar
+            yield field, count, read_type.__fmt__
 
         # Other types are byte based
         # We don't actually unpack anything here but slice directly out of the buffer
         elif issubclass(read_type, (Char, Wchar, Int)):
-            yield field, count * read_type.size, "x"
+            yield field, count * read_type.__size__, "x"
 
-        size = count * read_type.size
+        size = count * read_type.__size__
         imaginary_offset += size
         if current_offset is not None:
             current_offset += size
@@ -416,7 +416,7 @@ def _optimize_struct_fmt(info: Iterator[tuple[Field, int, str]]) -> str:
 
 def _get_read_type(cs: cstruct, type_: type[BaseType]) -> type[BaseType]:
     if issubclass(type_, (Enum, Flag)):
-        type_ = type_.type
+        type_ = type_.__type__
 
     if issubclass(type_, Pointer):
         type_ = cs.pointer

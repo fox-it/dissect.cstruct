@@ -21,7 +21,7 @@ _S = TypeVar("_S")
 
 
 class EnumMetaType(EnumMeta, MetaType):
-    type: type[BaseType]
+    __type__: type[BaseType]
 
     @overload
     def __call__(cls, value: cstruct, name: str, type_: type[BaseType], *args, **kwargs) -> type[Enum]: ...
@@ -39,11 +39,11 @@ class EnumMetaType(EnumMeta, MetaType):
     ) -> Enum | type[Enum]:
         if name is None:
             if value is None:
-                value = cls.type.__default__()
+                value = cls.__type__.__default__()
 
             if not isinstance(value, int):
                 # value is a parsable value
-                value = cls.type(value)
+                value = cls.__type__(value)
 
             return super().__call__(value)
 
@@ -54,11 +54,11 @@ class EnumMetaType(EnumMeta, MetaType):
             raise TypeError("Enum can only be created from int type")
 
         enum_cls = super().__call__(name, *args, **kwargs)
-        enum_cls.cs = cs
-        enum_cls.type = type_
-        enum_cls.size = type_.size
-        enum_cls.dynamic = type_.dynamic
-        enum_cls.alignment = type_.alignment
+        enum_cls.__cs__ = cs
+        enum_cls.__type__ = type_
+        enum_cls.__size__ = type_.__size__
+        enum_cls.__dynamic__ = type_.__dynamic__
+        enum_cls.__alignment__ = type_.__alignment__
 
         _fix_alias_members(enum_cls)
 
@@ -85,26 +85,26 @@ class EnumMetaType(EnumMeta, MetaType):
         return value in cls._value2member_map_
 
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
-        return cls(cls.type._read(stream, context=context, endian=endian))
+        return cls(cls.__type__._read(stream, context=context, endian=endian))
 
     def _read_array(
         cls, stream: BinaryIO, count: int, *, context: dict[str, Any] | None = None, endian: Endianness
     ) -> list[Self]:
-        return list(map(cls, cls.type._read_array(stream, count, context=context, endian=endian)))
+        return list(map(cls, cls.__type__._read_array(stream, count, context=context, endian=endian)))
 
     def _read_0(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> list[Self]:
-        return list(map(cls, cls.type._read_0(stream, context=context, endian=endian)))
+        return list(map(cls, cls.__type__._read_0(stream, context=context, endian=endian)))
 
     def _write(cls, stream: BinaryIO, data: Enum, *, endian: Endianness) -> int:
-        return cls.type._write(stream, data.value, endian=endian)
+        return cls.__type__._write(stream, data.value, endian=endian)
 
     def _write_array(cls, stream: BinaryIO, array: list[BaseType | int], *, endian: Endianness) -> int:
         data = [entry.value if isinstance(entry, _Enum) else entry for entry in array]
-        return cls.type._write_array(stream, data, endian=endian)
+        return cls.__type__._write_array(stream, data, endian=endian)
 
     def _write_0(cls, stream: BinaryIO, array: list[BaseType | int], *, endian: Endianness) -> int:
         data = [entry.value if isinstance(entry, _Enum) else entry for entry in array]
-        return cls._write_array(stream, [*data, cls.type.__default__()], endian=endian)
+        return cls._write_array(stream, [*data, cls.__type__.__default__()], endian=endian)
 
     def cdef(cls) -> str:
         """Render this enum (or flag) back to its C-style definition.
@@ -113,7 +113,7 @@ class EnumMetaType(EnumMeta, MetaType):
             The C-style definition as a string.
         """
         keyword = "flag" if issubclass(cls, IntFlag) else "enum"
-        underlying = cls.type.__name__
+        underlying = cls.__type__.__name__
         title = f"{keyword} {cls.__name__} : {underlying}" if cls.__name__ else f"{keyword} : {underlying}"
 
         lines = [f"{title} {{"]

@@ -13,50 +13,50 @@ if TYPE_CHECKING:
 
 
 class EtwPointer(BaseType):
-    type: type[BaseType]
-    size: int | None
+    __type__: type[BaseType]
+    __size__: int | None
 
     @classmethod
     def __default__(cls) -> int:
-        return cls.cs.uint64.__default__()
+        return cls.__cs__.uint64.__default__()
 
     @classmethod
     def _read(
         cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs
     ) -> BaseType:
-        return cls.type._read(stream, context=context, endian=endian)
+        return cls.__type__._read(stream, context=context, endian=endian)
 
     @classmethod
     def _read_0(
         cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs
     ) -> list[BaseType]:
-        return cls.type._read_0(stream, context=context, endian=endian)
+        return cls.__type__._read_0(stream, context=context, endian=endian)
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: Any, *, endian: Endianness) -> int:
-        return cls.type._write(stream, data, endian=endian)
+        return cls.__type__._write(stream, data, endian=endian)
 
     @classmethod
     def as_32bit(cls) -> None:
-        cls.type = cls.cs.uint32
-        cls.size = 4
+        cls.__type__ = cls.__cs__.uint32
+        cls.__size__ = 4
 
     @classmethod
     def as_64bit(cls) -> None:
-        cls.type = cls.cs.uint64
-        cls.size = 8
+        cls.__type__ = cls.__cs__.uint64
+        cls.__size__ = 8
 
 
 def test_adding_custom_type(cs: cstruct) -> None:
     cs.add_custom_type("EtwPointer", EtwPointer)
 
     cs.EtwPointer.as_64bit()
-    assert cs.EtwPointer.type is cs.uint64
+    assert cs.EtwPointer.__type__ is cs.uint64
     assert len(cs.EtwPointer) == 8
     assert cs.EtwPointer(b"\xde\xad\xbe\xef" * 2).dumps() == b"\xde\xad\xbe\xef" * 2
 
     cs.EtwPointer.as_32bit()
-    assert cs.EtwPointer.type is cs.uint32
+    assert cs.EtwPointer.__type__ is cs.uint32
     assert len(cs.EtwPointer) == 4
     assert cs.EtwPointer(b"\xde\xad\xbe\xef" * 2).dumps() == b"\xde\xad\xbe\xef"
 
@@ -120,7 +120,7 @@ def test_custom_deprecated_signature(cs: cstruct) -> None:
             pass
 
     class OldArrayRead(int, BaseType):
-        class ArrayType(list, BaseArray):
+        class __ArrayType__(list, BaseArray):
             def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list:
                 pass
 
@@ -138,6 +138,7 @@ def test_custom_deprecated_signature(cs: cstruct) -> None:
         cs.add_custom_type("OldWrite", OldWrite)
 
     with pytest.warns(
-        UserWarning, match=r"OldArrayRead\.ArrayType is missing the 'endian' keyword-only parameter in its _read method"
+        UserWarning,
+        match=r"OldArrayRead\.__ArrayType__ is missing the 'endian' keyword-only parameter in its _read method",
     ):
         cs.add_custom_type("OldArrayRead", OldArrayRead)

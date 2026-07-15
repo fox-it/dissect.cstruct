@@ -117,17 +117,17 @@ def test_custom_array_type(cs: cstruct, compiled: bool) -> None:
             value = stream.read(length)
             return type.__call__(cls, value)
 
-        class ArrayType(BaseArray):
+        class __ArrayType__(BaseArray):
             @classmethod
             def __default__(cls) -> CustomType:
-                return cls.type()
+                return cls.__type__()
 
             @classmethod
             def _read(
                 cls, stream: BinaryIO, *, context: dict | None = None, endian: Endianness, **kwargs
             ) -> CustomType:
-                value = cls.type._read(stream, context=context, endian=endian)
-                if str(cls.num_entries) == "lower":
+                value = cls.__type__._read(stream, context=context, endian=endian)
+                if str(cls.__num_entries__) == "lower":
                     value.value = value.value.lower()
 
                 return value

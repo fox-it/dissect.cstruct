@@ -16,7 +16,7 @@ class CharArray(bytes, BaseArray):
 
     @classmethod
     def __default__(cls) -> Self:
-        return type.__call__(cls, b"\x00" * (0 if cls.dynamic or cls.null_terminated else cls.num_entries))
+        return type.__call__(cls, b"\x00" * (0 if cls.__dynamic__ or cls.__null_terminated__ else cls.__num_entries__))
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
@@ -29,12 +29,12 @@ class CharArray(bytes, BaseArray):
         elif isinstance(data, str):
             data = data.encode("latin-1")
 
-        if cls.null_terminated:
+        if cls.__null_terminated__:
             data += b"\x00"
 
-        if not cls.dynamic and (remaining := cls.num_entries - (actual_size := len(data))):
+        if not cls.__dynamic__ and (remaining := cls.__num_entries__ - (actual_size := len(data))):
             if remaining < 0:
-                raise ArraySizeError(f"Expected static array size {cls.num_entries}, got {actual_size} instead.")
+                raise ArraySizeError(f"Expected static array size {cls.__num_entries__}, got {actual_size} instead.")
             data += b"\x00" * remaining
 
         return stream.write(data)
@@ -43,7 +43,7 @@ class CharArray(bytes, BaseArray):
 class Char(bytes, BaseType):
     """Character type for reading and writing bytes."""
 
-    ArrayType = CharArray
+    __ArrayType__ = CharArray
 
     @classmethod
     def __default__(cls) -> Self:

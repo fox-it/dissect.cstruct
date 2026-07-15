@@ -206,7 +206,28 @@ class cstruct:
         if load:
             self.load(load)
 
-    def __getattr__(self, attr: str) -> Any:
+    def __getattr__(
+        self, attr: str
+    ) -> (
+        type[
+            LEB128
+            | BaseType
+            | Char
+            | Enum
+            | Flag
+            | Int
+            | Packed[int]
+            | Packed[float]
+            | Pointer
+            | Structure
+            | Union
+            | Void
+            | Wchar
+        ]
+        | int
+        | str
+        | bytes
+    ):
         try:
             return self.consts[attr]
         except KeyError:
@@ -227,7 +248,7 @@ class cstruct:
         # Update types to point to the new cstruct instance
         for name, type_ in self.types.items():
             new_type = copy.copy(type_)
-            new_type.cs = cs
+            new_type.__cs__ = cs
             cs.add_type(name, new_type, replace=True)
 
         for name, value in self.consts.items():
@@ -288,8 +309,10 @@ class cstruct:
         """
         # In cstruct 5.0 we changed the function signature of _read and _write
         # Check if the function signature is compatible, and warn if not
-        for type_to_check in (type_, type_.ArrayType):
-            type_name = type_.__name__ + (f".{type_.ArrayType.__name__}" if type_to_check is type_.ArrayType else "")
+        for type_to_check in (type_, type_.__ArrayType__):
+            type_name = type_.__name__ + (
+                f".{type_.__ArrayType__.__name__}" if type_to_check is type_.__ArrayType__ else ""
+            )
 
             for method in ("_read", "_read_array", "_read_0", "_write", "_write_array", "_write_0"):
                 if not hasattr(type_to_check, method):
@@ -481,10 +504,10 @@ class cstruct:
         attrs = attrs or {}
         attrs.update(
             {
-                "cs": self,
-                "size": size,
-                "dynamic": size is None,
-                "alignment": alignment or size,
+                "__cs__": self,
+                "__size__": size,
+                "__dynamic__": size is None,
+                "__alignment__": alignment or size,
             }
         )
         return types.new_class(name, bases, {}, lambda ns: ns.update(attrs))
@@ -494,37 +517,37 @@ class cstruct:
         if num_entries is None:
             null_terminated = True
             size = None
-        elif isinstance(num_entries, Expression) or type_.dynamic:
+        elif isinstance(num_entries, Expression) or type_.__dynamic__:
             size = None
         else:
-            if type_.size is None:
+            if type_.__size__ is None:
                 raise ValueError(f"Cannot create array of dynamic type: {type_.__name__}")
-            size = num_entries * type_.size
+            size = num_entries * type_.__size__
 
         name = f"{type_.__name__}[]" if null_terminated else f"{type_.__name__}[{num_entries}]"
 
-        bases = (type_.ArrayType,)
+        bases = (type_.__ArrayType__,)
 
         attrs = {
-            "type": type_,
-            "num_entries": num_entries,
-            "null_terminated": null_terminated,
+            "__type__": type_,
+            "__num_entries__": num_entries,
+            "__null_terminated__": null_terminated,
         }
 
-        return cast("type[Array]", self._make_type(name, bases, size, alignment=type_.alignment, attrs=attrs))
+        return cast("type[Array]", self._make_type(name, bases, size, alignment=type_.__alignment__, attrs=attrs))
 
     def _make_int_type(self, name: str, size: int, signed: bool, *, alignment: int | None = None) -> type[Int]:
         return cast("type[Int]", self._make_type(name, (Int,), size, alignment=alignment, attrs={"signed": signed}))
 
-    def _make_packed_type(self, name: str, packchar: str, base: type, *, alignment: int | None = None) -> type[Packed]:
+    def _make_packed_type(self, name: str, fmt: str, base: type, *, alignment: int | None = None) -> type[Packed]:
         return cast(
             "type[Packed]",
             self._make_type(
                 name,
                 (base, Packed),
-                struct.calcsize(packchar),
+                struct.calcsize(fmt),
                 alignment=alignment,
-                attrs={"packchar": packchar},
+                attrs={"__fmt__": fmt},
             ),
         )
 
@@ -538,9 +561,9 @@ class cstruct:
         return self._make_type(
             f"{target.__name__}*",
             (Pointer,),
-            self.pointer.size,
-            alignment=self.pointer.alignment,
-            attrs={"type": target},
+            self.pointer.__size__,
+            alignment=self.pointer.__alignment__,
+            attrs={"__type__": target},
         )
 
     def _make_struct(
@@ -557,7 +580,7 @@ class cstruct:
             (base,),
             None,
             attrs={
-                "fields": fields,
+                "__members__": fields,
                 "__align__": align,
                 "__anonymous__": anonymous,
             },
@@ -567,6 +590,15 @@ class cstruct:
         self, name: str, fields: list[Field], *, align: bool = False, anonymous: bool = False
     ) -> type[Structure]:
         return self._make_struct(name, fields, align=align, anonymous=anonymous, base=Union)
+
+    @property
+    def typedefs(self) -> dict[str, type[BaseType]]:
+        warnings.warn(
+            "The 'typedefs' property is deprecated, use 'types' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.types
 
     if TYPE_CHECKING:
         # ruff: noqa: PYI042
@@ -749,8 +781,8 @@ def ctypes_type(type_: type[BaseType]) -> Any:
         "d": _ctypes.c_double,
     }
 
-    if issubclass(type_, Packed) and type_.packchar in mapping:
-        return mapping[type_.packchar]
+    if issubclass(type_, Packed) and type_.__fmt__ in mapping:
+        return mapping[type_.__fmt__]
 
     if issubclass(type_, Char):
         return _ctypes.c_char
@@ -759,11 +791,11 @@ def ctypes_type(type_: type[BaseType]) -> Any:
         return _ctypes.c_wchar
 
     if issubclass(type_, BaseArray):
-        subtype = ctypes_type(type_.type)
-        return subtype * type_.num_entries
+        subtype = ctypes_type(type_.__type__)
+        return subtype * type_.__num_entries__
 
     if issubclass(type_, Pointer):
-        subtype = ctypes_type(type_.type)
+        subtype = ctypes_type(type_.__type__)
         return _ctypes.POINTER(subtype)
 
     if issubclass(type_, Structure):
