@@ -3,15 +3,17 @@ from __future__ import annotations
 import os
 import pprint
 import string
+import struct
 import sys
 from enum import Enum
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from typing import Literal
 
-    from dissect.cstruct.cstruct import AllowedEndianness
+    from dissect.cstruct.cstruct import AllowedEndianness, Endianness
     from dissect.cstruct.types.base import BaseType
     from dissect.cstruct.types.structure import Structure
 
@@ -63,6 +65,28 @@ ENDIANNESS_TO_BYTEORDER_MAP: dict[AllowedEndianness, Literal["big", "little"]] =
     "little": "little",
     "big": "big",
 }
+
+ENDIANNESS_MAP: dict[AllowedEndianness, Endianness] = {
+    "<": "<",
+    ">": ">",
+    "!": "!",
+    "@": "@",
+    "=": "=",
+    "network": "!",
+    "little": "<",
+    "big": ">",
+}
+
+
+def normalize_endianness(endian: AllowedEndianness) -> Endianness:
+    """Normalize an endianness string to one of the standard format characters."""
+    try:
+        return ENDIANNESS_MAP[endian]
+    except KeyError:
+        raise ValueError(
+            f"Invalid endianness: {endian!r}, expected one of {', '.join(ENDIANNESS_MAP.keys())}"
+        ) from None
+
 
 Palette = list[tuple[int, str]]
 
@@ -327,6 +351,11 @@ def dumpstruct(
     return _dumpstruct(obj, obj.dumps(), offset, color, output, autoskip)
 
 
+@lru_cache(1024)
+def _struct(endian: str, packchar: str) -> struct.Struct:
+    return struct.Struct(f"{endian}{packchar}")
+
+
 def pack(value: int, size: int | None = None, endian: AllowedEndianness = "little") -> bytes:
     """Pack an integer value to a given bit size, endianness.
 
@@ -400,6 +429,36 @@ def p64(value: int, endian: AllowedEndianness = "little") -> bytes:
     return pack(value, 64, endian)
 
 
+def pf16(value: float, endian: AllowedEndianness = "little") -> bytes:
+    """Pack a 16 bit float.
+
+    Arguments:
+        value: Value to pack.
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
+    """
+    return _struct(normalize_endianness(endian), "e").pack(value)
+
+
+def pf32(value: float, endian: AllowedEndianness = "little") -> bytes:
+    """Pack a 32 bit float.
+
+    Arguments:
+        value: Value to pack.
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
+    """
+    return _struct(normalize_endianness(endian), "f").pack(value)
+
+
+def pf64(value: float, endian: AllowedEndianness = "little") -> bytes:
+    """Pack a 64 bit float.
+
+    Arguments:
+        value: Value to pack.
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
+    """
+    return _struct(normalize_endianness(endian), "d").pack(value)
+
+
 def u8(value: bytes, endian: AllowedEndianness = "little", sign: bool = False) -> int:
     """Unpack an 8 bit integer.
 
@@ -442,6 +501,36 @@ def u64(value: bytes, endian: AllowedEndianness = "little", sign: bool = False) 
         sign: Signedness of the integer.
     """
     return unpack(value, 64, endian, sign)
+
+
+def f16(value: bytes, endian: AllowedEndianness = "little") -> float:
+    """Unpack a 16 bit float.
+
+    Arguments:
+        value: Value to unpack.
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
+    """
+    return _struct(normalize_endianness(endian), "e").unpack(value)[0]
+
+
+def f32(value: bytes, endian: AllowedEndianness = "little") -> float:
+    """Unpack a 32 bit float.
+
+    Arguments:
+        value: Value to unpack.
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
+    """
+    return _struct(normalize_endianness(endian), "f").unpack(value)[0]
+
+
+def f64(value: bytes, endian: AllowedEndianness = "little") -> float:
+    """Unpack a 64 bit float.
+
+    Arguments:
+        value: Value to unpack.
+        endian: Endianness to use (little, big, network, <, >, !, @ or =).
+    """
+    return _struct(normalize_endianness(endian), "d").unpack(value)[0]
 
 
 def swap(value: int, size: int) -> int:

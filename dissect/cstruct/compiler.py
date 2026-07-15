@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.types import (
     Array,
+    BaseArray,
     Char,
     CharArray,
     Flag,
@@ -24,18 +25,15 @@ from dissect.cstruct.types import (
     Wchar,
     WcharArray,
 )
-from dissect.cstruct.types.base import BaseArray
 from dissect.cstruct.types.enum import EnumMetaType
-from dissect.cstruct.types.packed import _struct
+from dissect.cstruct.util import _struct
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from types import MethodType
 
     from dissect.cstruct.cstruct import cstruct
-    from dissect.cstruct.types import (
-        BaseType,
-    )
+    from dissect.cstruct.types import BaseType
     from dissect.cstruct.types.structure import Field
 
 SUPPORTED_TYPES = (

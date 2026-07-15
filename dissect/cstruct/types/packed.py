@@ -1,20 +1,14 @@
 from __future__ import annotations
 
-from functools import lru_cache
-from struct import Struct
 from typing import TYPE_CHECKING, Any, BinaryIO, Generic, TypeVar
 
 from dissect.cstruct.types.base import EOF, BaseType
+from dissect.cstruct.util import _struct
 
 if TYPE_CHECKING:
     from typing_extensions import Self
 
     from dissect.cstruct.cstruct import Endianness
-
-
-@lru_cache(1024)
-def _struct(endian: str, packchar: str) -> Struct:
-    return Struct(f"{endian}{packchar}")
 
 
 T = TypeVar("T", int, float)
