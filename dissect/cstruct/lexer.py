@@ -134,6 +134,14 @@ def tokenize(data: str) -> list[Token]:
     return Lexer(data).tokenize()
 
 
+def format_error_context(data: str, lineno: int, window: int = 1) -> str:
+    """Format a snippet of the input data around a given line number for error messages."""
+    start = max(0, lineno - window - 2)
+    context = data.splitlines()[start:lineno]
+    no_len = len(str(lineno)) + 2
+    return "\n".join(f"{start + i + 1:>{no_len}}: {line}" for i, line in enumerate(context))
+
+
 class Lexer:
     """Lexer compatible with C-like syntax for struct definitions and preprocessor directives."""
 
@@ -213,8 +221,10 @@ class Lexer:
 
         return self._take()
 
-    def _error(self, msg: str, *, line: int | None = None) -> LexerError:
-        return LexerError(f"line {line if line is not None else self._line}: {msg}")
+    def _error(self, msg: str, *, lineno: int | None = None) -> LexerError:
+        lineno = lineno if lineno is not None else self._line
+        content = format_error_context(self.data, lineno)
+        return LexerError(f"line {lineno}: {msg}\n{content}")
 
     def _emit(self, type: TokenType, value: str, line: int, column: int = 0) -> None:
         """Emit a token with the given type and value at the specified line and column."""
@@ -402,7 +412,7 @@ class Lexer:
         keyword = self._read_identifier()
 
         if (token_type := _PP_KEYWORDS.get(keyword)) is None:
-            raise self._error(f"unknown preprocessor directive '#{keyword}'", line=line)
+            raise self._error(f"unknown preprocessor directive '#{keyword}'", lineno=line)
 
         self._emit(token_type, keyword, line, col)
 
@@ -410,7 +420,7 @@ class Lexer:
             self._skip_whitespace_and_comments()
 
             if not (name := self._read_identifier()):
-                raise self._error("expected identifier after '#define'", line=line)
+                raise self._error("expected identifier after '#define'", lineno=line)
             self._emit(TokenType.IDENTIFIER, name, line)
 
             self._skip_whitespace_and_comments()
@@ -434,7 +444,7 @@ class Lexer:
                 self._expect(">")  # Consume closing `>`
                 value = f"<{value}>"
             else:
-                raise self._error("expected include path after '#include'", line=line)
+                raise self._error("expected include path after '#include'", lineno=line)
 
             self._emit(TokenType.STRING, value, line)
 
@@ -486,7 +496,7 @@ class Lexer:
                 self._emit(_SINGLE_CHARS[ch], self._take(), line, col)
 
             else:
-                raise self._error(f"unexpected character {ch!r}", line=line)
+                raise self._error(f"unexpected character {ch!r}", lineno=line)
 
         self._emit(TokenType.EOF, "", self._line, self._column)
         return self._tokens

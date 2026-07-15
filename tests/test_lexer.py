@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import textwrap
+
 import pytest
 
 from dissect.cstruct.exception import LexerError
@@ -180,6 +182,22 @@ def test_error(src: str, match: str) -> None:
     """Test that various invalid inputs raise a LexerError with the expected message."""
     with pytest.raises(LexerError, match=match):
         tokenize(src)
+
+
+def test_error_context() -> None:
+    """Test that a LexerError includes the surrounding lines as context."""
+    src = "struct test {\n    uint32 a;\n    @invalid;\n    uint32 b;\n};"
+    with pytest.raises(LexerError, match="line 3: unexpected character '@'") as exc_info:
+        tokenize(src)
+
+    assert str(exc_info.value) == textwrap.dedent(
+        """\
+        line 3: unexpected character '@'
+          1: struct test {
+          2:     uint32 a;
+          3:     @invalid;
+        """.rstrip()
+    )
 
 
 def test_line_and_column_tracking() -> None:

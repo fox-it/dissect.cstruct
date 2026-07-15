@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import textwrap
+
 import pytest
 
 from dissect.cstruct import cstruct
@@ -214,6 +216,27 @@ def test_typedef_enum(cs: cstruct) -> None:
     assert cs.test_enum.VAL3 == 4
 
 
+def test_enum_flag_digit_member_name(cs: cstruct) -> None:
+    # For historical reasons, we allow enum/flag member names to start with a digit, e.g. `32BIT`
+    cdef = """
+    enum test_enum : uint8 {
+        32BIT = 1,
+        64BIT = 2
+    };
+
+    flag test_flag : uint8 {
+        32BIT = 1,
+        64BIT = 2
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test_enum["32BIT"] == 1
+    assert cs.test_enum["64BIT"] == 2
+    assert cs.test_flag["32BIT"] == 1
+    assert cs.test_flag["64BIT"] == 2
+
+
 def test_define(cs: cstruct) -> None:
     cdef = """
     #define CONST 42
@@ -230,6 +253,7 @@ def test_define(cs: cstruct) -> None:
                         3)
     #define QUOTES "\'\"a'b\""
     #define ESCAPE "\\'\\"a'b\\"\\n"
+    #define BYTES_ESCAPE b"`\\n"
     #define FUNC(x) ( x == 0 )
     #define TERNARY(x) ( x ? 1 : 0 )
     """
@@ -247,6 +271,7 @@ def test_define(cs: cstruct) -> None:
     assert cs.consts["MULTILINE"] == 6
     assert cs.consts["QUOTES"] == "'\"a'b\""
     assert cs.consts["ESCAPE"] == "'\"a'b\"\n"
+    assert cs.consts["BYTES_ESCAPE"] == b"`\n"
     # We don't evaluate function-like macros yet, so they should be stored as their raw string representation
     assert cs.consts["FUNC"] == "(x) ( x == 0 )"
     assert cs.consts["TERNARY"] == "(x) ( x ? 1 : 0 )"
@@ -490,7 +515,7 @@ def test_preprocessor_in_struct_body(cs: cstruct) -> None:
     assert cs.test.fields["bonus"].type == cs.uint64
 
 
-def test_preprocessor_define_from_enum_in_struct() -> None:
+def test_preprocessor_define_from_enum_in_struct(cs: cstruct) -> None:
     """Test #define referencing enum values used for conditional fields and array sizes."""
     cdef = """
     enum protocol : uint8 {
@@ -530,7 +555,6 @@ def test_preprocessor_define_from_enum_in_struct() -> None:
         uint16 checksum;
     };
     """
-    cs = cstruct()
     cs.load(cdef)
 
     assert cs.consts["PROTO"] == 6
@@ -544,3 +568,30 @@ def test_preprocessor_define_from_enum_in_struct() -> None:
 
     assert cs.packet.fields["options"].type.num_entries == 4
     assert cs.packet.fields["payload"].type.num_entries == 20
+
+
+def test_error_context(cs: cstruct) -> None:
+    """Test the context window around errors: 1 line before, the error line, up to 2 lines after."""
+    # Error on line 1: no preceding lines available; shows lines 1, 2, 3
+    src = "69\n#define A 1\n#define B 2\n#define C 3"
+    with pytest.raises(ParserError, match="line 1:") as exc_info:
+        cs.load(src)
+    assert str(exc_info.value) == textwrap.dedent(
+        """\
+        line 1: unexpected token '69'
+          1: 69
+        """.rstrip()
+    )
+
+    # Error on line 3: shows 2 lines of preceding context plus the error line
+    src = "#define A 1\n#define B 2\n69\n#define C 3\n#define D 4\n#define E 5"
+    with pytest.raises(ParserError, match="line 3:") as exc_info:
+        cs.load(src)
+    assert str(exc_info.value) == textwrap.dedent(
+        """\
+        line 3: unexpected token '69'
+          1: #define A 1
+          2: #define B 2
+          3: 69
+        """.rstrip()
+    )
