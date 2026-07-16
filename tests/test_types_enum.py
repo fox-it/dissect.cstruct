@@ -20,10 +20,10 @@ def TestEnum(cs: cstruct) -> type[Enum]:
 
 def test_enum(cs: cstruct, TestEnum: type[Enum]) -> None:
     assert issubclass(TestEnum, StdEnum)
-    assert TestEnum.cs is cs
+    assert TestEnum.__cs__ is cs
     assert TestEnum.type is cs.uint8
-    assert TestEnum.size == 1
-    assert TestEnum.alignment == 1
+    assert TestEnum.__size__ == 1
+    assert TestEnum.__alignment__ == 1
 
     assert TestEnum.A == 1
     assert TestEnum.B == 2

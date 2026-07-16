@@ -26,12 +26,12 @@ def TestUnion(cs: cstruct) -> type[Union]:
 
 def test_union(TestUnion: type[Union]) -> None:
     assert issubclass(TestUnion, Union)
-    assert len(TestUnion.fields) == 2
-    assert TestUnion.fields["a"].name == "a"
-    assert TestUnion.fields["b"].name == "b"
+    assert len(TestUnion.__members__) == 2
+    assert TestUnion.__members__["a"].name == "a"
+    assert TestUnion.__members__["b"].name == "b"
 
-    assert TestUnion.size == 4
-    assert TestUnion.alignment == 4
+    assert TestUnion.__size__ == 4
+    assert TestUnion.__alignment__ == 4
 
     spec = inspect.getfullargspec(TestUnion.__init__)
     assert spec.args == ["self", "a", "b"]
@@ -163,7 +163,7 @@ def test_union_array_write(TestUnion: type[Union]) -> None:
 def test_union_modify(cs: cstruct) -> None:
     TestUnion = cs._make_union("Test", [Field("a", cs.char)])
 
-    assert len(TestUnion.fields) == len(TestUnion.lookup) == 1
+    assert len(TestUnion.__members__) == len(TestUnion.__lookup__) == 1
     assert len(TestUnion) == 1
     spec = inspect.getfullargspec(TestUnion.__init__)
     assert spec.args == ["self", "a"]
@@ -171,7 +171,7 @@ def test_union_modify(cs: cstruct) -> None:
 
     TestUnion.add_field("b", cs.uint32)
 
-    assert len(TestUnion.fields) == len(TestUnion.lookup) == 2
+    assert len(TestUnion.__members__) == len(TestUnion.__lookup__) == 2
     assert len(TestUnion) == 4
     spec = inspect.getfullargspec(TestUnion.__init__)
     assert spec.args == ["self", "a", "b"]
@@ -181,7 +181,7 @@ def test_union_modify(cs: cstruct) -> None:
         TestUnion.add_field("c", cs.uint16)
         TestUnion.add_field("d", cs.uint8)
 
-    assert len(TestUnion.fields) == len(TestUnion.lookup) == 4
+    assert len(TestUnion.__members__) == len(TestUnion.__lookup__) == 4
     assert len(TestUnion) == 4
     spec = inspect.getfullargspec(TestUnion.__init__)
     assert spec.args == ["self", "a", "b", "c", "d"]
@@ -429,7 +429,7 @@ def test_union_default(cs: cstruct) -> None:
 
     assert obj.dumps() == b"\x00" * 8
 
-    for name in obj.fields:
+    for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
 
     assert cs.test_nested() == cs.test_nested.__default__()
@@ -440,7 +440,7 @@ def test_union_default(cs: cstruct) -> None:
 
     assert obj.dumps() == b"\x00" * 24
 
-    for name in obj.fields:
+    for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
 
 

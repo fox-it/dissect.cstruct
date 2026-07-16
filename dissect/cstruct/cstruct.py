@@ -206,7 +206,28 @@ class cstruct:
         if load:
             self.load(load)
 
-    def __getattr__(self, attr: str) -> Any:
+    def __getattr__(
+        self, attr: str
+    ) -> (
+        type[
+            LEB128
+            | BaseType
+            | Char
+            | Enum
+            | Flag
+            | Int
+            | Packed[int]
+            | Packed[float]
+            | Pointer
+            | Structure
+            | Union
+            | Void
+            | Wchar
+        ]
+        | int
+        | str
+        | bytes
+    ):
         try:
             return self.consts[attr]
         except KeyError:
@@ -227,7 +248,7 @@ class cstruct:
         # Update types to point to the new cstruct instance
         for name, type_ in self.types.items():
             new_type = copy.copy(type_)
-            new_type.cs = cs
+            new_type.__cs__ = cs
             cs.add_type(name, new_type, replace=True)
 
         for name, value in self.consts.items():
@@ -481,10 +502,10 @@ class cstruct:
         attrs = attrs or {}
         attrs.update(
             {
-                "cs": self,
-                "size": size,
-                "dynamic": size is None,
-                "alignment": alignment or size,
+                "__cs__": self,
+                "__size__": size,
+                "__dynamic__": size is None,
+                "__alignment__": alignment or size,
             }
         )
         return types.new_class(name, bases, {}, lambda ns: ns.update(attrs))
@@ -494,12 +515,12 @@ class cstruct:
         if num_entries is None:
             null_terminated = True
             size = None
-        elif isinstance(num_entries, Expression) or type_.dynamic:
+        elif isinstance(num_entries, Expression) or type_.__dynamic__:
             size = None
         else:
-            if type_.size is None:
+            if type_.__size__ is None:
                 raise ValueError(f"Cannot create array of dynamic type: {type_.__name__}")
-            size = num_entries * type_.size
+            size = num_entries * type_.__size__
 
         name = f"{type_.__name__}[]" if null_terminated else f"{type_.__name__}[{num_entries}]"
 
@@ -511,7 +532,7 @@ class cstruct:
             "null_terminated": null_terminated,
         }
 
-        return cast("type[Array]", self._make_type(name, bases, size, alignment=type_.alignment, attrs=attrs))
+        return cast("type[Array]", self._make_type(name, bases, size, alignment=type_.__alignment__, attrs=attrs))
 
     def _make_int_type(self, name: str, size: int, signed: bool, *, alignment: int | None = None) -> type[Int]:
         return cast("type[Int]", self._make_type(name, (Int,), size, alignment=alignment, attrs={"signed": signed}))
@@ -538,8 +559,8 @@ class cstruct:
         return self._make_type(
             f"{target.__name__}*",
             (Pointer,),
-            self.pointer.size,
-            alignment=self.pointer.alignment,
+            self.pointer.__size__,
+            alignment=self.pointer.__alignment__,
             attrs={"type": target},
         )
 
@@ -567,6 +588,15 @@ class cstruct:
         self, name: str, fields: list[Field], *, align: bool = False, anonymous: bool = False
     ) -> type[Structure]:
         return self._make_struct(name, fields, align=align, anonymous=anonymous, base=Union)
+
+    @property
+    def typedefs(self) -> dict[str, type[BaseType]]:
+        warnings.warn(
+            "The 'typedefs' property is deprecated, use 'types' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.types
 
     if TYPE_CHECKING:
         # ruff: noqa: PYI042

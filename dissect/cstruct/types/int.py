@@ -18,10 +18,10 @@ class Int(int, BaseType):
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
-        data = stream.read(cls.size)
+        data = stream.read(cls.__size__)
 
-        if len(data) != cls.size:
-            raise EOFError(f"Read {len(data)} bytes, but expected {cls.size}")
+        if len(data) != cls.__size__:
+            raise EOFError(f"Read {len(data)} bytes, but expected {cls.__size__}")
 
         return cls.from_bytes(data, ENDIANNESS_TO_BYTEORDER_MAP[endian], signed=cls.signed)
 
@@ -39,4 +39,4 @@ class Int(int, BaseType):
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: int, *, endian: Endianness) -> int:
-        return stream.write(data.to_bytes(cls.size, ENDIANNESS_TO_BYTEORDER_MAP[endian], signed=cls.signed))
+        return stream.write(data.to_bytes(cls.__size__, ENDIANNESS_TO_BYTEORDER_MAP[endian], signed=cls.signed))

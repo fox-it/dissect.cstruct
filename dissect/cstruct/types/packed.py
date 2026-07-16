@@ -27,10 +27,10 @@ class Packed(BaseType, Generic[T]):
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
-        data = stream.read(cls.size)
+        data = stream.read(cls.__size__)
 
-        if len(data) != cls.size:
-            raise EOFError(f"Read {len(data)} bytes, but expected {cls.size}")
+        if len(data) != cls.__size__:
+            raise EOFError(f"Read {len(data)} bytes, but expected {cls.__size__}")
 
         return cls.__new__(cls, _struct(endian, cls.packchar).unpack(data)[0])
 
@@ -41,9 +41,9 @@ class Packed(BaseType, Generic[T]):
         if count == EOF:
             data = stream.read()
             length = len(data)
-            count = length // cls.size
+            count = length // cls.__size__
         else:
-            length = cls.size * count
+            length = cls.__size__ * count
             data = stream.read(length)
 
         fmt = _struct(endian, f"{count}{cls.packchar}")
@@ -59,10 +59,10 @@ class Packed(BaseType, Generic[T]):
 
         fmt = _struct(endian, cls.packchar)
         while True:
-            data = stream.read(cls.size)
+            data = stream.read(cls.__size__)
 
-            if len(data) != cls.size:
-                raise EOFError(f"Read {len(data)} bytes, but expected {cls.size}")
+            if len(data) != cls.__size__:
+                raise EOFError(f"Read {len(data)} bytes, but expected {cls.__size__}")
 
             if (value := fmt.unpack(data)[0]) == 0:
                 break

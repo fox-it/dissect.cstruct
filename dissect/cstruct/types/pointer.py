@@ -74,17 +74,17 @@ class Pointer(int, BaseType, Generic[T]):
     def __default__(cls) -> Self:
         return cls.__new__(
             cls,
-            cls.cs.pointer.__default__(),
+            cls.__cs__.pointer.__default__(),
             None,
             context=None,
-            endian=cls.cs.endian,
+            endian=cls.__cs__.endian,
         )
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
         return cls.__new__(
             cls,
-            cls.cs.pointer._read(stream, context=context, endian=endian),
+            cls.__cs__.pointer._read(stream, context=context, endian=endian),
             stream,
             context=context,
             endian=endian,
@@ -92,7 +92,7 @@ class Pointer(int, BaseType, Generic[T]):
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: int, *, endian: Endianness) -> int:
-        return cls.cs.pointer._write(stream, data, endian=endian)
+        return cls.__cs__.pointer._write(stream, data, endian=endian)
 
     def dereference(self, *, endian: AllowedEndianness | None = None) -> T | None:
         """Dereference the pointer and read the value it points to.

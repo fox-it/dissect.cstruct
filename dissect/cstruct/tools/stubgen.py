@@ -159,7 +159,7 @@ def generate_structure_stub(
     indent = " " * 4
 
     args = ["self"]
-    for field_name, field in structure.fields.items():
+    for field_name, field in structure.__members__.items():
         inlined = False
 
         # If it's a structure and not globally defined, add an inline stub for it
@@ -167,7 +167,7 @@ def generate_structure_stub(
         while issubclass(nested_type, types.BaseArray):
             nested_type = nested_type.type
 
-        if issubclass(nested_type, types.Structure) and nested_type.__name__ not in structure.cs.types:
+        if issubclass(nested_type, types.Structure) and nested_type.__name__ not in structure.__cs__.types:
             inlined = True
             inline_stub = generate_structure_stub(nested_type, cs_prefix=cs_prefix, module_prefix=module_prefix)
 

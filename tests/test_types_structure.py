@@ -28,13 +28,13 @@ def TestStruct(cs: cstruct) -> type[Structure]:
 
 def test_structure(TestStruct: type[Structure]) -> None:
     assert issubclass(TestStruct, Structure)
-    assert len(TestStruct.fields) == 2
-    assert TestStruct.fields["a"].name == "a"
-    assert TestStruct.fields["b"].name == "b"
-    assert repr(TestStruct.fields["a"]) == "<Field a uint32>"
+    assert len(TestStruct.__members__) == 2
+    assert TestStruct.__members__["a"].name == "a"
+    assert TestStruct.__members__["b"].name == "b"
+    assert repr(TestStruct.__members__["a"]) == "<Field a uint32>"
 
-    assert TestStruct.size == 8
-    assert TestStruct.alignment == 4
+    assert TestStruct.__size__ == 8
+    assert TestStruct.__alignment__ == 4
 
     spec = inspect.getfullargspec(TestStruct.__init__)
     assert spec.args == ["self", "a", "b"]
@@ -123,7 +123,7 @@ def test_structure_array_write(TestStruct: type[Structure]) -> None:
 def test_structure_modify(cs: cstruct) -> None:
     TestStruct = cs._make_struct("Test", [Field("a", cs.char)])
 
-    assert len(TestStruct.fields) == len(TestStruct.lookup) == 1
+    assert len(TestStruct.__members__) == len(TestStruct.__lookup__) == 1
     assert len(TestStruct) == 1
     spec = inspect.getfullargspec(TestStruct.__init__)
     assert spec.args == ["self", "a"]
@@ -131,7 +131,7 @@ def test_structure_modify(cs: cstruct) -> None:
 
     TestStruct.add_field("b", cs.char)
 
-    assert len(TestStruct.fields) == len(TestStruct.lookup) == 2
+    assert len(TestStruct.__members__) == len(TestStruct.__lookup__) == 2
     assert len(TestStruct) == 2
     spec = inspect.getfullargspec(TestStruct.__init__)
     assert spec.args == ["self", "a", "b"]
@@ -141,7 +141,7 @@ def test_structure_modify(cs: cstruct) -> None:
         TestStruct.add_field("c", cs.char)
         TestStruct.add_field("d", cs.char)
 
-    assert len(TestStruct.fields) == len(TestStruct.lookup) == 4
+    assert len(TestStruct.__members__) == len(TestStruct.__lookup__) == 4
     assert len(TestStruct) == 4
     spec = inspect.getfullargspec(TestStruct.__init__)
     assert spec.args == ["self", "a", "b", "c", "d"]
@@ -220,8 +220,8 @@ def test_structure_definitions(cs: cstruct, compiled: bool) -> None:
     with pytest.raises(ResolveError, match="Unknown type test1"):
         assert cs.resolve("test1")
 
-    assert "a" in cs._test.fields
-    assert "b" in cs._test.fields
+    assert "a" in cs._test.__members__
+    assert "b" in cs._test.__members__
 
     # This will work but is kind of pointless
     cdef = """
@@ -338,7 +338,7 @@ def test_structure_definition_simple_be(cs: cstruct, compiled: bool) -> None:
     assert obj.wstring == "test"
     assert obj.dumps() == buf
 
-    for name in obj.fields:
+    for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
 
 
@@ -585,8 +585,8 @@ def test_structure_definition_self(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert issubclass(cs.test.fields["b"].type, Pointer)
-    assert cs.test.fields["b"].type.type is cs.test
+    assert issubclass(cs.test.__members__["b"].type, Pointer)
+    assert cs.test.__members__["b"].type.type is cs.test
 
 
 def test_align_struct_in_struct(cs: cstruct) -> None:
@@ -659,7 +659,7 @@ def test_structure_default(cs: cstruct, compiled: bool) -> None:
 
     assert obj.dumps() == b"\x00" * 57
 
-    for name in obj.fields:
+    for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
 
     assert cs.test_nested() == cs.test_nested.__default__()
@@ -670,7 +670,7 @@ def test_structure_default(cs: cstruct, compiled: bool) -> None:
 
     assert obj.dumps() == b"\x00" * 171
 
-    for name in obj.fields:
+    for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
 
 
@@ -728,7 +728,7 @@ def test_structure_default_dynamic(cs: cstruct, compiled: bool) -> None:
 
     assert obj.dumps() == b"\x00" * 20
 
-    for name in obj.fields:
+    for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
 
     assert cs.test_nested() == cs.test_nested.__default__()
@@ -738,7 +738,7 @@ def test_structure_default_dynamic(cs: cstruct, compiled: bool) -> None:
 
     assert obj.dumps() == b"\x00" * 21
 
-    for name in obj.fields:
+    for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
 
 
@@ -1056,7 +1056,7 @@ def test_cdef_round_trip(cs: cstruct) -> None:
     for name in ("Header", "Point", "Color", "Val"):
         original = getattr(cs, name)
         result = getattr(reparsed, name)
-        assert original.size == result.size
+        assert len(original) == len(result)
 
         if hasattr(original, "__fields__"):
             assert [f._name for f in original.__fields__] == [f._name for f in result.__fields__]

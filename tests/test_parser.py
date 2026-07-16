@@ -65,10 +65,10 @@ def test_nested_structs(cs: cstruct, compiled: bool) -> None:
     for i in range(4):
         assert obj.a[i].b == i
 
-    assert cs.nest.fields["a"].type.__name__ == "__anonymous_0__[4]"
-    assert cs.nest.fields["a"].type.type.__name__ == "__anonymous_0__"
+    assert cs.nest.__members__["a"].type.__name__ == "__anonymous_0__[4]"
+    assert cs.nest.__members__["a"].type.type.__name__ == "__anonymous_0__"
 
-    assert cs.also_nest.fields["d"].type == cs.named
+    assert cs.also_nest.__members__["d"].type == cs.named
 
 
 def test_preserve_comment_newlines() -> None:
@@ -135,8 +135,8 @@ def test_dynamic_substruct_size(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert cs.sub.dynamic
-    assert cs.test.dynamic
+    assert cs.sub.__dynamic__
+    assert cs.test.__dynamic__
 
 
 def test_struct_names(cs: cstruct) -> None:
@@ -182,8 +182,8 @@ def test_includes(cs: cstruct) -> None:
 
     assert cs.includes == ["<stdint.h>", "myLib.h"]
     assert cs.myStruct.__name__ == "myStruct"
-    assert len(cs.myStruct.fields) == 1
-    assert cs.myStruct.fields.get("charVal")
+    assert len(cs.myStruct.__members__) == 1
+    assert cs.myStruct.__members__.get("charVal")
 
 
 def test_typedef_pointer(cs: cstruct) -> None:
@@ -397,10 +397,10 @@ def test_conditional_in_struct(cs: cstruct) -> None:
     cs.load(cdef)
 
     assert "t_bitfield" in cs.types
-    assert "fval" in cs.t_bitfield.fields
-    assert "bit0" in cs.t_bitfield.fields["fval"].type.fields
-    assert "bit1" in cs.t_bitfield.fields["fval"].type.fields
-    assert "bit2" not in cs.t_bitfield.fields["fval"].type.fields
+    assert "fval" in cs.t_bitfield.__members__
+    assert "bit0" in cs.t_bitfield.__members__["fval"].type.__members__
+    assert "bit1" in cs.t_bitfield.__members__["fval"].type.__members__
+    assert "bit2" not in cs.t_bitfield.__members__["fval"].type.__members__
 
 
 def test_conditional_parsing_error(cs: cstruct) -> None:
@@ -451,12 +451,12 @@ def test_multiple_declarators(cs: cstruct) -> None:
     cs.load(cdef)
 
     assert "test" in cs.types
-    assert all(field in cs.test.fields for field in ("a", "b", "c", "d", "e"))
-    assert cs.test.fields["a"].type == cs.uint32
-    assert cs.test.fields["b"].type == cs.uint32
-    assert cs.test.fields["c"].type == cs.uint32
-    assert cs.test.fields["d"].type.__name__ == "__anonymous_0__"
-    assert cs.test.fields["e"].type is cs.test.fields["d"].type
+    assert all(field in cs.test.__members__ for field in ("a", "b", "c", "d", "e"))
+    assert cs.test.__members__["a"].type == cs.uint32
+    assert cs.test.__members__["b"].type == cs.uint32
+    assert cs.test.__members__["c"].type == cs.uint32
+    assert cs.test.__members__["d"].type.__name__ == "__anonymous_0__"
+    assert cs.test.__members__["e"].type is cs.test.__members__["d"].type
 
 
 def test_config_flags(cs: cstruct) -> None:
@@ -502,17 +502,17 @@ def test_preprocessor_in_struct_body(cs: cstruct) -> None:
     cs.load(cdef)
 
     assert cs.consts["VERSION"] == 2
-    assert "always_present" in cs.test.fields
-    assert "version" in cs.test.fields
-    assert "basic" in cs.test.fields
-    assert "extra" not in cs.test.fields
-    assert "bonus" in cs.test.fields
-    assert "should_not_exist" not in cs.test.fields
+    assert "always_present" in cs.test.__members__
+    assert "version" in cs.test.__members__
+    assert "basic" in cs.test.__members__
+    assert "extra" not in cs.test.__members__
+    assert "bonus" in cs.test.__members__
+    assert "should_not_exist" not in cs.test.__members__
 
-    assert cs.test.fields["always_present"].type == cs.uint32
-    assert cs.test.fields["version"].type == cs.uint16
-    assert cs.test.fields["basic"].type == cs.uint8
-    assert cs.test.fields["bonus"].type == cs.uint64
+    assert cs.test.__members__["always_present"].type == cs.uint32
+    assert cs.test.__members__["version"].type == cs.uint16
+    assert cs.test.__members__["basic"].type == cs.uint8
+    assert cs.test.__members__["bonus"].type == cs.uint64
 
 
 def test_preprocessor_define_from_enum_in_struct(cs: cstruct) -> None:
@@ -561,13 +561,13 @@ def test_preprocessor_define_from_enum_in_struct(cs: cstruct) -> None:
     assert cs.consts["FLAG_SYNACK"] == 3
     assert cs.consts["FLAG_BIG"] == "flags.PSH | YOMOMMA"
 
-    assert "type" in cs.packet.fields
-    assert "options" in cs.packet.fields
-    assert "payload" in cs.packet.fields
-    assert "checksum" in cs.packet.fields
+    assert "type" in cs.packet.__members__
+    assert "options" in cs.packet.__members__
+    assert "payload" in cs.packet.__members__
+    assert "checksum" in cs.packet.__members__
 
-    assert cs.packet.fields["options"].type.num_entries == 4
-    assert cs.packet.fields["payload"].type.num_entries == 20
+    assert cs.packet.__members__["options"].type.num_entries == 4
+    assert cs.packet.__members__["payload"].type.num_entries == 20
 
 
 def test_error_context(cs: cstruct) -> None:

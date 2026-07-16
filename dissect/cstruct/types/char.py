@@ -15,7 +15,7 @@ class CharArray(bytes, BaseArray):
 
     @classmethod
     def __default__(cls) -> Self:
-        return type.__call__(cls, b"\x00" * (0 if cls.dynamic or cls.null_terminated else cls.num_entries))
+        return type.__call__(cls, b"\x00" * (0 if cls.__dynamic__ or cls.null_terminated else cls.num_entries))
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:

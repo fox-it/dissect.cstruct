@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import warnings
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, TypeVar
 
@@ -21,13 +22,13 @@ EOF = -0xE0F  # Negative counts are illegal anyway, so abuse that for our EOF se
 class MetaType(type):
     """Base metaclass for cstruct type classes."""
 
-    cs: cstruct
+    __cs__: cstruct
     """The cstruct instance this type class belongs to."""
-    size: int | None
+    __size__: int | None
     """The size of the type in bytes. Can be ``None`` for dynamic sized types."""
-    dynamic: bool
+    __dynamic__: bool
     """Whether or not the type is dynamically sized."""
-    alignment: int | None
+    __alignment__: int | None
     """The alignment of the type in bytes. A value of ``None`` will be treated as 1-byte aligned."""
 
     # This must be the actual type, but since Array is a subclass of BaseType, we correct this at the bottom of the file
@@ -41,10 +42,12 @@ class MetaType(type):
             stream = args[0]
 
             if _is_readable_type(stream):
-                endian = normalize_endianness(endian) if (endian := kwargs.get("endian")) is not None else cls.cs.endian
+                endian = (
+                    normalize_endianness(endian) if (endian := kwargs.get("endian")) is not None else cls.__cs__.endian
+                )
                 return cls._read(stream, endian=endian)
 
-            if issubclass(cls, bytes) and isinstance(stream, bytes) and len(stream) == cls.size:
+            if issubclass(cls, bytes) and isinstance(stream, bytes) and len(stream) == cls.__size__:
                 # Shortcut for char/bytes type
                 return type.__call__(cls, *args, **kwargs)
 
@@ -55,7 +58,7 @@ class MetaType(type):
 
     def __getitem__(cls, num_entries: int | Expression | None) -> type[BaseArray]:
         """Create a new array with the given number of entries."""
-        return cls.cs._make_array(cls, num_entries)
+        return cls.__cs__._make_array(cls, num_entries)
 
     def __bool__(cls) -> bool:
         """Type class is always truthy."""
@@ -63,10 +66,10 @@ class MetaType(type):
 
     def __len__(cls) -> int:
         """Return the byte size of the type."""
-        if cls.size is None:
+        if cls.__size__ is None:
             raise TypeError("Dynamic size")
 
-        return cls.size
+        return cls.__size__
 
     def __default__(cls) -> Self:  # type: ignore
         """Return the default value of this type."""
@@ -83,7 +86,7 @@ class MetaType(type):
         Returns:
             The parsed value of this type.
         """
-        endian = normalize_endianness(endian) if endian is not None else cls.cs.endian
+        endian = normalize_endianness(endian) if endian is not None else cls.__cs__.endian
         return cls._read(BytesIO(data), endian=endian)
 
     def read(cls, obj: BinaryIO | bytes | memoryview | bytearray, *, endian: AllowedEndianness | None = None) -> Self:  # type: ignore
@@ -103,7 +106,7 @@ class MetaType(type):
         if not _is_readable_type(obj):
             raise TypeError("Invalid object type")
 
-        endian = normalize_endianness(endian) if endian is not None else cls.cs.endian
+        endian = normalize_endianness(endian) if endian is not None else cls.__cs__.endian
         return cls._read(obj, endian=endian)
 
     def write(cls, stream: BinaryIO, value: Any, *, endian: AllowedEndianness | None = None) -> int:
@@ -118,7 +121,7 @@ class MetaType(type):
         Returns:
             The amount of bytes written.
         """
-        endian = normalize_endianness(endian) if endian is not None else cls.cs.endian
+        endian = normalize_endianness(endian) if endian is not None else cls.__cs__.endian
         return cls._write(stream, value, endian=endian)
 
     def dumps(cls, value: Any, *, endian: AllowedEndianness | None = None) -> bytes:
@@ -132,7 +135,7 @@ class MetaType(type):
         Returns:
             The raw bytes of this type.
         """
-        endian = normalize_endianness(endian) if endian is not None else cls.cs.endian
+        endian = normalize_endianness(endian) if endian is not None else cls.__cs__.endian
 
         out = BytesIO()
         cls._write(out, value, endian=endian)
@@ -210,6 +213,46 @@ class MetaType(type):
         """
         return cls._write_array(stream, [*array, cls.__default__()], endian=endian)
 
+    @property
+    def cs(cls) -> cstruct:
+        """Access the cstruct object for this type."""
+        warnings.warn(
+            "The 'cs' property is deprecated, use '__cs__' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cls.__cs__
+
+    @property
+    def size(cls) -> int | None:
+        """Access the size of this type."""
+        warnings.warn(
+            "The 'size' property is deprecated, use '__size__', len(cls) or sizeof(cls) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cls.__size__
+
+    @property
+    def dynamic(cls) -> bool:
+        """Access whether this type is dynamically sized."""
+        warnings.warn(
+            "The 'dynamic' property is deprecated, use '__dynamic__' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cls.__dynamic__
+
+    @property
+    def alignment(cls) -> int | None:
+        """Access the alignment of this type."""
+        warnings.warn(
+            "The 'alignment' property is deprecated, use '__alignment__' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cls.__alignment__
+
 
 class _overload:
     """Descriptor to use on the ``write`` and ``dumps`` methods on cstruct types.
@@ -240,10 +283,10 @@ class BaseType(metaclass=MetaType):
 
     def __len__(self) -> int:
         """Return the byte size of the type."""
-        if self.__class__.size is None:
+        if self.__class__.__size__ is None:
             raise TypeError("Dynamic size")
 
-        return self.__class__.size
+        return self.__class__.__size__
 
 
 T = TypeVar("T", bound=BaseType)
@@ -281,7 +324,7 @@ class BaseArray(BaseType):
             num = EOF
         elif isinstance(cls.num_entries, Expression):
             try:
-                num = max(0, cls.num_entries.evaluate(cls.cs, context))
+                num = max(0, cls.num_entries.evaluate(cls.__cs__, context))
             except Exception:
                 if cls.num_entries.expression != "EOF":
                     raise
@@ -294,7 +337,7 @@ class BaseArray(BaseType):
         if cls.null_terminated:
             return cls.type._write_0(stream, data, endian=endian)
 
-        if not cls.dynamic and cls.num_entries != (actual_size := len(data)):
+        if not cls.__dynamic__ and cls.num_entries != (actual_size := len(data)):
             raise ArraySizeError(f"Expected static array size {cls.num_entries}, got {actual_size} instead.")
 
         return cls.type._write_array(stream, data, endian=endian)

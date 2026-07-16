@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import textwrap
 from io import BytesIO
 from typing import TYPE_CHECKING, BinaryIO
@@ -155,7 +156,7 @@ def test_type_replace(cs: cstruct) -> None:
 def test_reserved_attribute_names(cs: cstruct) -> None:
     cs.load("struct load { uint8 a; };")
     assert callable(cs.load)
-    assert cs.resolve("load").fields["a"].type is cs.uint8
+    assert cs.resolve("load").__members__["a"].type is cs.uint8
 
     cs.load("struct consts { uint8 a; };")
     assert isinstance(cs.consts, dict)
@@ -184,7 +185,7 @@ def test_const_type_name_collision(cs: cstruct) -> None:
     cs.load("struct foo { uint8 a; };")
     cs.load("#define foo 1")
     assert cs.foo == 1
-    assert cs.resolve("foo").fields["a"].type is cs.uint8
+    assert cs.resolve("foo").__members__["a"].type is cs.uint8
 
 
 def test_typedef(cs: cstruct) -> None:
@@ -517,12 +518,12 @@ def test_array_class_name(cs: cstruct) -> None:
 
 def test_size_and_aligment(cs: cstruct) -> None:
     test = cs._make_int_type("test", 1, False, alignment=8)
-    assert test.size == 1
-    assert test.alignment == 8
+    assert test.__size__ == 1
+    assert test.__alignment__ == 8
 
     test = cs._make_packed_type("test", "B", int, alignment=8)
-    assert test.size == 1
-    assert test.alignment == 8
+    assert test.__size__ == 1
+    assert test.__alignment__ == 8
 
 
 def test_dynamic_substruct_size(cs: cstruct) -> None:
@@ -538,8 +539,8 @@ def test_dynamic_substruct_size(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert cs.sub.dynamic
-    assert cs.test.dynamic
+    assert cs.sub.__dynamic__
+    assert cs.test.__dynamic__
 
 
 def test_dumps_write_overload(cs: cstruct) -> None:
@@ -596,8 +597,8 @@ def test_copy(cs: cstruct) -> None:
     assert "test2" in cs_copy.types
 
     # Verify that types in the copied cstruct reference the copied cstruct
-    assert cs_copy.resolve("test").cs is cs_copy
-    assert cs_copy.resolve("test2").cs is cs_copy
+    assert cs_copy.resolve("test").__cs__ is cs_copy
+    assert cs_copy.resolve("test2").__cs__ is cs_copy
 
 
 def test_cdef(cs: cstruct) -> None:
@@ -653,7 +654,7 @@ def test_cdef(cs: cstruct) -> None:
     reparsed.load(cs.cdef())
     assert reparsed.consts == cs.consts
     for name in ("Color", "Point", "Val", "Coord", "Header"):
-        assert getattr(cs, name).size == getattr(reparsed, name).size
+        assert len(getattr(cs, name)) == len(getattr(reparsed, name))
 
 
 def test_cdef_defines(cs: cstruct) -> None:
@@ -702,3 +703,41 @@ def test_endianness(cs: cstruct) -> None:
     with cs.little_endian() as little_endian_cs:
         assert little_endian_cs.endian == "<"
         assert little_endian_cs.uint32(b"\x01\x00\x00\x00") == 1
+
+
+def test_deprecation_warnings(cs: cstruct) -> None:
+    cdef = """
+    struct test {
+        uint8 a;
+    };
+    """
+    cs.load(cdef)
+
+    with pytest.warns(DeprecationWarning, match=re.escape("The 'cs' property is deprecated, use '__cs__' instead.")):
+        _ = cs.test.cs
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=re.escape("The 'size' property is deprecated, use '__size__', len(cls) or sizeof(cls) instead."),
+    ):
+        _ = cs.test.size
+
+    with pytest.warns(
+        DeprecationWarning, match=re.escape("The 'dynamic' property is deprecated, use '__dynamic__' instead.")
+    ):
+        _ = cs.test.dynamic
+
+    with pytest.warns(
+        DeprecationWarning, match=re.escape("The 'alignment' property is deprecated, use '__alignment__' instead.")
+    ):
+        _ = cs.test.alignment
+
+    with pytest.warns(
+        DeprecationWarning, match=re.escape("The 'fields' property is deprecated, use '__members__' instead.")
+    ):
+        _ = cs.test.fields
+
+    with pytest.warns(
+        DeprecationWarning, match=re.escape("The 'lookup' property is deprecated, use '__lookup__' instead.")
+    ):
+        _ = cs.test.lookup
