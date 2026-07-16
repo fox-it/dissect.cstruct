@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any, BinaryIO
 
 import pytest
 
 from dissect.cstruct.types import BaseType
+from dissect.cstruct.types.base import BaseArray
 
 if TYPE_CHECKING:
-    from dissect.cstruct.cstruct import cstruct
+    from dissect.cstruct.cstruct import Endianness, cstruct
 
 
 class EtwPointer(BaseType):
@@ -19,16 +21,20 @@ class EtwPointer(BaseType):
         return cls.cs.uint64.__default__()
 
     @classmethod
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> BaseType:
-        return cls.type._read(stream, context)
+    def _read(
+        cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs
+    ) -> BaseType:
+        return cls.type._read(stream, context=context, endian=endian)
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[BaseType]:
-        return cls.type._read_0(stream, context)
+    def _read_0(
+        cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness, **kwargs
+    ) -> list[BaseType]:
+        return cls.type._read_0(stream, context=context, endian=endian)
 
     @classmethod
-    def _write(cls, stream: BinaryIO, data: Any) -> int:
-        return cls.type._write(stream, data)
+    def _write(cls, stream: BinaryIO, data: Any, *, endian: Endianness) -> int:
+        return cls.type._write(stream, data, endian=endian)
 
     @classmethod
     def as_32bit(cls) -> None:
@@ -91,3 +97,47 @@ def test_custom_default(cs: cstruct) -> None:
 
     assert cs.EtwPointer[1].__default__() == [0]
     assert cs.EtwPointer[None].__default__() == []
+
+
+def test_custom_deprecated_signature(cs: cstruct) -> None:
+    class New(int, BaseType):
+        @classmethod
+        def _read(cls, stream: BinaryIO, *, context: dict | None = None, endian: Endianness) -> New:
+            pass
+
+        @classmethod
+        def _write(cls, stream: BinaryIO, data: int, *, endian: Endianness) -> New:
+            pass
+
+    class OldRead(int, BaseType):
+        @classmethod
+        def _read(cls, stream: BinaryIO, context: dict | None = None) -> OldRead:
+            pass
+
+    class OldWrite(int, BaseType):
+        @classmethod
+        def _write(cls, stream: BinaryIO, data: int) -> OldRead:
+            pass
+
+    class OldArrayRead(int, BaseType):
+        class ArrayType(list, BaseArray):
+            def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list:
+                pass
+
+    # No warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        cs.add_custom_type("New", New)
+
+    with pytest.warns(UserWarning, match=r"OldRead is missing the 'endian' keyword-only parameter in its _read method"):
+        cs.add_custom_type("OldRead", OldRead)
+
+    with pytest.warns(
+        UserWarning, match=r"OldWrite is missing the 'endian' keyword-only parameter in its _write method"
+    ):
+        cs.add_custom_type("OldWrite", OldWrite)
+
+    with pytest.warns(
+        UserWarning, match=r"OldArrayRead\.ArrayType is missing the 'endian' keyword-only parameter in its _read method"
+    ):
+        cs.add_custom_type("OldArrayRead", OldArrayRead)

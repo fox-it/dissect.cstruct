@@ -10,7 +10,7 @@ from dissect.cstruct.types.base import BaseType, MetaType
 if TYPE_CHECKING:
     from typing_extensions import Self
 
-    from dissect.cstruct.cstruct import cstruct
+    from dissect.cstruct.cstruct import Endianness, cstruct
     from dissect.cstruct.types.base import Array
 
 
@@ -84,25 +84,27 @@ class EnumMetaType(EnumMeta, MetaType):
             return True
         return value in cls._value2member_map_
 
-    def _read(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> Self:
-        return cls(cls.type._read(stream, context))
+    def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
+        return cls(cls.type._read(stream, context=context, endian=endian))
 
-    def _read_array(cls, stream: BinaryIO, count: int, context: dict[str, Any] | None = None) -> list[Self]:
-        return list(map(cls, cls.type._read_array(stream, count, context)))
+    def _read_array(
+        cls, stream: BinaryIO, count: int, *, context: dict[str, Any] | None = None, endian: Endianness
+    ) -> list[Self]:
+        return list(map(cls, cls.type._read_array(stream, count, context=context, endian=endian)))
 
-    def _read_0(cls, stream: BinaryIO, context: dict[str, Any] | None = None) -> list[Self]:
-        return list(map(cls, cls.type._read_0(stream, context)))
+    def _read_0(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> list[Self]:
+        return list(map(cls, cls.type._read_0(stream, context=context, endian=endian)))
 
-    def _write(cls, stream: BinaryIO, data: Enum) -> int:
-        return cls.type._write(stream, data.value)
+    def _write(cls, stream: BinaryIO, data: Enum, *, endian: Endianness) -> int:
+        return cls.type._write(stream, data.value, endian=endian)
 
-    def _write_array(cls, stream: BinaryIO, array: list[BaseType | int]) -> int:
+    def _write_array(cls, stream: BinaryIO, array: list[BaseType | int], *, endian: Endianness) -> int:
         data = [entry.value if isinstance(entry, _Enum) else entry for entry in array]
-        return cls.type._write_array(stream, data)
+        return cls.type._write_array(stream, data, endian=endian)
 
-    def _write_0(cls, stream: BinaryIO, array: list[BaseType | int]) -> int:
+    def _write_0(cls, stream: BinaryIO, array: list[BaseType | int], *, endian: Endianness) -> int:
         data = [entry.value if isinstance(entry, _Enum) else entry for entry in array]
-        return cls._write_array(stream, [*data, cls.type.__default__()])
+        return cls._write_array(stream, [*data, cls.type.__default__()], endian=endian)
 
     def cdef(cls) -> str:
         """Render this enum (or flag) back to its C-style definition.
