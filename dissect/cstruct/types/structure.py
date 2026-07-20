@@ -252,7 +252,7 @@ class StructureMetaType(MetaType):
             offset = stream.tell()
 
             if field.offset is not None and offset != struct_start + field.offset:
-                # Field is at a specific offset, either alligned or added that way
+                # Field is at a specific offset, either aligned or added that way
                 offset = struct_start + field.offset
                 stream.seek(offset)
 
@@ -318,7 +318,7 @@ class StructureMetaType(MetaType):
             offset = stream.tell()
 
             if field.offset is not None and offset < struct_start + field.offset:
-                # Field is at a specific offset, either alligned or added that way
+                # Field is at a specific offset, either aligned or added that way
                 stream.write(b"\x00" * (struct_start + field.offset - offset))
                 offset = struct_start + field.offset
 

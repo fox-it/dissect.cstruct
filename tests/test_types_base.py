@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 from typing import TYPE_CHECKING, BinaryIO
 
 import pytest
@@ -18,6 +19,24 @@ def test_array_size_mismatch(cs: cstruct) -> None:
         cs.uint8[2]([1, 2, 3]).dumps()
 
     assert cs.uint8[2]([1, 2]).dumps()
+
+
+def test_array_write_padding(cs: cstruct) -> None:
+    buf = io.BytesIO()
+    cs.uint8[4]._write(buf, [1, 2], endian=cs.endian)
+    assert buf.getvalue() == b"\x01\x02\x00\x00"
+
+    cdef = """
+    struct point {
+        uint8 x;
+        uint8 y;
+    };
+    """
+    cs.load(cdef)
+
+    buf = io.BytesIO()
+    cs.point[4]._write(buf, [cs.point(x=1, y=2)], endian=cs.endian)
+    assert buf.getvalue() == b"\x01\x02" + b"\x00\x00" * 3
 
 
 def test_eof(cs: cstruct, compiled: bool) -> None:
