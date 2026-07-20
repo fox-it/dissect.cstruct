@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import functools
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, TypeVar
@@ -53,8 +54,13 @@ class MetaType(type):
 
         return type.__call__(cls, *args, **kwargs)
 
-    def __getitem__(cls, num_entries: int | Expression | None) -> type[BaseArray]:
+    def __getitem__(cls, num_entries: int | str | Expression | None) -> type[BaseArray]:
         """Create a new array with the given number of entries."""
+        if isinstance(num_entries, str):
+            num_entries = Expression(num_entries)
+            with contextlib.suppress(Exception):
+                num_entries = num_entries.evaluate(cls.cs)
+
         return cls.cs._make_array(cls, num_entries)
 
     def __bool__(cls) -> bool:

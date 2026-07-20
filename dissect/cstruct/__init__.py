@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.cstruct import cstruct, ctypes, ctypes_type
+from dissect.cstruct.declarative import Struct, field
 from dissect.cstruct.exception import (
     Error,
     NullPointerDereference,
@@ -66,6 +67,7 @@ __all__ = [
     "ParserError",
     "Pointer",
     "ResolveError",
+    "Struct",
     "Structure",
     "Union",
     "Void",
@@ -75,6 +77,7 @@ __all__ = [
     "ctypes",
     "ctypes_type",
     "dumpstruct",
+    "field",
     "hexdump",
     "p8",
     "p16",
