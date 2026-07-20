@@ -3,7 +3,7 @@ from __future__ import annotations
 from io import BytesIO
 from typing import TYPE_CHECKING
 
-from tests.utils import verify_compiled
+from tests.util import verify_compiled
 
 if TYPE_CHECKING:
     from dissect.cstruct import cstruct
