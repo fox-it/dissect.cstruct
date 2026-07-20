@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from dissect.cstruct.exception import ArraySizeError
+
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
 
@@ -34,6 +36,38 @@ def test_char_array_write(cs: cstruct) -> None:
 
     assert cs.char[4](buf).dumps() == b"AAAA"
     assert cs.char[None](buf).dumps() == b"AAAA\x00"
+
+
+def test_char_array_write_padding(cs: cstruct) -> None:
+    buf = io.BytesIO()
+    cs.char[8]._write(buf, "hi", endian=cs.endian)
+    assert buf.getvalue() == b"hi\x00\x00\x00\x00\x00\x00"
+
+    cdef = """
+    struct test_struct {
+        int x;
+        char y[8];
+        char z[16];
+    };
+    """
+    cs.load(cdef)
+
+    obj = cs.test_struct()
+    obj.x = 4
+    obj.y = "hi"
+    obj.z = "bye"
+
+    assert len(obj.dumps()) == len(cs.test_struct)
+    assert (
+        obj.dumps()
+        == b"\x04\x00\x00\x00hi\x00\x00\x00\x00\x00\x00bye\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    )
+
+
+def test_char_array_write_size_error(cs: cstruct) -> None:
+    buf = io.BytesIO()
+    with pytest.raises(ArraySizeError):
+        cs.char[4]._write(buf, b"toolong", endian=cs.endian)
 
 
 def test_char_eof(cs: cstruct) -> None:

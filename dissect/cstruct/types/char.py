@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, BinaryIO
 
+from dissect.cstruct.exception import ArraySizeError
 from dissect.cstruct.types.base import EOF, BaseArray, BaseType
 
 if TYPE_CHECKING:
@@ -22,15 +23,20 @@ class CharArray(bytes, BaseArray):
         return type.__call__(cls, super()._read(stream, context=context, endian=endian))
 
     @classmethod
-    def _write(cls, stream: BinaryIO, data: bytes, *, endian: Endianness) -> int:
-        if isinstance(data, list) and data and isinstance(data[0], int):
+    def _write(cls, stream: BinaryIO, data: bytes | str | list[int], *, endian: Endianness) -> int:
+        if isinstance(data, list):
             data = bytes(data)
-
         elif isinstance(data, str):
             data = data.encode("latin-1")
 
         if cls.null_terminated:
-            return stream.write(data + b"\x00")
+            data += b"\x00"
+
+        if not cls.dynamic and (remaining := cls.num_entries - (actual_size := len(data))):
+            if remaining < 0:
+                raise ArraySizeError(f"Expected static array size {cls.num_entries}, got {actual_size} instead.")
+            data += b"\x00" * remaining
+
         return stream.write(data)
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar
 
+from dissect.cstruct.exception import ArraySizeError
 from dissect.cstruct.types.base import EOF, BaseArray, BaseType
 
 if TYPE_CHECKING:
@@ -26,6 +27,12 @@ class WcharArray(str, BaseArray):
     def _write(cls, stream: BinaryIO, data: str, *, endian: Endianness) -> int:
         if cls.null_terminated:
             data += "\x00"
+
+        if not cls.dynamic and (remaining := cls.num_entries - (actual_size := len(data))):
+            if remaining < 0:
+                raise ArraySizeError(f"Expected static array size {cls.num_entries}, got {actual_size} instead.")
+            data += "\x00" * remaining
+
         return stream.write(data.encode(Wchar.__encoding_map__[endian]))
 
 
