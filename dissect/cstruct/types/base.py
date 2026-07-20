@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, TypeVar
 
 from dissect.cstruct.exception import ArraySizeError
 from dissect.cstruct.expression import Expression
+from dissect.cstruct.util import normalize_endianness
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -326,28 +327,6 @@ def _is_eof(stream: BinaryIO) -> bool:
 
     stream.seek(pos)
     return False
-
-
-ENDIANNESS_MAP: dict[AllowedEndianness, Endianness] = {
-    "<": "<",
-    ">": ">",
-    "!": "!",
-    "@": "@",
-    "=": "=",
-    "network": "!",
-    "little": "<",
-    "big": ">",
-}
-
-
-def normalize_endianness(endian: AllowedEndianness) -> Endianness:
-    """Normalize an endianness string to one of the standard format characters."""
-    try:
-        return ENDIANNESS_MAP[endian]
-    except KeyError:
-        raise ValueError(
-            f"Invalid endianness: {endian!r}, expected one of {', '.join(ENDIANNESS_MAP.keys())}"
-        ) from None
 
 
 # As mentioned in the BaseType class, we correctly set the type here
