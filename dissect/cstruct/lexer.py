@@ -390,6 +390,34 @@ class Lexer:
 
         return result
 
+    def _read_define_value(self) -> str:
+        start = self._pos
+        whitespace_size = 0
+        is_quoted = False
+        while not self.eof:
+            char = self._current()
+            next_char = self._peek()
+            if char == "\n":
+                break
+
+            if char in ('"', "'"):
+                is_quoted = not is_quoted
+
+            # Check whether we encounter a comment
+            if char == "/" and next_char in ("*", "/") and not is_quoted:
+                break
+
+            # Keep track of the whitespace
+            if char in (" ", "\t", "\r"):
+                whitespace_size += 1
+            else:
+                whitespace_size = 0
+
+            self._pos += 1
+        end = self._pos - whitespace_size
+        self._pos = start
+        return self._take(end - start)
+
     def _read_preprocessor(self) -> None:
         """Read a preprocessor directive starting with ``#``."""
         line = self._line
@@ -428,7 +456,7 @@ class Lexer:
                 # No value, just a simple macro definition
                 return
 
-            if (value := self._read_until("\n")).strip():
+            if value := self._read_define_value():
                 self._emit(TokenType.STRING, value, line)
 
         elif token_type == TokenType.PP_INCLUDE:

@@ -515,6 +515,28 @@ def test_preprocessor_in_struct_body(cs: cstruct) -> None:
     assert cs.test.fields["bonus"].type == cs.uint64
 
 
+def test_preprocessor_define_with_comments(cs: cstruct) -> None:
+    cdef = """
+    #define TEST1 data1      /* ... */
+    #define TEST2 data2      //
+    #define TEST3 data3      /* Multiline
+                                comment
+                              */
+    #define TEST4 data4      /* define
+    #define TEST_NO data_no     inside
+                                comment
+                              */
+    #define TEST5 "text with comments /* data5 */"
+    """
+
+    cs.load(cdef)
+    assert cs.consts["TEST1"] == "data1"
+    assert cs.consts["TEST2"] == "data2"
+    assert cs.consts["TEST3"] == "data3"
+    assert cs.consts["TEST4"] == "data4"
+    assert cs.consts["TEST5"] == "text with comments /* data5 */"
+
+
 def test_preprocessor_define_from_enum_in_struct(cs: cstruct) -> None:
     """Test #define referencing enum values used for conditional fields and array sizes."""
     cdef = """
