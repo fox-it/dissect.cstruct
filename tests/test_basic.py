@@ -9,8 +9,7 @@ import pytest
 from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exception import ArraySizeError, ParserError, ResolveError
 from dissect.cstruct.types import BaseType
-
-from .utils import verify_compiled
+from tests.util import verify_compiled
 
 if TYPE_CHECKING:
     from pathlib import Path
