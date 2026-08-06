@@ -391,32 +391,39 @@ class Lexer:
         return result
 
     def _read_define_value(self) -> str:
-        start = self._pos
-        whitespace_size = 0
-        is_quoted = False
+        """Read value of a define, ignoring comments and unecessary white space."""
+        text_offsets: list[tuple[int, int]] = []
+
         while not self.eof:
             char = self._current()
-            next_char = self._peek()
             if char == "\n":
                 break
 
-            if char in ('"', "'"):
-                is_quoted = not is_quoted
+            if char in ("\"'"):
+                sof = self._pos
+                self._read_string()
+                text_offsets.append((sof, self._pos))
+                continue
 
-            # Check whether we encounter a comment
-            if char == "/" and next_char in ("*", "/") and not is_quoted:
+            if char not in " \t\r":
+                sof = self._pos
+                self._read_until(" \t\r\n")
+                text_offsets.append((sof, self._pos))
+                continue
+
+            # Skip whitespace
+            self._read_while(" \t\r", or_eof=True)
+            if self.eof:
+                break
+            self._skip_comment()
+            if self.eof:
                 break
 
-            # Keep track of the whitespace
-            if char in (" ", "\t", "\r"):
-                whitespace_size += 1
-            else:
-                whitespace_size = 0
-
-            self._pos += 1
-        end = self._pos - whitespace_size
-        self._pos = start
-        return self._take(end - start)
+        result: list[str] = []
+        for start, end in text_offsets:
+            self._pos = start
+            result.append(self._take(end - start))
+        return " ".join(result)
 
     def _read_preprocessor(self) -> None:
         """Read a preprocessor directive starting with ``#``."""
