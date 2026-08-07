@@ -138,19 +138,19 @@ def test_generate_packed_read_array(cs: cstruct) -> None:
     data = _struct(endian, "2B3h4I5q").unpack(buf)
 
     _t = _0
-    _et = _t.type
+    _et = _t.__type__
     r["a"] = type.__call__(_t, [type.__call__(_et, e) for e in data[0:2]])
 
     _t = _1
-    _et = _t.type
+    _et = _t.__type__
     r["b"] = type.__call__(_t, [type.__call__(_et, e) for e in data[2:5]])
 
     _t = _2
-    _et = _t.type
+    _et = _t.__type__
     r["c"] = type.__call__(_t, [type.__call__(_et, e) for e in data[5:9]])
 
     _t = _3
-    _et = _t.type
+    _et = _t.__type__
     r["d"] = type.__call__(_t, [type.__call__(_et, e) for e in data[9:14]])
     """
 
@@ -184,7 +184,7 @@ def test_generate_packed_read_byte_types(cs: cstruct) -> None:
     r["e"] = _4(buf[9:12])
 
     _t = _5
-    _et = _t.type
+    _et = _t.__type__
     _b = buf[12:18]
     r["f"] = type.__call__(_t, [_et(_b[i:i + 3]) for i in range(0, 6, 3)])
     """
@@ -215,7 +215,7 @@ def test_generate_packed_read_composite_types(cs: cstruct, TestEnum: type[Enum])
     r["b"] = _pt.__new__(_pt, data[1], stream, context=r, endian=endian)
 
     _t = _2
-    _et = _t.type
+    _et = _t.__type__
     r["c"] = type.__call__(_t, [type.__call__(_et, e) for e in data[2:4]])
     """
 
@@ -243,10 +243,7 @@ def test_generate_packed_read_offsets(cs: cstruct) -> None:
 
 
 def test_generate_structure_read(cs: cstruct) -> None:
-    mock_type = Mock()
-    mock_type.__anonymous__ = False
-
-    field = Field("a", mock_type)
+    field = Field("a", Mock(__alignment__=None, __dynamic__=True, __anonymous__=False))
     code = next(compiler._ReadSourceGenerator(cs, [field])._generate_structure(field))
 
     expected = """
@@ -259,10 +256,7 @@ def test_generate_structure_read(cs: cstruct) -> None:
 
 
 def test_generate_structure_read_anonymous(cs: cstruct) -> None:
-    mock_type = Mock()
-    mock_type.__anonymous__ = True
-
-    field = Field("a", mock_type)
+    field = Field("a", Mock(__alignment__=None, __dynamic__=True, __anonymous__=True))
     code = next(compiler._ReadSourceGenerator(cs, [field])._generate_structure(field))
 
     expected = """
@@ -275,7 +269,7 @@ def test_generate_structure_read_anonymous(cs: cstruct) -> None:
 
 
 def test_generate_array_read(cs: cstruct) -> None:
-    field = Field("a", Mock())
+    field = Field("a", Mock(__alignment__=None, __dynamic__=True))
     code = next(compiler._ReadSourceGenerator(cs, [field])._generate_array(field))
 
     expected = """
@@ -303,7 +297,7 @@ def test_generate_bits_read(cs: cstruct, TestEnum: type[Enum]) -> None:
 
     expected = """
     _t = _0
-    r["b"] = type.__call__(_t, bit_reader.read(_t.type, 2))
+    r["b"] = type.__call__(_t, bit_reader.read(_t.__type__, 2))
     """
 
     assert code == dedent(expected)
@@ -331,7 +325,7 @@ def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, oth
 
 
     _t = _1
-    r["a"] = type.__call__(_t, bit_reader.read(_t.type, 4))
+    r["a"] = type.__call__(_t, bit_reader.read(_t.__type__, 4))
 
 
     _t = _2
@@ -374,7 +368,7 @@ def test_generate_fields_dynamic_before_bitfield(cs: cstruct, TestEnum: Enum, ot
 
 
     _t = _2
-    r["b"] = type.__call__(_t, bit_reader.read(_t.type, 4))
+    r["b"] = type.__call__(_t, bit_reader.read(_t.__type__, 4))
 
     bit_reader.reset()
     stream.seek(o + 3)

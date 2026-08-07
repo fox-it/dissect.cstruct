@@ -21,23 +21,23 @@ T = TypeVar("T", bound=BaseType)
 class Pointer(int, BaseType, Generic[T]):
     """Pointer to some other type."""
 
-    type: type[T]
-    _stream: BinaryIO | None
-    _context: dict[str, Any] | None
-    _endian: Endianness
+    __type__: type[T]
+    __stream: BinaryIO | None
+    __context: dict[str, Any] | None
+    __endian: Endianness
 
     def __new__(
         cls, value: int, stream: BinaryIO | None, *, context: dict[str, Any] | None = None, endian: Endianness
     ) -> Self:
         obj = super().__new__(cls, value)
-        obj._stream = stream
-        obj._context = context
-        obj._endian = endian
+        obj.__stream = stream
+        obj.__context = context
+        obj.__endian = endian
         obj.dereference = cache(obj.dereference)
         return obj
 
     def __repr__(self) -> str:
-        return f"<{self.type.__name__}* @ {self:#x}>"
+        return f"<{self.__type__.__name__}* @ {self:#x}>"
 
     def __str__(self) -> str:
         return str(self.dereference())
@@ -51,9 +51,9 @@ class Pointer(int, BaseType, Generic[T]):
             return type.__call__(
                 self.__class__,
                 op(self, other),
-                self._stream,
-                context=self._context,
-                endian=self._endian,
+                self.__stream,
+                context=self.__context,
+                endian=self.__endian,
             )
 
         return method
@@ -74,17 +74,17 @@ class Pointer(int, BaseType, Generic[T]):
     def __default__(cls) -> Self:
         return cls.__new__(
             cls,
-            cls.cs.pointer.__default__(),
+            cls.__cs__.pointer.__default__(),
             None,
             context=None,
-            endian=cls.cs.endian,
+            endian=cls.__cs__.endian,
         )
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
         return cls.__new__(
             cls,
-            cls.cs.pointer._read(stream, context=context, endian=endian),
+            cls.__cs__.pointer._read(stream, context=context, endian=endian),
             stream,
             context=context,
             endian=endian,
@@ -92,7 +92,7 @@ class Pointer(int, BaseType, Generic[T]):
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: int, *, endian: Endianness) -> int:
-        return cls.cs.pointer._write(stream, data, endian=endian)
+        return cls.__cs__.pointer._write(stream, data, endian=endian)
 
     def dereference(self, *, endian: AllowedEndianness | None = None) -> T | None:
         """Dereference the pointer and read the value it points to.
@@ -101,22 +101,22 @@ class Pointer(int, BaseType, Generic[T]):
             endian: Optional endianness to use when reading the value.
                     If not provided, the endianness used when reading the pointer itself will be used.
         """
-        if self == 0 or self._stream is None:
+        if self == 0 or self.__stream is None:
             raise NullPointerDereference
 
-        endian = normalize_endianness(endian) if endian is not None else self._endian
-        if issubclass(self.type, Void):
+        endian = normalize_endianness(endian) if endian is not None else self.__endian
+        if issubclass(self.__type__, Void):
             return None
 
-        position = self._stream.tell()
-        self._stream.seek(self)
+        position = self.__stream.tell()
+        self.__stream.seek(self)
 
-        if issubclass(self.type, Char):
+        if issubclass(self.__type__, Char):
             # This makes the assumption that a char pointer is a null-terminated string
-            value = self.type._read_0(self._stream, context=self._context, endian=endian)
+            value = self.__type__._read_0(self.__stream, context=self.__context, endian=endian)
         else:
-            value = self.type._read(self._stream, context=self._context, endian=endian)
+            value = self.__type__._read(self.__stream, context=self.__context, endian=endian)
 
         # Restore the stream position after reading the value
-        self._stream.seek(position)
+        self.__stream.seek(position)
         return value

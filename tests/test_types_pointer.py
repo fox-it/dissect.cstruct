@@ -148,7 +148,7 @@ def test_pointer_struct_pointer(cs: cstruct, compiled: bool) -> None:
     struct test {
         char    magic[4];
         wchar   wmagic[4];
-        uint8   a;
+        uint8   type;
         uint16  b;
         uint32  c;
         char    string[];
@@ -173,7 +173,7 @@ def test_pointer_struct_pointer(cs: cstruct, compiled: bool) -> None:
 
     assert obj.ptr.magic == b"test"
     assert obj.ptr.wmagic == "test"
-    assert obj.ptr.a == 0x01
+    assert obj.ptr.type == 0x01
     assert obj.ptr.b == 0x0302
     assert obj.ptr.c == 0x07060504
     assert obj.ptr.string == b"lalala"

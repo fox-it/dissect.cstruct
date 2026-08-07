@@ -17,7 +17,7 @@ class WcharArray(str, BaseArray):
 
     @classmethod
     def __default__(cls) -> WcharArray:
-        return type.__call__(cls, "\x00" * (0 if cls.dynamic or cls.null_terminated else cls.num_entries))
+        return type.__call__(cls, "\x00" * (0 if cls.__dynamic__ or cls.__null_terminated__ else cls.__num_entries__))
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> WcharArray:
@@ -25,12 +25,12 @@ class WcharArray(str, BaseArray):
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: str, *, endian: Endianness) -> int:
-        if cls.null_terminated:
+        if cls.__null_terminated__:
             data += "\x00"
 
-        if not cls.dynamic and (remaining := cls.num_entries - (actual_size := len(data))):
+        if not cls.__dynamic__ and (remaining := cls.__num_entries__ - (actual_size := len(data))):
             if remaining < 0:
-                raise ArraySizeError(f"Expected static array size {cls.num_entries}, got {actual_size} instead.")
+                raise ArraySizeError(f"Expected static array size {cls.__num_entries__}, got {actual_size} instead.")
             data += "\x00" * remaining
 
         return stream.write(data.encode(Wchar.__encoding_map__[endian]))
@@ -39,7 +39,7 @@ class WcharArray(str, BaseArray):
 class Wchar(str, BaseType):
     """Wide-character type for reading and writing UTF-16 characters."""
 
-    ArrayType = WcharArray
+    __ArrayType__ = WcharArray
 
     __slots__ = ()
     __encoding_map__: ClassVar[dict[Endianness, str]] = {

@@ -29,7 +29,7 @@ class VoidArray(list, BaseArray):
 class Void(BaseType):
     """Void type."""
 
-    ArrayType = VoidArray
+    __ArrayType__ = VoidArray
 
     def __bool__(self) -> bool:
         return False
