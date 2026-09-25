@@ -399,12 +399,23 @@ class Lexer:
             if char == "\n":
                 break
 
+            # Read byte string
+            next = self._peek()
+            if char == "b" and next is not None and next in ("\"'"):
+                sof = self._pos
+                self._pos += 1  # consume the b
+                self._read_string()
+                text_offsets.append((sof, self._pos))
+                continue
+
+            # read normal string
             if char in ("\"'"):
                 sof = self._pos
                 self._read_string()
                 text_offsets.append((sof, self._pos))
                 continue
 
+            # read word
             if char not in " \t\r":
                 sof = self._pos
                 self._read_until(" \t\r\n")

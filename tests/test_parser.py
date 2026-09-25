@@ -258,6 +258,7 @@ def test_define(cs: cstruct) -> None:
     #define TERNARY(x) ( x ? 1 : 0 )
     #define MULTI_LINE_QUOTE "\
     #define DEFINITION "
+    #define SPACED_BYTES b"        "
     """
     cs.load(cdef)
 
@@ -278,6 +279,7 @@ def test_define(cs: cstruct) -> None:
     assert cs.consts["FUNC"] == "(x) ( x == 0 )"
     assert cs.consts["TERNARY"] == "(x) ( x ? 1 : 0 )"
     assert cs.consts["MULTI_LINE_QUOTE"] == "    #define DEFINITION "
+    assert cs.consts["SPACED_BYTES"] == b"        "
 
 
 def test_define_flag_value(cs: cstruct) -> None:
