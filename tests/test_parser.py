@@ -251,11 +251,14 @@ def test_define(cs: cstruct) -> None:
     #define MULTILINE (1 + \
                         2 + \
                         3)
-    #define QUOTES "\'\"a'b\""
+    #define QUOTES "'\\"a'b\\""
     #define ESCAPE "\\'\\"a'b\\"\\n"
     #define BYTES_ESCAPE b"`\\n"
     #define FUNC(x) ( x == 0 )
     #define TERNARY(x) ( x ? 1 : 0 )
+    #define MULTI_LINE_QUOTE "\
+    #define DEFINITION "
+    #define SPACED_BYTES b"        "
     """
     cs.load(cdef)
 
@@ -275,6 +278,8 @@ def test_define(cs: cstruct) -> None:
     # We don't evaluate function-like macros yet, so they should be stored as their raw string representation
     assert cs.consts["FUNC"] == "(x) ( x == 0 )"
     assert cs.consts["TERNARY"] == "(x) ( x ? 1 : 0 )"
+    assert cs.consts["MULTI_LINE_QUOTE"] == "    #define DEFINITION "
+    assert cs.consts["SPACED_BYTES"] == b"        "
 
 
 def test_define_flag_value(cs: cstruct) -> None:
@@ -513,6 +518,34 @@ def test_preprocessor_in_struct_body(cs: cstruct) -> None:
     assert cs.test.__members__["version"].type == cs.uint16
     assert cs.test.__members__["basic"].type == cs.uint8
     assert cs.test.__members__["bonus"].type == cs.uint64
+
+
+def test_preprocessor_define_with_comments(cs: cstruct) -> None:
+    cdef = """
+    #define IGNORE_SCOPED_COMMENT       data1      /* ... */
+    #define IGNORE_LINE_COMMENT         data2      //
+    #define IGNORE_MULTILINE_COMMENT    data3      /* Multiline
+                                                      comment
+                                                    */
+    #define IGNORE_DEFINE_IN_COMMENT    data4      /* define
+    #define TEST_NO                     data_no       inside
+                                                      comment
+                                                    */
+    #define TEXT_CONTAINING_COMMENT     "text with comments /* data5 */"
+    #define IGNORE_STRING_AFTER_COMMENT "data6" // \
+                                        "string that cannot be reached"
+    #define NO_COMMENT_BETWEEN_CONCATINATION "data7" /* Comment */ \
+                                             "should get concatinated"
+    """
+
+    cs.load(cdef)
+    assert cs.consts["IGNORE_SCOPED_COMMENT"] == "data1"
+    assert cs.consts["IGNORE_LINE_COMMENT"] == "data2"
+    assert cs.consts["IGNORE_MULTILINE_COMMENT"] == "data3"
+    assert cs.consts["IGNORE_DEFINE_IN_COMMENT"] == "data4"
+    assert cs.consts["TEXT_CONTAINING_COMMENT"] == "text with comments /* data5 */"
+    assert cs.consts["IGNORE_STRING_AFTER_COMMENT"] == "data6"
+    assert cs.consts["NO_COMMENT_BETWEEN_CONCATINATION"] == 'data7" "should get concatinated'
 
 
 def test_preprocessor_define_from_enum_in_struct(cs: cstruct) -> None:

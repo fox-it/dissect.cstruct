@@ -96,7 +96,7 @@ from dissect.cstruct.lexer import TokenType, tokenize
             + 2)
             """,
             [TokenType.PP_DEFINE, TokenType.IDENTIFIER, TokenType.STRING],
-            ["define", "FOO", "(1             + 2)"],
+            ["define", "FOO", "(1 + 2)"],
         ),
         ("#undef", [TokenType.PP_UNDEF], ["undef"]),
         ("#ifdef", [TokenType.PP_IFDEF], ["ifdef"]),

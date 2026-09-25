@@ -390,6 +390,52 @@ class Lexer:
 
         return result
 
+    def _read_define_value(self) -> str:
+        """Read value of a define, ignoring comments and unecessary white space."""
+        text_offsets: list[tuple[int, int]] = []
+
+        while not self.eof:
+            char = self._current()
+            if char == "\n":
+                break
+
+            # Read byte string
+            next = self._peek()
+            if char == "b" and next is not None and next in ("\"'"):
+                sof = self._pos
+                self._pos += 1  # consume the b
+                self._read_string()
+                text_offsets.append((sof, self._pos))
+                continue
+
+            # read normal string
+            if char in ("\"'"):
+                sof = self._pos
+                self._read_string()
+                text_offsets.append((sof, self._pos))
+                continue
+
+            # read word
+            if char not in " \t\r":
+                sof = self._pos
+                self._read_until(" \t\r\n")
+                text_offsets.append((sof, self._pos))
+                continue
+
+            # Skip whitespace
+            self._read_while(" \t\r", or_eof=True)
+            if self.eof:
+                break
+            self._skip_comment()
+            if self.eof:
+                break
+
+        result: list[str] = []
+        for start, end in text_offsets:
+            self._pos = start
+            result.append(self._take(end - start))
+        return " ".join(result)
+
     def _read_preprocessor(self) -> None:
         """Read a preprocessor directive starting with ``#``."""
         line = self._line
@@ -428,7 +474,7 @@ class Lexer:
                 # No value, just a simple macro definition
                 return
 
-            if (value := self._read_until("\n")).strip():
+            if value := self._read_define_value():
                 self._emit(TokenType.STRING, value, line)
 
         elif token_type == TokenType.PP_INCLUDE:
