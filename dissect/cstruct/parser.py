@@ -499,8 +499,13 @@ class CStyleParser(Parser):
                 count = Expression(expression)
                 try:
                     count = count.evaluate(self.cs)
-                except Exception:
-                    pass
+                except Exception as error:
+                    if isinstance(error, ExpressionParserError) and isinstance(
+                        error.__context__, (ValueError, TypeError)
+                    ):
+                        raise self._error(
+                            f"array size expression {expression!r} must evaluate to an integer"
+                        ) from error
                 dimensions.append(count)
             self._expect(TokenType.RBRACKET)
 

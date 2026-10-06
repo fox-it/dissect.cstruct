@@ -595,3 +595,22 @@ def test_error_context(cs: cstruct) -> None:
           3: 69
         """.rstrip()
     )
+
+
+@pytest.mark.parametrize("definition", ["LENGTH", '"invalid"', "b'bytes'"])
+def test_array_dimension_rejects_noninteger_constant(cs: cstruct, definition: str, compiled: bool) -> None:
+    cdef = f"#define DATA_LEN {definition}\nstruct data {{ char foo[DATA_LEN]; }};"
+    with pytest.raises(ParserError, match="array size expression 'DATA_LEN' must evaluate to an integer"):
+        cs.load(cdef, compiled=compiled)
+
+
+def test_array_dimension_retains_dynamic_expression(cs: cstruct, compiled: bool) -> None:
+    cs.load("struct data { uint8 length; char foo[length + 1]; };", compiled=compiled)
+    assert cs.data(b"\x02abc").foo == b"abc"
+
+
+@pytest.mark.parametrize("length", [0, 3])
+def test_array_dimension_integer_constant(cs: cstruct, length: int, compiled: bool) -> None:
+    cs.load(f"#define DATA_LEN {length}\nstruct data {{ char foo[DATA_LEN]; }};", compiled=compiled)
+    assert len(cs.data) == length
+    assert cs.data(b"abc").foo == b"abc"[:length]
