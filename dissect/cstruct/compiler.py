@@ -294,7 +294,7 @@ class _ReadSourceGenerator:
 
             if issubclass(read_type, (Wchar, Int)):
                 # Types that parse bytes further down to their own type
-                parser_template = "{type}({getter})"
+                parser_template = "{type}.reads({getter}, endian=endian)"
             else:
                 # All other types can be simply intialized
                 parser_template = "type.__call__({type}, {getter})"
@@ -310,6 +310,9 @@ class _ReadSourceGenerator:
                     list_comp = f"[{item_parser} for i in range(0, {count}, {field_type.__type__.__size__})]"
                 elif issubclass(field_type.__type__, Pointer):
                     item_parser = "_et.__new__(_et, e, stream, context=r, endian=endian)"
+                    list_comp = f"[{item_parser} for e in {getter}]"
+                elif issubclass(read_type, (Wchar, Int)):
+                    item_parser = "_et(e)"
                     list_comp = f"[{item_parser} for e in {getter}]"
                 else:
                     item_parser = parser_template.format(type="_et", getter="e")

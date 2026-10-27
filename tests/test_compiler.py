@@ -8,13 +8,13 @@ from unittest.mock import Mock
 import pytest
 
 from dissect.cstruct import compiler
+from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.types.structure import Field
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from dissect.cstruct.cstruct import cstruct
     from dissect.cstruct.types.base import BaseType
     from dissect.cstruct.types.enum import Enum
 
@@ -177,16 +177,16 @@ def test_generate_packed_read_byte_types(cs: cstruct) -> None:
 
     r["b"] = type.__call__(_1, buf[1:3])
 
-    r["c"] = _2(buf[3:5])
+    r["c"] = _2.reads(buf[3:5], endian=endian)
 
-    r["d"] = _3(buf[5:9])
+    r["d"] = _3.reads(buf[5:9], endian=endian)
 
-    r["e"] = _4(buf[9:12])
+    r["e"] = _4.reads(buf[9:12], endian=endian)
 
     _t = _5
     _et = _t.__type__
     _b = buf[12:18]
-    r["f"] = type.__call__(_t, [_et(_b[i:i + 3]) for i in range(0, 6, 3)])
+    r["f"] = type.__call__(_t, [_et.reads(_b[i:i + 3], endian=endian) for i in range(0, 6, 3)])
     """
 
     assert code == dedent(expected)
@@ -379,3 +379,37 @@ def test_generate_fields_dynamic_before_bitfield(cs: cstruct, TestEnum: Enum, ot
     """
 
     assert output.strip() == dedent(expected).strip()
+
+
+@pytest.mark.parametrize("endian", ["<", ">"])
+def test_compiled_endian_override(endian: str) -> None:
+    cdef = """
+    enum Test : uint24 {
+        A = 1,
+    };
+
+    struct test {
+        uint16  a;
+        wchar   b;
+        wchar   c[2];
+        int24   d;
+        uint24  e[2];
+        Test    f;
+    };
+    """
+    compiled = cstruct().load(cdef, compiled=True)
+    interpreted = cstruct().load(cdef, compiled=False)
+    assert compiled.test.__compiled__
+    assert not interpreted.test.__compiled__
+
+    buf = bytes.fromhex("0102 4100 4200 4300 fffffe 010000 000002 000001")
+    obj = compiled.test(buf, endian=endian)
+    expected = interpreted.test(buf, endian=endian)
+    assert repr(obj) == repr(expected)
+    assert obj.dumps(endian=endian) == expected.dumps(endian=endian) == buf
+
+    if endian == ">":
+        assert obj.b == "\u4100"
+        assert obj.d == -2
+        assert obj.e == [0x010000, 2]
+        assert obj.f == compiled.Test.A
