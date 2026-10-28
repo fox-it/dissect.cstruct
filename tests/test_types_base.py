@@ -40,6 +40,27 @@ def test_array_write_padding(cs: cstruct) -> None:
     assert buf.getvalue() == b"\x01\x02" + b"\x00\x00" * 3
 
 
+def test_array_large_count(cs: cstruct, compiled: bool) -> None:
+    """Test that an array with a count beyond the end of the data raises an EOFError."""
+    cdef = """
+    struct entry {
+        uint32  a;
+        uint32  b;
+    };
+
+    struct test {
+        uint32  count;
+        entry   entries[count];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    with pytest.raises(EOFError):
+        cs.test(b"\x00\x00\x00\x40" + bytes(16))
+
+
 def test_eof(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct test_char {

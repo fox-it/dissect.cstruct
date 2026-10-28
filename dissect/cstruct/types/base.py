@@ -180,13 +180,18 @@ class MetaType(type):
             context: Optional reading context.
             endian: The endianness to use when parsing (little, big, network, <, >, !, @ or =).
         """
+        result = []
         if count == EOF:
-            result = []
             while not _is_eof(stream):
                 result.append(cls._read(stream, context=context, endian=endian))
             return result
 
-        return [cls._read(stream, context=context, endian=endian) for _ in range(count)]
+        # This is purposefully a simple loop
+        # PyPy will pre-allocate the list for a list comprehension ahead of time, which will cause huge allocations in
+        # case wrong count is read, instead of causing an EOFError when trying to read the type.
+        for _ in range(count):
+            result.append(cls._read(stream, context=context, endian=endian))  # noqa: PERF401
+        return result
 
     def _read_0(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> list[Self]:
         """Internal function for reading null-terminated data.
