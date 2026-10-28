@@ -7,6 +7,8 @@ import pytest
 
 from dissect.cstruct.exception import ArraySizeError
 
+from .utils import NonSeekableStream
+
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
 
@@ -87,3 +89,17 @@ def test_char_default(cs: cstruct) -> None:
     assert cs.char.__default__() == b"\x00"
     assert cs.char[4].__default__() == b"\x00\x00\x00\x00"
     assert cs.char[None].__default__() == b""
+
+
+@pytest.mark.parametrize("stream_type", [io.BytesIO, NonSeekableStream])
+@pytest.mark.parametrize("length", [0, 1, 127, 128, 129, 300])
+def test_char_null_terminated(cs: cstruct, stream_type: type, length: int) -> None:
+    """Test reading null-terminated char arrays from seekable and non-seekable streams."""
+    data = b"".join(bytes([0x41 + i % 26]) for i in range(length))
+
+    fh = stream_type(data + b"\x00rest")
+    assert cs.char[None](fh) == data
+    assert fh.read() == b"rest"
+
+    with pytest.raises(EOFError, match="Read 0 bytes, but expected 1"):
+        cs.char[None](stream_type(data))

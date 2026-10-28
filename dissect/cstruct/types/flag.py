@@ -1,9 +1,33 @@
 from __future__ import annotations
 
+import operator
+from enum import Flag as _StdFlag
 from enum import IntFlag
+from typing import TYPE_CHECKING
 
 from dissect.cstruct.types.base import BaseType
 from dissect.cstruct.types.enum import PY_311, EnumMetaType
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+
+def _operator(op: Callable[[int, int], int], fallback: Callable[[Flag, int], Flag]) -> Callable[[Flag, int], Flag]:
+    """Create a flag operator with a fast path for integers and flags of the same class."""
+
+    def method(self: Flag, other: int | Flag) -> Flag:
+        if type(other) is self.__class__:
+            value = op(self._value_, other._value_)
+        elif isinstance(other, int) and not isinstance(other, _StdFlag):
+            value = op(self._value_, other)
+        else:
+            return fallback(self, other)
+
+        if (member := self.__class__._value2member_map_.get(value)) is not None:
+            return member
+        return self.__class__(value)
+
+    return method
 
 
 class Flag(BaseType, IntFlag, metaclass=EnumMetaType):
@@ -56,17 +80,26 @@ class Flag(BaseType, IntFlag, metaclass=EnumMetaType):
             return result
 
     def __eq__(self, other: int | Flag) -> bool:
-        if isinstance(other, Flag) and other.__class__ is not self.__class__:
-            return False
-
-        # Python <= 3.10 compatibility
         if isinstance(other, Flag):
-            other = other.value
+            if other.__class__ is not self.__class__:
+                return False
 
-        return self.value == other
+            # Python <= 3.10 compatibility
+            other = other._value_
+
+        return self._value_ == other
 
     def __ne__(self, value: int | Flag) -> bool:
         return not self.__eq__(value)
 
     def __hash__(self) -> int:
-        return hash((self.__class__, self.name, self.value))
+        return hash((self.__class__, self._name_, self._value_))
+
+    # Faster implementations of the standard library Flag operators
+    __and__ = _operator(operator.and_, IntFlag.__and__)
+    __or__ = _operator(operator.or_, IntFlag.__or__)
+    __xor__ = _operator(operator.xor, IntFlag.__xor__)
+
+    __rand__ = __and__
+    __ror__ = __or__
+    __rxor__ = __xor__

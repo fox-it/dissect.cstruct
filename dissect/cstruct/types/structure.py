@@ -17,11 +17,11 @@ from dissect.cstruct.bitbuffer import BitBuffer
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.lexer import IDENTIFIER_TYPES
 from dissect.cstruct.types.base import (
+    _BUFFER_TYPES,
     BaseArray,
     BaseType,
     MetaType,
     _is_buffer_type,
-    _is_readable_type,
 )
 from dissect.cstruct.types.enum import EnumMetaType
 from dissect.cstruct.types.pointer import Pointer
@@ -75,6 +75,15 @@ class StructureMetaType(MetaType):
         return super().__new__(metacls, name, bases, classdict)
 
     def __call__(cls, *args, **kwargs) -> Self:  # type: ignore
+        if len(args) == 1 and not kwargs:
+            # Fast paths for the most common cases
+            obj = args[0]
+            if type(obj) in _BUFFER_TYPES:
+                return cls._read(io.BytesIO(obj), endian=cls.__cs__.endian)
+
+            if hasattr(obj, "read") and not isinstance(obj, cls):
+                return cls._read(obj, endian=cls.__cs__.endian)
+
         if not args and not kwargs:
             obj = type.__call__(cls)
             object.__setattr__(obj, "__dynamic_sizes__", {})
@@ -131,20 +140,6 @@ class StructureMetaType(MetaType):
             size, alignment = cls._calculate_size_and_offsets(cls, fields, align)
         else:
             size, alignment = cls._calculate_size_and_offsets(fields, align)
-
-        if cls.__compiled__:
-            # If the previous class was compiled try to compile this too
-            from dissect.cstruct import compiler
-
-            try:
-                classdict["_read"] = compiler.Compiler(cls.__cs__).compile_read(
-                    fields, cls.__name__, align=cls.__align__
-                )
-                classdict["__compiled__"] = True
-            except Exception:
-                # Revert _read to the slower loop based method
-                classdict["_read"] = classmethod(Structure._read.__func__)
-                classdict["__compiled__"] = False
 
         # TODO: compile _write
         # TODO: generate cached_property for lazy reading
@@ -244,7 +239,7 @@ class StructureMetaType(MetaType):
         return offset, alignment
 
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:  # type: ignore
-        bit_buffer = BitBuffer(stream, endian=endian)
+        bit_buffer = None
         struct_start = stream.tell()
 
         result = {}
@@ -263,6 +258,9 @@ class StructureMetaType(MetaType):
                 stream.seek(offset)
 
             if field.bits:
+                if bit_buffer is None:
+                    bit_buffer = BitBuffer(stream, endian=endian)
+
                 if isinstance(field.type, EnumMetaType):
                     value = field.type(bit_buffer.read(field.type.__type__, field.bits))
                 else:
@@ -271,7 +269,8 @@ class StructureMetaType(MetaType):
                 result[field._name] = value
                 continue
 
-            bit_buffer.reset()
+            if bit_buffer is not None:
+                bit_buffer.reset()
 
             value = field.type._read(stream, context=result, endian=endian)
 
@@ -298,23 +297,24 @@ class StructureMetaType(MetaType):
         return result
 
     def _write(cls, stream: BinaryIO, data: Structure, *, endian: Endianness) -> int:
-        bit_buffer = BitBuffer(stream, endian=endian)
+        bit_buffer = None
         struct_start = stream.tell()
         num = 0
 
         for field in cls.__fields__:
             field_type = field.type
 
-            bit_field_type = (
-                (field_type.__type__ if isinstance(field_type, EnumMetaType) else field_type) if field.bits else None
-            )
-            # Current field is not a bit field, but previous was
-            # Or, moved to a bit field of another type, e.g. uint16 f1 : 8, uint32 f2 : 8;
-            if (not field.bits and bit_buffer._type is not None) or (
-                bit_buffer._type and bit_buffer._type != bit_field_type
-            ):
-                # Flush the current bit buffer so we can process alignment properly
-                bit_buffer.flush()
+            if bit_buffer is not None and bit_buffer._type is not None:
+                bit_field_type = (
+                    (field_type.__type__ if isinstance(field_type, EnumMetaType) else field_type)
+                    if field.bits
+                    else None
+                )
+                # Current field is not a bit field, but previous was
+                # Or, moved to a bit field of another type, e.g. uint16 f1 : 8, uint32 f2 : 8;
+                if bit_buffer._type != bit_field_type:
+                    # Flush the current bit buffer so we can process alignment properly
+                    bit_buffer.flush()
 
             offset = stream.tell()
 
@@ -324,10 +324,8 @@ class StructureMetaType(MetaType):
                 offset = struct_start + field.offset
 
             if cls.__align__ and field.offset is None:
-                is_bitbuffer_boundary = bit_buffer._type and (
-                    bit_buffer._remaining == 0 or bit_buffer._type != field_type
-                )
-                if not bit_buffer._type or is_bitbuffer_boundary:
+                bit_type = bit_buffer._type if bit_buffer is not None else None
+                if bit_type is None or bit_buffer._remaining == 0 or bit_type != field_type:
                     # Previous field was dynamically sized and we need to align
                     align_pad = -offset & (field.alignment - 1)
                     stream.write(b"\x00" * align_pad)
@@ -338,6 +336,9 @@ class StructureMetaType(MetaType):
                 value = field_type.__default__()
 
             if field.bits:
+                if bit_buffer is None:
+                    bit_buffer = BitBuffer(stream, endian=endian)
+
                 if isinstance(field_type, EnumMetaType):
                     bit_buffer.write(field_type.__type__, value.value, field.bits)
                 else:
@@ -346,7 +347,7 @@ class StructureMetaType(MetaType):
                 field_type._write(stream, value, endian=endian)
                 num += stream.tell() - offset
 
-        if bit_buffer._type is not None:
+        if bit_buffer is not None and bit_buffer._type is not None:
             bit_buffer.flush()
 
         if cls.__align__:
@@ -376,6 +377,12 @@ class StructureMetaType(MetaType):
 
         for key, value in classdict.items():
             setattr(cls, key, value)
+
+        if cls.__compiled__:
+            # If the previous class was compiled try to compile this too
+            from dissect.cstruct import compiler
+
+            compiler.compile_structure(cls)
 
     def cdef(cls, *, recursive: bool = False) -> str:
         """Render this structure (or union) back to its C-style definition.
@@ -579,7 +586,7 @@ class UnionMetaType(StructureMetaType):
             object.__setattr__(obj, "_endian", cls.__cs__.endian)
 
         # Calling with non-stream args or kwargs means we are initializing with values
-        if (args and not (len(args) == 1 and (_is_readable_type(args[0]) or _is_buffer_type(args[0])))) or kwargs:
+        if (args and not (len(args) == 1 and (hasattr(args[0], "read") or _is_buffer_type(args[0])))) or kwargs:
             # We don't support user initialization of dynamic unions yet
             if cls.__dynamic__:
                 raise NotImplementedError("Initializing a dynamic union is not yet supported")
@@ -656,6 +663,18 @@ class UnionMetaType(StructureMetaType):
             size = stream.tell() - start
             stream.seek(start)
             buf = stream.read(size)
+        elif "__init__" in cls.__dict__ and cls.__new__ is object.__new__:
+            # Fast path for static unions
+            buf = stream.read(cls.__size__)
+            result, sizes = cls._read_fields(io.BytesIO(buf), endian=endian)
+
+            obj: Union = object.__new__(cls)
+            obj.__dict__.update(result)
+            object.__setattr__(obj, "__dynamic_sizes__", sizes)
+            object.__setattr__(obj, "_buf", buf)
+            object.__setattr__(obj, "_endian", endian)
+            obj._proxify()
+            return obj
         else:
             result = {}
             sizes = {}

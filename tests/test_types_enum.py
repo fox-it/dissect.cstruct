@@ -462,3 +462,25 @@ def test_cdef_enum(cs: cstruct) -> None:
             BLUE = 4,
         };"""
     )
+
+
+def test_enum_call_fast_path(cs: cstruct) -> None:
+    """Test that calling an enum with a value returns the right member, also for unknown values."""
+    cdef = """
+    enum Test : uint16 {
+        A = 1,
+        B = 2,
+        C = 2,
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.Test(1) is cs.Test.A
+    assert cs.Test(b"\x01\x00") is cs.Test.A
+
+    # Calling with a member returns that member, also for an alias with the same value
+    assert cs.Test(cs.Test.B) is cs.Test.B
+    assert cs.Test(cs.Test.C) is cs.Test.C
+
+    assert cs.Test(1337) == cs.Test(1337)
+    assert hash(cs.Test(1337)) == hash(cs.Test(1337))
