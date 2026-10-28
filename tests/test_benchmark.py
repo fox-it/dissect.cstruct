@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -46,6 +47,43 @@ def test_benchmark_union(cs: cstruct, compiled: bool, benchmark: BenchmarkFixtur
     cs.load(cdef, compiled=compiled)
 
     benchmark(lambda: cs.test(b"\x01\x02\x03\x04\x05\x06\x07\x08"))
+
+
+@pytest.mark.benchmark
+def test_benchmark_union_nested(cs: cstruct, compiled: bool, benchmark: BenchmarkFixture) -> None:
+    """Benchmark the parsing of a union with nested structures with both the compiled and interpreted backends."""
+    cdef = """
+    union test {
+        struct {
+            uint32  offset;
+            uint32  block;
+        } lsn;
+        struct {
+            uint16  low;
+            uint16  mid;
+            uint32  high;
+        } parts;
+        uint64  value;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    benchmark(lambda: cs.test(b"\x01\x02\x03\x04\x05\x06\x07\x08"))
+
+
+@pytest.mark.benchmark
+def test_benchmark_union_array(cs: cstruct, compiled: bool, benchmark: BenchmarkFixture) -> None:
+    """Benchmark the parsing of an array of unions with both the compiled and interpreted backends."""
+    cdef = """
+    union test {
+        uint32  a;
+        char    b[4];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    buf = bytes(range(64))
+    benchmark(lambda: cs.test[16](buf))
 
 
 @pytest.mark.benchmark
@@ -200,3 +238,144 @@ def test_benchmark_lexer_and_parser(cs: cstruct, benchmark: BenchmarkFixture) ->
     cs.add_type = partial(cs.add_type, replace=True)
 
     benchmark(lambda: cs.load(_BENCHMARK_CDEF))
+
+
+@pytest.mark.benchmark
+def test_benchmark_nested_dynamic(cs: cstruct, compiled: bool, benchmark: BenchmarkFixture) -> None:
+    """Benchmark the parsing of a realistic struct with nested structs and dynamically sized arrays."""
+    cs.load(_BENCHMARK_CDEF, compiled=compiled)
+
+    buf = (
+        b"\x01\x00\x00\x00"  # Mask
+        b"\x03\x00\x00\x00"  # Flags
+        + bytes(range(16))  # ObjectType
+        + bytes(range(16))  # InheritedObjectType
+        + b"\x01\x04\x00\x00\x00\x00\x00\x05"  # Sid
+        + b"\x15\x00\x00\x00" * 4  # Sid.SubAuthority
+    )
+
+    benchmark(lambda: cs.ACCESS_ALLOWED_OBJECT_ACE(buf))
+
+
+@pytest.mark.benchmark
+def test_benchmark_enum_flag_bits(cs: cstruct, compiled: bool, benchmark: BenchmarkFixture) -> None:
+    """Benchmark the parsing of a struct with enums, flags and bit fields."""
+    cdef = """
+    enum Type : uint16 {
+        A = 1,
+        B = 2,
+    };
+
+    flag Flags : uint16 {
+        X = 1,
+        Y = 2,
+        Z = 4,
+    };
+
+    struct test {
+        Type    type;
+        Flags   flags;
+        uint16  a : 4;
+        uint16  b : 12;
+        uint32  c;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    benchmark(lambda: cs.test(b"\x01\x00\x05\x00\x34\x12\x01\x00\x00\x00"))
+
+
+@pytest.mark.benchmark
+def test_benchmark_flag_operators(cs: cstruct, benchmark: BenchmarkFixture) -> None:
+    """Benchmark bitwise operations on flags."""
+    cdef = """
+    flag Flags : uint16 {
+        X = 1,
+        Y = 2,
+        Z = 4,
+    };
+    """
+    cs.load(cdef)
+    value = cs.Flags.X | cs.Flags.Z
+
+    benchmark(lambda: (value & cs.Flags.X, value | cs.Flags.Y, value & 0x4))
+
+
+@pytest.mark.benchmark
+def test_benchmark_strings(cs: cstruct, compiled: bool, benchmark: BenchmarkFixture) -> None:
+    """Benchmark the parsing of a struct with fixed size and null-terminated strings."""
+    cdef = """
+    struct test {
+        wchar   name[8];
+        char    path[];
+        wchar   description[];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    buf = (
+        "filename".encode("utf-16-le")  # name
+        + b"some/path/to/a/file\x00"  # path
+        + "A description".encode("utf-16-le")  # description
+        + b"\x00\x00"
+    )
+
+    benchmark(lambda: cs.test(buf))
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize("kind", ["bytes", "memoryview", "stream"])
+def test_benchmark_primitive(cs: cstruct, kind: str, benchmark: BenchmarkFixture) -> None:
+    """Benchmark the parsing of a primitive type from different kinds of input."""
+    buf = b"\x01\x02\x03\x04"
+
+    if kind == "stream":
+        fh = io.BytesIO(buf)
+
+        def read() -> int:
+            fh.seek(0)
+            return cs.uint32(fh)
+
+        benchmark(read)
+    else:
+        obj = memoryview(buf) if kind == "memoryview" else buf
+        benchmark(lambda: cs.uint32(obj))
+
+
+@pytest.mark.benchmark
+def test_benchmark_array(cs: cstruct, benchmark: BenchmarkFixture) -> None:
+    """Benchmark the parsing of an array type created at runtime."""
+    buf = bytes(range(64))
+
+    benchmark(lambda: cs.uint32[16](buf))
+
+
+@pytest.mark.benchmark
+def test_benchmark_dumps(cs: cstruct, benchmark: BenchmarkFixture) -> None:
+    """Benchmark the writing of a simple struct."""
+    cdef = """
+    struct test {
+        uint32  a;
+        uint64  b;
+        uint16  c;
+        uint8   d;
+    };
+    """
+    cs.load(cdef)
+    obj = cs.test(b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x03\x00\x04")
+
+    benchmark(lambda: obj.dumps())
+
+
+@pytest.mark.benchmark
+def test_benchmark_load_and_read(cs: cstruct, compiled: bool, benchmark: BenchmarkFixture) -> None:
+    """Benchmark loading struct definitions and reading one struct, which includes any (lazy) compilation."""
+    cs.add_type = partial(cs.add_type, replace=True)
+
+    buf = b"\x02\x01\x00\x00\x00\x00\x00\x05" + b"\x15\x00\x00\x00" * 2
+
+    def load_and_read() -> None:
+        cs.load(_BENCHMARK_CDEF, compiled=compiled)
+        cs.LDAP_SID(buf)
+
+    benchmark(load_and_read)
