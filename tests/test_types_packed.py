@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import array
+import struct
 from typing import TYPE_CHECKING
 
 import pytest
@@ -218,5 +219,13 @@ def test_packed_memoryview_formats(cs: cstruct) -> None:
     assert cs.uint32(memoryview(array.array("I", [7, 8]))) == 7
     assert cs.uint8(memoryview(array.array("I", [7, 8]))) == 7
 
-    with pytest.raises(BufferError):
-        cs.uint32(memoryview(bytearray(16))[::2])
+    # Non-contiguous memoryviews are handled like the struct module does, which differs per Python implementation
+    # E.g. PyPy 3.10 reads the bytes of the view, other versions raise a BufferError
+    view = memoryview(bytearray(range(16)))[::2]
+    try:
+        expected = struct.unpack_from("<I", view)[0]
+    except BufferError:
+        with pytest.raises(BufferError):
+            cs.uint32(view)
+    else:
+        assert cs.uint32(view) == expected
