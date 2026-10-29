@@ -8,6 +8,7 @@ import sys
 import types
 import warnings
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, BinaryIO, Literal, TypeVar, cast
 
@@ -32,7 +33,7 @@ from dissect.cstruct.types import (
 from dissect.cstruct.types.base import normalize_endianness
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Generator, Iterable
     from typing import TypeAlias
 
     from dissect.cstruct.types import (
@@ -202,6 +203,9 @@ class cstruct:
         pointer = pointer or ("uint64" if sys.maxsize > 2**32 else "uint32")
         self.pointer: type[BaseType] = self.resolve(pointer)
         self._anonymous_count = 0
+
+        # Array types are frequently created at runtime (e.g. ``cs.uint32[count]``), so cache them per instance
+        self._make_array_cached = lru_cache(maxsize=4096)(self._make_array_cached)
 
         if load:
             self.load(load)
@@ -467,7 +471,7 @@ class cstruct:
         return copy.copy(self)
 
     @contextmanager
-    def endianness(self, endian: AllowedEndianness) -> Iterator[cstruct]:
+    def endianness(self, endian: AllowedEndianness) -> Generator[cstruct]:
         """Context manager for temporarily changing the endianness of this cstruct instance."""
         original = self.endian
         self.endian = normalize_endianness(endian)
@@ -477,13 +481,13 @@ class cstruct:
             self.endian = original
 
     @contextmanager
-    def big_endian(self) -> Iterator[cstruct]:
+    def big_endian(self) -> Generator[cstruct]:
         """Context manager for temporarily changing the endianness to big endian."""
         with self.endianness(">") as cs:
             yield cs
 
     @contextmanager
-    def little_endian(self) -> Iterator[cstruct]:
+    def little_endian(self) -> Generator[cstruct]:
         """Context manager for temporarily changing the endianness to little endian."""
         with self.endianness("<") as cs:
             yield cs
@@ -513,6 +517,17 @@ class cstruct:
         return types.new_class(name, bases, {}, lambda ns: ns.update(attrs))
 
     def _make_array(self, type_: T, num_entries: int | Expression | None) -> type[Array[T]]:
+        if isinstance(num_entries, Expression):
+            # Only created when parsing a definition, so no point in caching
+            return self._make_array_type(type_, num_entries)
+
+        # Structures can be dynamically modified, so include the size and alignment in the cache key
+        return self._make_array_cached(type_, num_entries, type_.__size__, type_.__alignment__)
+
+    def _make_array_cached(self, type_: T, num_entries: int | None, size: int | None, alignment: int) -> type[Array[T]]:
+        return self._make_array_type(type_, num_entries)
+
+    def _make_array_type(self, type_: T, num_entries: int | Expression | None) -> type[Array[T]]:
         null_terminated = False
         if num_entries is None:
             null_terminated = True

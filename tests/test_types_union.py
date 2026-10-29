@@ -2,26 +2,29 @@ from __future__ import annotations
 
 import inspect
 from textwrap import dedent
-from typing import TYPE_CHECKING
 
 import pytest
 
+from dissect.cstruct import compiler
+from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.structure import Field, Union, UnionProxy
 
-from .utils import verify_compiled
-
-if TYPE_CHECKING:
-    from dissect.cstruct.cstruct import cstruct
+from .utils import parsed_state, source_lines, verify_compiled
 
 
 @pytest.fixture
-def TestUnion(cs: cstruct) -> type[Union]:
-    return cs._make_union(
+def TestUnion(cs: cstruct, compiled: bool) -> type[Union]:
+    union = cs._make_union(
         "TestUnion",
         [Field("a", cs.uint32), Field("b", cs.uint16)],
     )
+    if compiled:
+        compiler.compile_structure(union)
+
+    assert verify_compiled(union, compiled)
+    return union
 
 
 def test_union(TestUnion: type[Union]) -> None:
@@ -109,7 +112,7 @@ def test_union_write(TestUnion: type[Union]) -> None:
     assert obj.dumps() == b"\x01\x00\x00\x00"
 
 
-def test_union_write_anonymous(cs: cstruct) -> None:
+def test_union_write_anonymous(cs: cstruct, compiled: bool) -> None:
     cdef = """
     union test {
         struct {
@@ -117,7 +120,9 @@ def test_union_write_anonymous(cs: cstruct) -> None:
         };
     };
     """
-    cs.load(cdef)
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
 
     obj = cs.test(b"\x01\x00\x00\x00")
     assert obj.a == 1
@@ -224,14 +229,16 @@ def test_union_eof(TestUnion: type[Union]) -> None:
         TestUnion[None](b"\x01\x00\x00\x00\x02\x00\x00\x00")
 
 
-def test_union_definition(cs: cstruct) -> None:
+def test_union_definition(cs: cstruct, compiled: bool) -> None:
     cdef = """
     union test {
         uint32 a;
         char   b[8];
     };
     """
-    cs.load(cdef, compiled=False)
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
 
     assert len(cs.test) == 8
 
@@ -240,6 +247,7 @@ def test_union_definition(cs: cstruct) -> None:
 
     assert obj.a == 0x676D6F7A
     assert obj.b == b"zomgbeef"
+    assert list(obj.__dict__) == ["a", "b", "__dynamic_sizes__", "_buf", "_endian"]
 
     assert obj.dumps() == buf
     assert cs.test().dumps() == b"\x00\x00\x00\x00\x00\x00\x00\x00"
@@ -263,6 +271,7 @@ def test_union_definition_nested(cs: cstruct, compiled: bool) -> None:
     cs.load(cdef, compiled=compiled)
 
     assert verify_compiled(cs.test, compiled)
+    assert verify_compiled(cs.test.__lookup__["c"].type, compiled)
 
     assert len(cs.test) == 12
 
@@ -301,6 +310,7 @@ def test_union_definition_anonymous(cs: cstruct, compiled: bool) -> None:
     cs.load(cdef, compiled=compiled)
 
     assert verify_compiled(cs.test, compiled)
+    assert verify_compiled(cs.test.__fields__[0].type, compiled)
 
     buf = b"\x01\x01\x02\x02\x03\x03\x04\x04"
     obj = cs.test(buf)
@@ -312,7 +322,7 @@ def test_union_definition_anonymous(cs: cstruct, compiled: bool) -> None:
     assert obj.dumps() == buf
 
 
-def test_union_definition_dynamic(cs: cstruct) -> None:
+def test_union_definition_dynamic(cs: cstruct, compiled: bool) -> None:
     cdef = """
     struct dynamic {
         uint8   size;
@@ -324,7 +334,9 @@ def test_union_definition_dynamic(cs: cstruct) -> None:
         uint64  b;
     };
     """
-    cs.load(cdef, compiled=False)
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, False)
 
     buf = b"\x09aaaaaaaaa"
     obj = cs.test(buf)
@@ -337,14 +349,16 @@ def test_union_definition_dynamic(cs: cstruct) -> None:
         obj.dumps()
 
 
-def test_union_update(cs: cstruct) -> None:
+def test_union_update(cs: cstruct, compiled: bool) -> None:
     cdef = """
     union test {
         uint8   a;
         uint16  b;
     };
     """
-    cs.load(cdef)
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
 
     obj = cs.test()
     obj.a = 1
@@ -407,7 +421,7 @@ def test_union_anonymous_update(cs: cstruct) -> None:
     assert obj.b == b"AAA"
 
 
-def test_union_default(cs: cstruct) -> None:
+def test_union_default(cs: cstruct, compiled: bool) -> None:
     cdef = """
     union test {
         uint32 a;
@@ -419,7 +433,9 @@ def test_union_default(cs: cstruct) -> None:
         test   t_union_array[2];
     };
     """
-    cs.load(cdef)
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
 
     assert cs.test() == cs.test.__default__()
 
@@ -444,7 +460,7 @@ def test_union_default(cs: cstruct) -> None:
         assert isinstance(getattr(obj, name), BaseType)
 
 
-def test_union_default_dynamic(cs: cstruct) -> None:
+def test_union_default_dynamic(cs: cstruct, compiled: bool) -> None:
     """Initialization of a dynamic union is not yet supported."""
     cdef = """
     union test {
@@ -459,7 +475,9 @@ def test_union_default_dynamic(cs: cstruct) -> None:
         test   t_union_d[x];
     };
     """
-    cs.load(cdef)
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, False)
 
     obj = cs.test()
     assert obj.x == 0
@@ -472,7 +490,7 @@ def test_union_default_dynamic(cs: cstruct) -> None:
     assert obj.t_union_d == []
 
 
-def test_union_partial_initialization(cs: cstruct) -> None:
+def test_union_partial_initialization(cs: cstruct, compiled: bool) -> None:
     """Partial initialization of a union should fill in the rest with appropriate values."""
     cdef = """
     union test {
@@ -480,7 +498,9 @@ def test_union_partial_initialization(cs: cstruct) -> None:
         uint8 b;
     };
     """
-    cs.load(cdef)
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
 
     obj = cs.test()
     assert obj.a == 0
@@ -518,7 +538,7 @@ def test_union_partial_initialization(cs: cstruct) -> None:
     assert str(obj) == "<test a=0x2 b=0x2>"
 
 
-def test_union_partial_initialization_dynamic(cs: cstruct) -> None:
+def test_union_partial_initialization_dynamic(cs: cstruct, compiled: bool) -> None:
     """Partial initialization of a dynamic union should fill in the rest with appropriate values."""
     cdef = """
     union test {
@@ -527,7 +547,9 @@ def test_union_partial_initialization_dynamic(cs: cstruct) -> None:
         char   b_d[x];
     };
     """
-    cs.load(cdef)
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, False)
 
     # Default initialization should already work
     cs.test()
@@ -550,9 +572,10 @@ def test_codegen_hashable(cs: cstruct) -> None:
     assert hash(structure._generate_union__init__(unhashable_fields).__code__)
 
 
-def test_cdef_union(cs: cstruct) -> None:
-    cs.load("union Val { uint32 as_int; float as_float; };")
+def test_cdef_union(cs: cstruct, compiled: bool) -> None:
+    cs.load("union Val { uint32 as_int; float as_float; };", compiled=compiled)
 
+    assert verify_compiled(cs.Val, compiled)
     assert cs.Val.cdef() == dedent(
         """\
         union Val {
@@ -562,14 +585,16 @@ def test_cdef_union(cs: cstruct) -> None:
     )
 
 
-def test_union_changing_endian(cs: cstruct) -> None:
+def test_union_changing_endian(cs: cstruct, compiled: bool) -> None:
     cdef = """
     union test {
         uint32 a;
         char   b[8];
     };
     """
-    cs.load(cdef, compiled=False)
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
 
     assert len(cs.test) == 8
     assert cs.endian == "<"
@@ -581,3 +606,185 @@ def test_union_changing_endian(cs: cstruct) -> None:
     assert obj.b == b"zomgbeef"
 
     assert obj.dumps(endian=">") == buf
+
+
+UNION_DEF = """
+enum Kind : uint16 {
+    A = 1,
+    B = 2,
+};
+
+struct pair {
+    uint16  low;
+    uint16  high;
+};
+
+union value {
+    uint32      raw;
+    pair        parts;
+    Kind        kind;
+    char        text[6];
+    wchar       wide[3];
+    uint8       bytes[6];
+    uint24      small[2];
+    struct {
+        uint8   first;
+        uint8   second;
+    };
+};
+
+union unsupported {
+    uint8   size;
+    char    data[size];
+};
+"""
+
+
+@pytest.mark.parametrize("endian", ["<", ">", "!", "="])
+def test_compiled_union(endian: str) -> None:
+    """Test that compiled unions read the same values as the interpreted version."""
+    compiled = cstruct().load(UNION_DEF)
+    interpreted = cstruct().load(UNION_DEF, compiled=False)
+
+    assert compiled.value.__compiled__
+    assert not compiled.unsupported.__compiled__
+
+    for buf in (bytes(range(1, 7)), b"\x01\x00\x00\x00\x00\x00", b"\xff" * 6):
+        obj = compiled.value(buf, endian=endian)
+        expected = interpreted.value(buf, endian=endian)
+        assert parsed_state(obj) == parsed_state(expected)
+        assert list(obj.__dict__) == list(expected.__dict__)
+
+        # Modifying the union rebuilds all values, like the interpreted version
+        obj.parts.low = 0x4142
+        expected.parts.low = 0x4142
+        assert parsed_state(obj) == parsed_state(expected)
+
+    # Arrays of unions read every entry with the compiled version
+    buf = bytes(range(1, 13))
+    assert parsed_state(compiled.value[2](buf)) == parsed_state(interpreted.value[2](buf))
+
+    # The generated code was used, it would revert to the interpreted version on failure
+    assert compiled.value.__compiled__
+
+
+def test_compiled_union_source(cs: cstruct) -> None:
+    """Test the exact source code that is generated for a union."""
+    cdef = """
+    union test {
+        uint32  a;
+        struct {
+            uint16  b;
+            uint16  c;
+        } d;
+    };
+    """
+    cs.load(cdef)
+
+    # Every member is read from the bytes of the union, structures are proxied like Union._proxify
+    expected = """
+    def _read(cls, stream, *, context=None, endian):
+        if cls is not _cls0 or _type1.__init__ is not _init0: return _union_read(cls, stream, context=context, endian=endian)
+        buf = stream.read(4)
+        if len(buf) != 4: raise EOFError(f"Read {len(buf)} bytes, but expected 4")
+        obj = _object_new(cls)
+        _data0 = _unpack_from0[endian](buf, 0)
+        _object_setattr(obj, 'a', _type_call(_type0, _data0[0]))
+        _data1 = _unpack_from1[endian](buf, 0)
+        _object0 = _object_new(_type1)
+        _object0.b = _type_call(_type2, _data1[0])
+        _object0.c = _type_call(_type2, _data1[1])
+        _object0.__dynamic_sizes__ = {}
+        _object_setattr(obj, 'd', _object0)
+        _object_setattr(obj, '__dynamic_sizes__', {})
+        _object_setattr(obj, '_buf', buf)
+        _object_setattr(obj, '_endian', endian)
+        _nested0 = _getattr(obj, 'd')
+        _object_setattr(obj, 'd', _UnionProxy(obj, 'd', _nested0))
+        return obj
+    """  # noqa: E501
+    assert cs.test._read.__source__ == dedent(expected).strip()
+
+
+def test_compiled_union_eof(cs: cstruct) -> None:
+    """Test that a short read of a compiled union raises an error with the number of bytes read."""
+    cs.load(UNION_DEF)
+
+    for size in range(len(cs.value)):
+        with pytest.raises(EOFError, match=f"^Read {size} bytes, but expected {len(cs.value)}$"):
+            cs.value(bytes(range(1, size + 1)))
+
+
+def test_compiled_union_generic() -> None:
+    """Test the cases in which a compiled union uses the generic read method."""
+    compiled = cstruct().load(UNION_DEF)
+    interpreted = cstruct().load(UNION_DEF, compiled=False)
+    buf = bytes(range(1, 7))
+
+    # Subclasses use the generic method
+    results = []
+    for cs in (compiled, interpreted):
+
+        class Subclass(cs.value):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                object.__setattr__(self, "initialized", True)
+
+        obj = Subclass(buf)
+        results.append((type(obj) is Subclass, hasattr(obj, "initialized"), parsed_state(obj)))
+
+    assert results[0] == results[1]
+
+    # Modifying a nested structure after compilation uses the generic method, like for inlined structures
+    compiled.value(buf)
+    compiled.pair.add_field("extra", compiled.uint8)
+    interpreted.pair.add_field("extra", interpreted.uint8)
+    assert parsed_state(compiled.value(buf)) == parsed_state(interpreted.value(buf))
+
+    # Changing the union itself recompiles it
+    compiled.value.add_field("tail", compiled.uint64)
+    interpreted.value.add_field("tail", interpreted.uint64)
+    assert compiled.value.__compiled__
+    buf = bytes(range(1, 9))
+    assert parsed_state(compiled.value(buf)) == parsed_state(interpreted.value(buf))
+
+    # Changes that the compiler doesn't support revert to the generic method
+    compiled.value.add_field("dynamic", compiled.char[None])
+    assert not compiled.value.__compiled__
+    assert compiled.value._read.__func__ is type(compiled.value)._read
+
+
+def test_compiled_union_member_offset() -> None:
+    """Test that a union with a member beyond its size isn't compiled or inlined."""
+    cdef = """
+    union test {
+        uint16  a;
+    };
+    """
+    cdef_outer = """
+    struct outer {
+        test    t;
+        uint16  c;
+    };
+    """
+    compiled = cstruct().load(cdef)
+    interpreted = cstruct().load(cdef, compiled=False)
+
+    # A member that doesn't fit in the union can't be read from the union's bytes
+    for cs in (compiled, interpreted):
+        cs.test.add_field("b", cs.uint16, offset=1)
+        cs.load(cdef_outer)
+
+    assert not compiled.test.__compiled__
+    # The union isn't inlined in the outer structure, but read by its type
+    read = "_value0 = values['t'] = _type0._read(stream, context=values, endian=endian)"
+    assert read in source_lines(compiled.outer)
+
+    for name in ("test", "outer"):
+        messages = []
+        for cs in (compiled, interpreted):
+            with pytest.raises(EOFError) as exc:
+                cs.resolve(name)(bytes(range(1, 5)))
+            messages.append(str(exc.value))
+
+        assert messages[0] == messages[1]

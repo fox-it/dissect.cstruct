@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import array
+import struct
 from typing import TYPE_CHECKING
 
 import pytest
@@ -191,3 +193,39 @@ def test_packed_default(cs: cstruct) -> None:
 
     assert cs.int8[2].__default__() == [0, 0]
     assert cs.int8[None].__default__() == []
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [bytes, bytearray, memoryview, lambda data: memoryview(bytearray(data))],
+    ids=["bytes", "bytearray", "memoryview", "memoryview-bytearray"],
+)
+def test_packed_buffer_types(cs: cstruct, factory: type) -> None:
+    """Test reading packed types from different bytes-like objects."""
+    data = b"\x01\x02\x03\x04\x05"
+
+    assert cs.uint32(factory(data)) == 0x04030201
+    assert cs.uint32.reads(factory(data)) == 0x04030201
+    assert cs.uint32.read(factory(data)) == 0x04030201
+    assert cs.uint32(factory(data), endian=">") == 0x01020304
+    assert type(cs.uint32(factory(data))) is cs.uint32
+
+    with pytest.raises(EOFError, match="Read 2 bytes, but expected 4"):
+        cs.uint32(factory(data[:2]))
+
+
+def test_packed_memoryview_formats(cs: cstruct) -> None:
+    """Test reading packed types from memoryviews with a different format or stride."""
+    assert cs.uint32(memoryview(array.array("I", [7, 8]))) == 7
+    assert cs.uint8(memoryview(array.array("I", [7, 8]))) == 7
+
+    # Non-contiguous memoryviews are handled like the struct module does, which differs per Python implementation
+    # E.g. PyPy 3.10 reads the bytes of the view, other versions raise a BufferError
+    view = memoryview(bytearray(range(16)))[::2]
+    try:
+        expected = struct.unpack_from("<I", view)[0]
+    except BufferError:
+        with pytest.raises(BufferError):
+            cs.uint32(view)
+    else:
+        assert cs.uint32(view) == expected

@@ -45,6 +45,10 @@ class EnumMetaType(EnumMeta, MetaType):
                 # value is a parsable value
                 value = cls.__type__(value)
 
+            # Fast path for known values
+            if type(value) is not cls and (member := cls._value2member_map_.get(value)) is not None:
+                return member
+
             return super().__call__(value)
 
         # We are constructing a new Enum class
@@ -61,6 +65,7 @@ class EnumMetaType(EnumMeta, MetaType):
         enum_cls.__alignment__ = type_.__alignment__
 
         _fix_alias_members(enum_cls)
+        _fix_flag_operators(enum_cls)
 
         return enum_cls
 
@@ -123,6 +128,14 @@ class EnumMetaType(EnumMeta, MetaType):
         lines.append("};")
 
         return "\n".join(lines)
+
+
+def _fix_flag_operators(cls: type[Enum]) -> None:
+    # Since Python 3.11, the standard library copies its Flag operators onto every new Flag class
+    # Remove those copies, so that the (faster) operators of our Flag class are used
+    for name in ("__and__", "__or__", "__xor__", "__rand__", "__ror__", "__rxor__"):
+        if name in cls.__dict__:
+            delattr(cls, name)
 
 
 def _fix_alias_members(cls: type[Enum]) -> None:
@@ -204,20 +217,20 @@ class Enum(BaseType, IntEnum, metaclass=EnumMetaType):
             return f"{base}{value}"
 
     def __eq__(self, other: int | Enum) -> bool:
-        if isinstance(other, Enum) and other.__class__ is not self.__class__:
-            return False
-
-        # Python <= 3.10 compatibility
         if isinstance(other, Enum):
-            other = other.value
+            if other.__class__ is not self.__class__:
+                return False
 
-        return self.value == other
+            # Python <= 3.10 compatibility
+            other = other._value_
+
+        return self._value_ == other
 
     def __ne__(self, value: int | Enum) -> bool:
         return not self.__eq__(value)
 
     def __hash__(self) -> int:
-        return hash((self.__class__, self.name, self.value))
+        return hash((self.__class__, self._name_, self._value_))
 
     @classmethod
     def _missing_(cls, value: int) -> Self:

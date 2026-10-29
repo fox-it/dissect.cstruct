@@ -342,7 +342,7 @@ class CStyleParser(Parser):
                 # Named struct/union, empty pre-register for self-referencing
                 type = factory(name, [], align=self.align)
                 if self.compiled and "nocompile" not in self._flags:
-                    type = compiler.compile(type)
+                    type = compiler.compile_structure(type)
                 self.cs.add_type(name, type)
             else:
                 # struct typename ... (type reference)
@@ -359,7 +359,7 @@ class CStyleParser(Parser):
 
             type = factory(name, fields, align=self.align, anonymous=is_anonymous)
             if self.compiled and "nocompile" not in self._flags:
-                type = compiler.compile(type)
+                type = compiler.compile_structure(type)
         else:
             type.__fields__.extend(fields)
             type.commit()
