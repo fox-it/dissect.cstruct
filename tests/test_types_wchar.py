@@ -7,6 +7,8 @@ import pytest
 
 from dissect.cstruct.exception import ArraySizeError
 
+from .utils import NonSeekableStream
+
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
 
@@ -114,3 +116,35 @@ def test_wchar_default(cs: cstruct) -> None:
     assert cs.wchar.__default__() == "\x00"
     assert cs.wchar[4].__default__() == "\x00\x00\x00\x00"
     assert cs.wchar[None].__default__() == ""
+
+
+@pytest.mark.parametrize("stream_type", [io.BytesIO, NonSeekableStream])
+@pytest.mark.parametrize("length", [0, 1, 127, 128, 129, 300])
+def test_wchar_null_terminated(cs: cstruct, stream_type: type, length: int) -> None:
+    """Test reading null-terminated wchar arrays from seekable and non-seekable streams."""
+    text = "".join(chr(0x41 + i % 26) for i in range(length))
+    data = text.encode("utf-16-le")
+
+    fh = stream_type(data + b"\x00\x00rest")
+    assert cs.wchar[None](fh) == text
+    assert fh.read() == b"rest"
+
+    with pytest.raises(EOFError, match="Read 0 bytes, but expected 2"):
+        cs.wchar[None](stream_type(data))
+
+    with pytest.raises(EOFError, match="Read 1 bytes, but expected 2"):
+        cs.wchar[None](stream_type(data + b"\x41"))
+
+
+def test_wchar_null_terminated_alignment(cs: cstruct) -> None:
+    """Test that only an aligned double null byte ends a null-terminated wchar array."""
+    # The double null byte at an odd offset is not a terminator
+    fh = io.BytesIO(b"A\x00\x00\x01\x00\x00rest")
+    assert cs.wchar[None](fh) == "AĀ"
+    assert fh.read() == b"rest"
+
+    # Terminator right at a chunk boundary
+    data = "x".encode("utf-16-le") * 127
+    fh = io.BytesIO(data + b"\x00\x00rest")
+    assert cs.wchar[None](fh) == "x" * 127
+    assert fh.read() == b"rest"

@@ -12,10 +12,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Rename `_sizes` property of `Structure` to `__sizes__`.
 - Rename `_values` property of `Structure` to `__values__`.
 - Added `load` argument to `cstruct` class, allowing direct initialization with a definition (i.e. `cstruct(cdef)` instead of `cstruct().load(cdef)`. Other arguments to `cstruct` are now keyword only.
+- Replace `compiler.compile` and the `Compiler` class with `compiler.compile_structure`.
+- Improve parsing performance:
+  - Compiled structures construct objects directly and inline static nested structures, unions and bit fields.
+  - Static unions are compiled too.
+  - Structures are compiled on first use, which makes loading definitions faster.
+  - Array types are cached, so `cs.uint32[count]` no longer creates a new class on every call.
+  - Compiled structures calculate the sizes of dynamic arrays directly, instead of evaluating the expression.
+  - Faster paths for parsing primitive types from bytes-like objects, enum and flag lookups and flag operators.
+  - Null-terminated strings are read in chunks from seekable streams.
 
 ## [4.5] - 20-05-2025
 
-### Added 
+### Added
 
 - Introduce experimental tool `cstruct-stubgen` to generate type stubs for cstruct definitions.
 
@@ -44,11 +53,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- The string representation of enums now outputs the name of the constants. 
+- The string representation of enums now outputs the name of the constants.
 
 ## [4.1] - 10-09-2024
 
 ### Fixed
 
 - Declaring an array of a nested struct type now works as intended.
-

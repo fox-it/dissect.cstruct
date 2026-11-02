@@ -339,3 +339,44 @@ def test_align_pointer(cs: cstruct, compiled: bool) -> None:
     assert obj.d == 0x12
 
     assert obj.dumps() == buf[:-4]  # Without pointer value
+
+
+def test_align_field_after_nested_struct(cs: cstruct, compiled: bool) -> None:
+    """Test that the fields after a nested structure are read at their aligned offsets."""
+    cdef = """
+    struct inner {
+        uint16  a;
+        uint16  b;
+    };
+
+    struct test {
+        uint8   a;  // 0x00
+        inner   i;  // 0x02
+        uint32  c;  // 0x08
+        uint8   d;  // 0x0c
+    };
+    """
+    cs.load(cdef, compiled=compiled, align=True)
+
+    assert verify_compiled(cs.test, compiled)
+
+    fields = cs.test.__fields__
+    assert len(cs.test) == 16
+    assert fields[0].offset == 0x00
+    assert fields[1].offset == 0x02
+    assert fields[2].offset == 0x08
+    assert fields[3].offset == 0x0C
+
+    buf = """
+        00 00 02 00 04 00 00 00  08 00 00 00 0c 00 00 00
+    """
+    buf = bytes.fromhex(buf)
+    obj = cs.test(buf)
+
+    assert obj.a == 0x00
+    assert obj.i.a == 0x02
+    assert obj.i.b == 0x04
+    assert obj.c == 0x08
+    assert obj.d == 0x0C
+
+    assert obj.dumps() == buf

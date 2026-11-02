@@ -5,9 +5,11 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from dissect.cstruct.exception import ExpressionParserError, LexerError, ResolveError
-from dissect.cstruct.expression import Expression
+from dissect.cstruct.expression import SOURCE_GLOBALS, Expression
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from dissect.cstruct.cstruct import cstruct
 
 
@@ -269,3 +271,115 @@ def test_dotted_identifier_not_integer(cs: cstruct) -> None:
 
     with pytest.raises(ExpressionParserError, match="does not resolve to an integer"):
         Expression("mydict.nested").evaluate(cs)
+
+
+def _expression_function(expr: Expression) -> Callable[[cstruct, dict], int]:
+    """Turn the source code of an expression into a function with the same arguments as ``evaluate``."""
+    return eval(f"lambda cs, context: {expr.source()}", SOURCE_GLOBALS)
+
+
+def test_expression_source(cs: cstruct) -> None:
+    """Test that the source code of an expression calculates the same value as evaluating it."""
+    cdef = """
+    #define X 4
+    struct test {
+        uint32 a;
+        uint16 b;
+    };
+    """
+    cs.load(cdef)
+
+    cases = [
+        ("a - 8", {"a": 100}),
+        ("(a & 1) * 16", {"a": 3}),
+        ("a * 2 + b * (3 + 4) >> 1", {"a": 5, "b": 10}),
+        ("sizeof(test) * X - -1", {}),
+        ("offsetof(test, b) + ~X % 3", {}),
+        ("a.b | 0x10 ^ 1 << 2", {"a": {"b": 3}}),
+        ("a / 3", {"a": cs.uint32(10)}),
+        ("1 + 2", {}),
+    ]
+
+    for source, context in cases:
+        expr = Expression(source)
+        assert _expression_function(expr)(cs, context) == expr.evaluate(cs, context)
+
+
+@pytest.mark.parametrize(
+    ("source", "context"),
+    [
+        ("unknown + 1", {}),
+        ("a.c", {"a": {"b": 1}}),
+        ("a", {"a": b"bytes"}),
+        ("a / 0", {"a": 1}),
+    ],
+)
+def test_expression_source_errors(cs: cstruct, source: str, context: dict) -> None:
+    """Test that the source code of an expression raises the same errors as evaluating it."""
+    expr = Expression(source)
+    with pytest.raises(Exception) as expected:  # noqa: PT011
+        expr.evaluate(cs, context)
+
+    with pytest.raises(expected.type) as excinfo:
+        _expression_function(expr)(cs, context)
+    assert str(excinfo.value) == str(expected.value)
+
+
+@pytest.mark.parametrize("source", ["(1 + 2", "1 + 2)", "1 +", "()", "1 (2)"])
+def test_expression_source_invalid(cs: cstruct, source: str) -> None:
+    """Test that getting the source code of an invalid expression raises the same error as evaluating it."""
+    with pytest.raises(ExpressionParserError) as expected:
+        Expression(source).evaluate(cs)
+
+    with pytest.raises(ExpressionParserError) as excinfo:
+        Expression(source).source()
+    assert str(excinfo.value) == str(expected.value)
+
+
+@pytest.mark.parametrize(
+    ("expression", "source"),
+    [
+        # Precedence and associativity of the operators
+        ("1 + 2 * 3", "(1 + (2 * 3))"),
+        ("(1 + 2) * 3", "((1 + 2) * 3)"),
+        ("a - b - c", "((a - b) - c)"),
+        ("a / b / c", "((a // b) // c)"),
+        ("a * 2 + b * (3 + 4) >> 1", "(((a * 2) + (b * (3 + 4))) >> 1)"),
+        ("a | b ^ c & 1 << 2", "(a | (b ^ (c & (1 << 2))))"),
+        ("((a))", "a"),
+        # Unary operators
+        ("-a * ~b", "((-a) * (~b))"),
+        ("- -a", "(-(-a))"),
+        ("~(a + 1) % 8", "((~(a + 1)) % 8)"),
+        # Numbers in other bases
+        ("0x10 + 0b101 - 0o7", "((16 + 5) - 7)"),
+        # Functions, and identifiers that are resolved from the context
+        ("sizeof(test) * X - -1", "((_sizeof(cs, 'test') * _identifier(cs, context, 'X', 1)) - (-1))"),
+        ("offsetof(test, b) + a", "(_offsetof(cs, 'test', 'b') + a)"),
+        ("hdr.size * 4", "(_identifier(cs, context, 'hdr.size', 1) * 4)"),
+    ],
+)
+def test_expression_source_code(cs: cstruct, expression: str, source: str) -> None:
+    """Test the exact source code of expressions with different operators, numbers and identifiers."""
+    cdef = """
+    #define X 4
+    struct test {
+        uint32  a;
+        uint16  b;
+    };
+    """
+    cs.load(cdef)
+    expr = Expression(expression)
+
+    # The identifiers a, b and c are local variables, everything else is resolved from the context
+    variables = {"a": 100, "b": 7, "c": 3}
+    assert expr.source({name: name for name in variables}) == source
+
+    context = {**variables, "hdr": {"size": 5}}
+    assert eval(source, {**SOURCE_GLOBALS, "cs": cs, "context": context, **variables}) == expr.evaluate(cs, context)
+
+
+def test_expression_source_context() -> None:
+    """Test that identifiers are resolved from the context with the given name, with their line number."""
+    expected = "(_identifier(cs, values, 'X', 1) + _identifier(cs, values, 'b', 2))"
+    assert Expression("X +\nb").source(context="values") == expected

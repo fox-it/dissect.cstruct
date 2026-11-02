@@ -44,6 +44,7 @@ def test_int_unsigned_write(cs: cstruct) -> None:
 
 def test_int_unsigned_array_read(cs: cstruct) -> None:
     assert cs.uint24[4](b"AAABBBCCCDDD") == [0x414141, 0x424242, 0x434343, 0x444444]
+    assert all(type(value) is cs.uint24 for value in cs.uint24[4](b"AAABBBCCCDDD"))
 
     assert cs.uint48[4](b"AAAAAABBBBBBCCCCCCDDDDDD") == [0x414141414141, 0x424242424242, 0x434343434343, 0x444444444444]
 
@@ -228,13 +229,16 @@ def test_int_signed_be_array_write(cs: cstruct) -> None:
 
 
 def test_int_eof(cs: cstruct) -> None:
-    with pytest.raises(EOFError):
+    with pytest.raises(EOFError, match="Read 1 bytes, but expected 3"):
         cs.int24(b"\x00")
 
-    with pytest.raises(EOFError):
+    with pytest.raises(EOFError, match="Read 0 bytes, but expected 3"):
         cs.int24[2](b"\x00\x00\x00")
 
-    with pytest.raises(EOFError):
+    with pytest.raises(EOFError, match="Read 1 bytes, but expected 3"):
+        cs.int24[2](b"\x00\x00\x00\x00")
+
+    with pytest.raises(EOFError, match="Read 0 bytes, but expected 3"):
         cs.int24[None](b"\x01\x00\x00")
 
 

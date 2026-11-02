@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 from enum import Flag as StdFlag
+from enum import IntFlag
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
 import pytest
 
 from dissect.cstruct.types.enum import PY_311
+from dissect.cstruct.types.flag import Flag
 
 from .utils import verify_compiled
 
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
-    from dissect.cstruct.types.flag import Flag
 
 
 @pytest.fixture
@@ -296,3 +297,47 @@ def test_cdef_flag(cs: cstruct) -> None:
             X = 0x4,
         };"""
     )
+
+
+def test_flag_operators(cs: cstruct) -> None:
+    """Test that the flag operators behave like the ones of the standard library."""
+    cdef = """
+    flag Test : uint8 {
+        A = 1,
+        B = 2,
+        C = 4,
+    };
+
+    flag Other : uint8 {
+        X = 1,
+    };
+    """
+    cs.load(cdef)
+
+    # The standard library copies its operators onto every new Flag class, make sure ours are used
+    for name in ("__and__", "__or__", "__xor__", "__rand__", "__ror__", "__rxor__"):
+        assert getattr(cs.Test, name) is getattr(Flag, name)
+
+    class StdTest(IntFlag):
+        A = 1
+        B = 2
+        C = 4
+
+    def std(value: Flag) -> StdTest:
+        return StdTest(value.value)
+
+    values = [cs.Test.A, cs.Test.A | cs.Test.C, cs.Test(0), cs.Test(0xFF)]
+    operands = [0, 1, 6, 0xFF, cs.Test.B, cs.Test.A | cs.Test.B, cs.uint8(3), True]
+    for value in values:
+        for other in operands:
+            std_other = std(other) if isinstance(other, Flag) else other
+            for op in ("__and__", "__or__", "__xor__", "__rand__", "__ror__", "__rxor__"):
+                result = getattr(value, op)(other)
+                expected = getattr(std(value), op)(std_other)
+                assert type(result) is cs.Test
+                assert result.value == expected.value
+                assert result.name == expected.name
+
+    # Different flag classes still behave like before
+    result = cs.Test.A & cs.Other.X
+    assert result.value == 1

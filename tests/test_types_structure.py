@@ -1104,3 +1104,67 @@ def test_structure_endian_name_conflict(cs: cstruct, compiled: bool) -> None:
 
     with pytest.raises(EOFError):
         cs.test(b"", endian=">")
+
+
+def test_structure_changing_endian_field_types(cs: cstruct, compiled: bool) -> None:
+    """Test that the endian argument is used for wchar and non-standard integer fields too."""
+    cdef = """
+    struct test {
+        uint16  a;
+        wchar   b[2];
+        wchar   c;
+        int24   d;
+        uint24  e[2];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = bytes(range(1, 18))
+    obj = cs.test(buf)
+
+    assert obj.a == 0x0201
+    assert obj.b == "\u0403\u0605"
+    assert obj.c == "\u0807"
+    assert obj.d == 0x0B0A09
+    assert obj.e == [0x0E0D0C, 0x11100F]
+
+    assert obj.dumps() == buf
+
+    obj = cs.test(buf, endian=">")
+
+    assert obj.a == 0x0102
+    assert obj.b == "\u0304\u0506"
+    assert obj.c == "\u0708"
+    assert obj.d == 0x090A0B
+    assert obj.e == [0x0C0D0E, 0x0F1011]
+
+    assert obj.dumps(endian=">") == buf
+
+
+def test_structure_subclass_init(cs: cstruct, compiled: bool) -> None:
+    """Test that subclasses of a structure call their own __init__ method when reading."""
+    cdef = """
+    struct test {
+        uint32  a;
+        uint32  b;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    class Subclass(cs.test):
+        def __init__(self, a: int | None = None, b: int | None = None):
+            super().__init__(a, b)
+            self.initialized = True
+
+    obj = Subclass(b"\x01\x00\x00\x00\x02\x00\x00\x00")
+    assert isinstance(obj, Subclass)
+    assert obj.initialized
+    assert (obj.a, obj.b) == (1, 2)
+
+    obj = cs.test(b"\x01\x00\x00\x00\x02\x00\x00\x00")
+    assert type(obj) is cs.test
+    assert list(obj.__dict__) == ["a", "b", "__dynamic_sizes__"]

@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import functools
 import warnings
-from io import BytesIO
+from io import SEEK_CUR, BytesIO
 from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, TypeVar
 
 from dissect.cstruct.exception import ArraySizeError
-from dissect.cstruct.expression import Expression
 from dissect.cstruct.util import classproperty, normalize_endianness
 
 if TYPE_CHECKING:
@@ -15,6 +14,7 @@ if TYPE_CHECKING:
     from typing_extensions import Self
 
     from dissect.cstruct.cstruct import AllowedEndianness, Endianness, cstruct
+    from dissect.cstruct.expression import Expression
 
 
 EOF = -0xE0F  # Negative counts are illegal anyway, so abuse that for our EOF sentinel
@@ -38,22 +38,35 @@ class MetaType(type):
 
     def __call__(cls, *args, **kwargs) -> Self:  # type: ignore
         """Adds support for ``TypeClass(bytes | file-like object)`` parsing syntax."""
-        # TODO: add support for Type(cs) API to create new bounded type classes, similar to the old API?
-        if len(args) == 1 and not isinstance(args[0], cls):
-            stream = args[0]
+        if len(args) == 1 and not kwargs:
+            # Fast path for the most common case without keyword arguments
+            obj = args[0]
+            if type(obj) in _BUFFER_TYPES:
+                if len(obj) == cls.__size__ and isinstance(obj, bytes) and issubclass(cls, bytes):
+                    # Shortcut for char/bytes type
+                    return type.__call__(cls, obj)
+                return cls._read(BytesIO(obj), endian=cls.__cs__.endian)
 
-            if _is_readable_type(stream):
+            if hasattr(obj, "read") and not isinstance(obj, cls):
+                return cls._read(obj, endian=cls.__cs__.endian)
+
+            if not _is_buffer_type(obj):
+                # E.g. initializing with a value
+                return type.__call__(cls, obj)
+
+        if len(args) == 1 and not isinstance(obj := args[0], cls):
+            if type(obj) not in _BUFFER_TYPES and hasattr(obj, "read"):
                 endian = (
                     normalize_endianness(endian) if (endian := kwargs.get("endian")) is not None else cls.__cs__.endian
                 )
-                return cls._read(stream, endian=endian)
+                return cls._read(obj, endian=endian)
 
-            if issubclass(cls, bytes) and isinstance(stream, bytes) and len(stream) == cls.__size__:
+            if isinstance(obj, bytes) and len(obj) == cls.__size__ and issubclass(cls, bytes):
                 # Shortcut for char/bytes type
                 return type.__call__(cls, *args, **kwargs)
 
-            if _is_buffer_type(stream):
-                return cls.reads(stream, endian=kwargs.get("endian"))
+            if _is_buffer_type(obj):
+                return cls.reads(obj, endian=kwargs.get("endian"))
 
         return type.__call__(cls, *args, **kwargs)
 
@@ -104,7 +117,7 @@ class MetaType(type):
         if _is_buffer_type(obj):
             return cls.reads(obj, endian=endian)
 
-        if not _is_readable_type(obj):
+        if not hasattr(obj, "read"):
             raise TypeError("Invalid object type")
 
         endian = normalize_endianness(endian) if endian is not None else cls.__cs__.endian
@@ -167,13 +180,18 @@ class MetaType(type):
             context: Optional reading context.
             endian: The endianness to use when parsing (little, big, network, <, >, !, @ or =).
         """
+        result = []
         if count == EOF:
-            result = []
             while not _is_eof(stream):
                 result.append(cls._read(stream, context=context, endian=endian))
             return result
 
-        return [cls._read(stream, context=context, endian=endian) for _ in range(count)]
+        # This is purposefully a simple loop
+        # PyPy will pre-allocate the list for a list comprehension ahead of time, which will cause huge allocations in
+        # case wrong count is read, instead of causing an EOFError when trying to read the type.
+        for _ in range(count):
+            result.append(cls._read(stream, context=context, endian=endian))  # noqa: PERF401
+        return result
 
     def _read_0(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> list[Self]:
         """Internal function for reading null-terminated data.
@@ -329,19 +347,23 @@ class BaseArray(BaseType):
         if cls.__null_terminated__:
             return cls.__type__._read_0(stream, context=context, endian=endian)
 
-        if isinstance(cls.__num_entries__, int):
-            num = max(0, cls.__num_entries__)
-        elif cls.__num_entries__ is None:
-            num = EOF
-        elif isinstance(cls.__num_entries__, Expression):
-            try:
-                num = max(0, cls.__num_entries__.evaluate(cls.__cs__, context))
-            except Exception:
-                if cls.__num_entries__.expression != "EOF":
-                    raise
-                num = EOF
+        return cls.__type__._read_array(stream, cls._num_entries(context), context=context, endian=endian)
 
-        return cls.__type__._read_array(stream, num, context=context, endian=endian)
+    @classmethod
+    def _num_entries(cls, context: dict[str, Any] | None) -> int:
+        """Return the number of entries to read for this (non null-terminated) array type."""
+        if isinstance(cls.__num_entries__, int):
+            return max(0, cls.__num_entries__)
+
+        if cls.__num_entries__ is None:
+            return EOF
+
+        try:
+            return max(0, cls.__num_entries__.evaluate(cls.__cs__, context))
+        except Exception:
+            if cls.__num_entries__.expression != "EOF":
+                raise
+            return EOF
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: list[Any], *, endian: Endianness) -> int:
@@ -389,15 +411,51 @@ class BaseArray(BaseType):
 class Array(list[T], BaseArray):
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> list[T]:
-        return cls(super()._read(stream, context=context, endian=endian))
+        return type.__call__(cls, super()._read(stream, context=context, endian=endian))
 
 
-def _is_readable_type(value: object) -> bool:
-    return hasattr(value, "read")
+_BUFFER_TYPES = (bytes, memoryview, bytearray)
 
 
 def _is_buffer_type(value: object) -> bool:
-    return isinstance(value, (bytes, memoryview, bytearray))
+    return isinstance(value, _BUFFER_TYPES)
+
+
+def _is_seekable(stream: BinaryIO) -> bool:
+    try:
+        return stream.seekable()
+    except Exception:
+        return False
+
+
+def _read_null_terminated(stream: BinaryIO, width: int) -> bytes:
+    """Read data up to a null terminator of the given width from a seekable stream, in chunks.
+
+    Leaves the stream just after the terminator.
+    """
+    terminator = b"\x00" * width
+    buf = []
+    while True:
+        chunk = stream.read(128 * width)
+        if not isinstance(chunk, (bytes, bytearray)):
+            # E.g. a memoryview, which doesn't support find()
+            chunk = bytes(chunk)
+
+        # Find a terminator that is aligned on an item
+        idx = chunk.find(terminator)
+        while idx != -1 and idx % width:
+            idx = chunk.find(terminator, idx + 1)
+
+        if idx != -1:
+            buf.append(chunk[:idx])
+            stream.seek(idx + width - len(chunk), SEEK_CUR)
+            return b"".join(buf)
+
+        if not chunk or len(chunk) % width:
+            # The end of the stream, possibly with a partial item
+            raise EOFError(f"Read {len(chunk) % width} bytes, but expected {width}")
+
+        buf.append(chunk)
 
 
 def _is_eof(stream: BinaryIO) -> bool:

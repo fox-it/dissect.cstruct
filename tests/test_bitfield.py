@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import io
-from typing import TYPE_CHECKING
 
 import pytest
 
-from .utils import verify_compiled
+from dissect.cstruct.cstruct import cstruct
 
-if TYPE_CHECKING:
-    from dissect.cstruct.cstruct import cstruct
+from .utils import source_lines, verify_compiled
 
 
 def test_bitfield(cs: cstruct, compiled: bool) -> None:
@@ -297,3 +295,65 @@ def test_bitfield_dynamic(cs: cstruct, compiled: bool) -> None:
 
     buf.seek(2)
     assert obj.dumps() == buf.read()
+
+
+@pytest.mark.parametrize("endian", ["<", ">", "!", "@", "="])
+def test_compiled_bits(endian: str) -> None:
+    """Test that compiled bit fields read the same values as the interpreted version."""
+    cdef = """
+    enum Kind : uint8 {
+        A = 1,
+        B = 2,
+    };
+
+    flag Mode : uint16 {
+        R = 1,
+        W = 2,
+    };
+
+    struct bits {
+        uint8   a : 3;
+        uint8   b : 5;
+        int16   c : 4;
+        int16   d : 12;
+        Kind    e : 4;
+        Kind    f : 4;
+        uint32  g;
+        Mode    h : 2;
+        uint16  i : 6;
+        uint32  j : 7;
+        uint8   l;
+    };
+
+    struct charbits {
+        char    a : 4;
+        char    b : 4;
+        uint8   c;
+    };
+    """
+    compiled = cstruct().load(cdef)
+    interpreted = cstruct().load(cdef, compiled=False)
+
+    def values(obj: object) -> list:
+        # The interpreted version returns bit fields as plain integers, so only compare the values
+        return [getattr(value, "value", value) for value in obj.__dict__.values()]
+
+    # Character bit fields are inlined, they're read and returned as the uint8 type that the last field also uses
+    lines = source_lines(compiled.charbits)
+    assert [line for line in lines if line.startswith(("_bit_buffer = ", "buf = ", "_value"))] == [
+        "_bit_buffer = _type0._read(stream, endian=endian)",
+        "_value0 = _type_call(_type0, _bit_value)",
+        "_value1 = _type_call(_type0, _bit_value)",
+        "buf = stream.read(1)",
+        "_value2 = _type_call(_type0, data[0])",
+    ]
+    assert type(compiled.charbits(b"\x12\x34").a) is compiled.uint8
+
+    for name in ("bits", "charbits"):
+        for buf in (bytes(range(1, 32)), b"\xff" * 32, bytes(32), bytes(range(200, 232))):
+            obj = compiled.resolve(name)(buf, endian=endian)
+            assert values(obj) == values(interpreted.resolve(name)(buf, endian=endian))
+
+        for size in range(len(compiled.resolve(name))):
+            with pytest.raises(EOFError, match=r"^Read \d+ bytes, but expected \d+$"):
+                compiled.resolve(name)(bytes(range(1, 32))[:size], endian=endian)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.exception import ArraySizeError
-from dissect.cstruct.types.base import EOF, BaseArray, BaseType
+from dissect.cstruct.types.base import EOF, BaseArray, BaseType, _is_seekable, _read_null_terminated
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -68,6 +68,9 @@ class Char(bytes, BaseType):
 
     @classmethod
     def _read_0(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
+        if _is_seekable(stream):
+            return type.__call__(cls, _read_null_terminated(stream, 1))
+
         buf = []
         while True:
             byte = stream.read(1)
