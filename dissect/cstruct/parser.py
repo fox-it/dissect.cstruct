@@ -20,6 +20,10 @@ if TYPE_CHECKING:
     from dissect.cstruct.types import BaseType, Enum, Flag
 
 
+# A string or the name of a constant in the value of a define
+_RE_DEFINE_STRING = re.compile(r"""\s*(?:([bB]?)(["'])((?:\\.|(?!\2)[^\\\n])*)\2|([a-zA-Z_.][a-zA-Z0-9_.]*))""")
+
+
 class Parser(TokenCursor):
     """Base class for definition parsers.
 
@@ -42,7 +46,7 @@ class Parser(TokenCursor):
 
 def _join_line_continuations(string: str) -> str:
     # Join lines ending with backslash
-    return re.sub(r"\\\n", "", string)
+    return re.sub(r"\\\r?\n", "", string)
 
 
 class CStyleParser(Parser):
@@ -138,11 +142,16 @@ class CStyleParser(Parser):
             elif token.type == TokenType.TYPEDEF:
                 self._parse_typedef()
             elif token.type in (TokenType.STRUCT, TokenType.UNION):
-                self._parse_struct_or_union()
+                type_ = self._parse_struct_or_union()
 
                 # Skip variable declarations after struct/union definitions
-                while not self._at(TokenType.SEMICOLON, TokenType.EOF):
-                    self._pos += 1
+                has_variable = self._at(TokenType.IDENTIFIER, TokenType.STAR)
+                while has_variable:
+                    _, _, bits = self._parse_field_name(type_)
+                    if bits is not None:
+                        raise self._error("variables cannot have bitfields")
+
+                    has_variable = self._match(TokenType.COMMA)
 
                 self._expect(TokenType.SEMICOLON)
             elif token.type in (TokenType.ENUM, TokenType.FLAG):
@@ -174,21 +183,28 @@ class CStyleParser(Parser):
             value = self._take().value
 
         if value:
-            if value[0] in ('"', "'"):
-                quote = value[0]
-                if value[-1] != quote:
-                    raise self._error("unterminated string literal", token=token)
+            # Adjacent strings and constants that are strings are concatenated like in C
+            strings = []
+            pos = 0
+            if '"' in value or "'" in value:
+                while pos < len(value) and (match := _RE_DEFINE_STRING.match(value, pos)):
+                    is_bytes, _, string, name = match.groups()
+                    if name is None:
+                        # Flatten escape sequences
+                        string = string.encode().decode("unicode_escape")
+                        strings.append(string.encode("latin-1") if is_bytes else string)
+                    elif isinstance(constant := self.cs.consts.get(name), (str, bytes)):
+                        strings.append(constant)
+                    else:
+                        break
 
-                # Remove the surrounding quotes and flatten escape sequences
-                value = value[1:-1].encode().decode("unicode_escape")
-            elif value[:2].lower() in ("b'", 'b"'):
-                quote = value[1]
-                if value[-1] != quote:
-                    raise self._error("unterminated bytes literal", token=token)
+                    pos = match.end()
 
-                # Remove the leading b and surrounding quotes and flatten escape sequences
-                value = value[2:-1].encode().decode("unicode_escape")
-                value = ast.literal_eval(f"b{value!r}")
+            if strings and pos == len(value):
+                try:
+                    value = strings[0][:0].join(strings)
+                except TypeError:
+                    raise self._error("cannot concatenate strings and bytes", token=token) from None
             else:
                 try:
                     # Lazy mode, try to evaluate as a Python literal first (for simple constants)

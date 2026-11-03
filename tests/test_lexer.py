@@ -90,14 +90,6 @@ from dissect.cstruct.lexer import TokenType, tokenize
             [TokenType.PP_DEFINE, TokenType.IDENTIFIER, TokenType.STRING],
             ["define", "FOO", "ADCRYPT\00"],
         ),
-        (
-            """
-            #define FOO (1 \
-            + 2)
-            """,
-            [TokenType.PP_DEFINE, TokenType.IDENTIFIER, TokenType.STRING],
-            ["define", "FOO", "(1             + 2)"],
-        ),
         ("#undef", [TokenType.PP_UNDEF], ["undef"]),
         ("#ifdef", [TokenType.PP_IFDEF], ["ifdef"]),
         ("#ifndef", [TokenType.PP_IFNDEF], ["ifndef"]),
@@ -174,6 +166,14 @@ def test_token(src: str, types: list[TokenType], values: list[str]) -> None:
         ("#include", "unexpected end of input"),
         ("#include <missing_end", "unexpected end of input"),
         ('#include "missing_end', "unexpected end of input"),
+        ('#define A "x\ny"\n#define B 2\n', "line 1: unterminated string literal"),
+        ('#define A "x\n#define B "y"\n', "line 1: unterminated string literal"),
+        ('#define A "x', "line 1: unterminated string literal"),
+        ("#define A 'x\n", "line 1: unterminated string literal"),
+        ("#define A it's\n", "line 1: unterminated string literal"),
+        ("/* unterminated", "line 1: unterminated comment"),
+        ("struct a {\n    uint8 b; /* c\n};\n", "line 2: unterminated comment"),
+        ("#define A 1 /* c\n#define B 2\n", "line 1: unterminated comment"),
         ("@", "unexpected character"),
         ("`", "unexpected character"),
     ],

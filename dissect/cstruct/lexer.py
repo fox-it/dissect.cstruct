@@ -125,6 +125,7 @@ _SINGLE_CHARS = {
 
 _RE_IDENTIFIER = re.compile(r"[a-zA-Z_.][a-zA-Z0-9_.]*")
 _RE_WHITESPACE = re.compile(r"[ \t\r\n]+")
+_RE_DEFINE_LITERAL = re.compile(r"""(["'])(?:\\.|(?!\1)[^\\\n])*\1""")
 
 IDENTIFIER_TYPES = set(_C_KEYWORDS.values()) | {TokenType.IDENTIFIER}
 
@@ -292,10 +293,10 @@ class Lexer:
             if peek == "*":
                 self._take(2)  # Consume /*
                 end = self.data.find("*/", self._pos)
-                if end != -1:
-                    self._take(end - self._pos + 2)
-                else:
-                    self._take(len(self.data) - self._pos)
+                if end == -1:
+                    raise self._error("unterminated comment")
+
+                self._take(end - self._pos + 2)
 
             elif peek == "/":
                 self._take(2)  # Consume //
@@ -390,6 +391,23 @@ class Lexer:
 
         return result
 
+    def _read_define_value(self) -> str:
+        """Read the value of a ``#define`` up to the end of the line."""
+        value = []
+
+        while not self.eof and (ch := self._current()) != "\n":
+            if ch == "/" and self._peek() in ("/", "*"):
+                self._skip_comment()
+                value.append(" ")
+            elif ch in ('"', "'"):
+                if not (match := _RE_DEFINE_LITERAL.match(self.data, self._pos)):
+                    raise self._error("unterminated string literal")
+                value.append(self._take(match.end() - self._pos))
+            else:
+                value.append(self._read_until("\n\"'/") or self._take())
+
+        return "".join(value).strip()
+
     def _read_preprocessor(self) -> None:
         """Read a preprocessor directive starting with ``#``."""
         line = self._line
@@ -423,12 +441,7 @@ class Lexer:
                 raise self._error("expected identifier after '#define'", lineno=line)
             self._emit(TokenType.IDENTIFIER, name, line)
 
-            self._skip_whitespace_and_comments()
-            if self.eof or self._line != line:
-                # No value, just a simple macro definition
-                return
-
-            if (value := self._read_until("\n")).strip():
+            if value := self._read_define_value():
                 self._emit(TokenType.STRING, value, line)
 
         elif token_type == TokenType.PP_INCLUDE:

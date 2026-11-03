@@ -41,6 +41,65 @@ def test_struct(cs: cstruct, compiled: bool) -> None:
             cs.resolve(name)
 
 
+def test_struct_variables(cs: cstruct) -> None:
+    """Test that all forms of variable declarations after a struct or union definition are silently ignored."""
+    cdef = """
+    #define SIZE 2
+
+    struct test {
+        uint8 a;
+    } b[4], *c[SIZE], d[2][3], e[];
+
+    union test1 {
+        uint8 a;
+    } f;
+
+    struct test g, *h;
+
+    typedef uint8 test2;
+    """
+    cs.load(cdef)
+
+    assert cs.resolve("test") is cs.test
+    assert cs.resolve("test1") is cs.test1
+    assert cs.resolve("test2") is cs.uint8
+
+    for name in ("b", "c", "d", "e", "f", "g", "h"):
+        with pytest.raises(ResolveError, match=f"Unknown type {name}"):
+            cs.resolve(name)
+
+
+@pytest.mark.parametrize(
+    ("cdef", "match"),
+    [
+        # A missing semicolon before the next definition
+        ("struct a { uint8 x; }\nstruct b { uint8 x; };", "line 2: expected ;, got struct"),
+        ("struct a { uint8 x; }\nunion b { uint8 x; };", "line 2: expected ;, got union"),
+        ("struct a { uint8 x; }\nenum b : uint8 { C };", "line 2: expected ;, got enum"),
+        ("struct a { uint8 x; }\nflag b : uint8 { C };", "line 2: expected ;, got flag"),
+        ("struct a { uint8 x; }\ntypedef uint8 b;", "line 2: expected ;, got typedef"),
+        ("struct a { uint8 x; }\n#define B 1", "line 2: expected ;, got define"),
+        ("struct a { uint8 x; }\n#[nocompile]\nstruct b { uint8 x; };", "line 2: expected ;, got nocompile"),
+        ("union a { uint8 x; }\ntypedef uint8 b;", "line 2: expected ;, got typedef"),
+        ("struct a { uint8 x; } b\ntypedef uint8 c;", "line 2: expected ;, got typedef"),
+        ("struct a { uint8 x; }", "line 1: expected ;, got end of input"),
+        ("struct a { uint8 x; } b", "line 1: expected ;, got end of input"),
+        # Invalid variable declarations
+        ("struct a { uint8 x; } b c;", "line 1: expected ;, got c"),
+        ("struct a { uint8 x; } 1;", "line 1: expected ;, got 1"),
+        ("struct a { uint8 x; } , b;", "line 1: expected ;, got ,"),
+        ("struct a { uint8 x; } b,;", "line 1: expected one of .*, got ;"),
+        ("struct a { uint8 x; } *;", "line 1: expected one of .*, got ;"),
+        ("struct a { uint8 x; } b[2;", "line 1: expected ], got end of input"),
+        ("struct a { uint8 x; } b : 4;", "line 1: variables cannot have bitfields"),
+    ],
+)
+def test_struct_invalid_variables(cs: cstruct, cdef: str, match: str) -> None:
+    """Test that nothing other than variable declarations and a semicolon can follow a struct or union definition."""
+    with pytest.raises(ParserError, match=match):
+        cs.load(cdef)
+
+
 def test_nested_structs(cs: cstruct, compiled: bool) -> None:
     """Test parsing of nested structs, including anonymous ones."""
     cdef = """
@@ -248,14 +307,18 @@ def test_define(cs: cstruct) -> None:
     #define NULLSTR "ADCRYPT\00"
     #define NULLBYTES b"ADCRYPT\00"
     #define ARBITRARYBYTES b"\x00\x01\x02"
-    #define MULTILINE (1 + \
-                        2 + \
+    #define MULTILINE (1 + \\
+                        2 + \\
                         3)
-    #define QUOTES "\'\"a'b\""
+    #define QUOTES "'\\"a'b\\""
     #define ESCAPE "\\'\\"a'b\\"\\n"
     #define BYTES_ESCAPE b"`\\n"
     #define FUNC(x) ( x == 0 )
     #define TERNARY(x) ( x ? 1 : 0 )
+    #define STR_CONCAT "say " STR
+    #define BYTES_CONCAT BYTES b"!"
+    #define STR_AND_NUMBER "a" CONST
+    #define RAW_AND_RAW RAW RAW
     """
     cs.load(cdef)
 
@@ -275,6 +338,16 @@ def test_define(cs: cstruct) -> None:
     # We don't evaluate function-like macros yet, so they should be stored as their raw string representation
     assert cs.consts["FUNC"] == "(x) ( x == 0 )"
     assert cs.consts["TERNARY"] == "(x) ( x ? 1 : 0 )"
+    # Adjacent strings and constants that are strings are concatenated like in C
+    assert cs.consts["STR_CONCAT"] == "say hello"
+    assert cs.consts["BYTES_CONCAT"] == b"world!"
+    # A constant that isn't a string can't be concatenated, so the value is kept as it is
+    assert cs.consts["STR_AND_NUMBER"] == '"a" CONST'
+    # Without a string in the value we don't know whether these are strings, they could also just be raw values
+    assert cs.consts["RAW_AND_RAW"] == "RAW RAW"
+
+    with pytest.raises(ParserError, match="line 1: cannot concatenate strings and bytes"):
+        cs.load('#define MIXED "a" b"b"')
 
 
 def test_define_flag_value(cs: cstruct) -> None:
@@ -425,19 +498,6 @@ def test_conditional_parsing_error(cs: cstruct) -> None:
     """
     with pytest.raises(ParserError, match="line 2: unclosed conditional statement"):
         cs.load(cdef)
-
-
-def test_multiline_define(cs: cstruct) -> None:
-    """Test parsing of multi-line ``#define`` directives."""
-    cdef = """
-    #define MULTILINE_DEF (1 + \\
-                          2 + \\
-                          3)
-    """
-    cs.load(cdef)
-
-    assert "MULTILINE_DEF" in cs.consts
-    assert cs.consts["MULTILINE_DEF"] == 6
 
 
 def test_multiple_declarators(cs: cstruct) -> None:
@@ -595,3 +655,51 @@ def test_error_context(cs: cstruct) -> None:
           3: 69
         """.rstrip()
     )
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        # A comment is replaced by a space, after which the value continues
+        ("data /* c */", "data"),
+        ("a/* c */b", "a b"),
+        ("data /* c\n#define C 3\n d */", "data"),
+        ("data // c", "data"),
+        ("1 // it's", 1),
+        ("http://x", "http:"),
+        ("1 /* c\n d */ + 2", 3),
+        ("/* c\n d */ 1", 1),
+        ("/* c */", ""),
+        # Comments after and in strings
+        ('"a" /* c\n d */', "a"),
+        ('"a" // it\'s "b"', "a"),
+        ("'b' /* c\n d */", "b"),
+        ('b"c" // c', b"c"),
+        ("b'd' /* c */", b"d"),
+        ('"\\"f\\"" // c', '"f"'),
+        ('"it\'s /* c */ // d"', "it's /* c */ // d"),
+        # Escapes and spaces in strings
+        ('"a\\\\"', "a\\"),
+        ('"a   b"', "a   b"),
+        ('b"\\xff"', b"\xff"),
+        # Line continuations are joined first
+        ('"a\\\nb"', "ab"),
+        ("1 /* c */ + \\\n 2", 3),
+        ('"a" // c \\\n "b"', "a"),
+        ("1 + \\\r\n 2\r", 3),
+        # Adjacent strings are concatenated
+        ('"bar" /* c */ \\\n "zomg"', "barzomg"),
+        # CRLF line endings
+        ('"a"\r', "a"),
+        ("data\r", "data"),
+        # Anything that isn't only strings is kept as it is, like other macro-like constants
+        ('"a" + 1', '"a" + 1'),
+    ],
+)
+def test_define_value(cs: cstruct, value: str, expected: int | str | bytes) -> None:
+    """Test that the value of a ``#define`` follows the rules of C for comments, continuations and strings."""
+    cs.load(f"#define A {value}\n#define B 2\n")
+
+    assert cs.consts["A"] == expected
+    assert cs.consts["B"] == 2
+    assert "C" not in cs.consts
