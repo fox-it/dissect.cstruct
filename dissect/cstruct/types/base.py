@@ -384,12 +384,24 @@ class BaseArray(BaseType):
         if cls.__null_terminated__:
             return cls.__type__._write_0(stream, data, endian=endian)
 
-        if not cls.__dynamic__ and (remaining := cls.__num_entries__ - (actual_size := len(data))):
+        if not cls.__dynamic__:
+            data = cls._pad(data)
+
+        return cls.__type__._write_array(stream, data, endian=endian)
+
+    @classmethod
+    def _pad(cls, data: list[Any]) -> list[Any]:
+        """Internal function for padding the entries of a static array to its size.
+
+        Args:
+            data: The entries of the array.
+        """
+        if remaining := cls.__num_entries__ - (actual_size := len(data)):
             if remaining < 0:
                 raise ArraySizeError(f"Expected static array size {cls.__num_entries__}, got {actual_size} instead.")
             data = data + [cls.__type__.__default__()] * remaining
 
-        return cls.__type__._write_array(stream, data, endian=endian)
+        return data
 
     @classproperty
     def type(cls) -> type[BaseType]:

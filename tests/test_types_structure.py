@@ -9,7 +9,7 @@ from unittest.mock import call, patch
 import pytest
 
 from dissect.cstruct.cstruct import cstruct
-from dissect.cstruct.exception import ResolveError
+from dissect.cstruct.exception import ArraySizeError, ResolveError
 from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.pointer import Pointer
@@ -1254,3 +1254,224 @@ def test_structure_write_missing_attribute(cs: cstruct, compiled: bool) -> None:
     del obj.c.a
     with pytest.raises(AttributeError, match="'nested' object has no attribute 'a'"):
         obj.dumps()
+
+
+def test_structure_write_dynamic(cs: cstruct, compiled: bool) -> None:
+    """Test that dynamic fields are written by the length of their value instead of by evaluating their expression."""
+    cdef = """
+    struct test {
+        uint8   n;
+        uint16  a[n];
+        uint8   b;
+        char    c[n];
+        wchar   d[];
+        uint8   e;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"\x02\x01\x00\x02\x00\x03ab\x78\x00\x00\x00\x04"
+    fh = BytesIO()
+    assert cs.test(buf).write(fh) == len(buf)
+    assert fh.getvalue() == buf
+
+    # The length of a value doesn't have to match the expression
+    assert (
+        cs.test(n=1, a=[1, 2, 3], b=4, c=b"xy", d="", e=5).dumps() == b"\x01\x01\x00\x02\x00\x03\x00\x04xy\x00\x00\x05"
+    )
+
+
+def test_structure_write_nested(cs: cstruct, compiled: bool) -> None:
+    """Test that nested structures are written in both endiannesses, and raise errors for invalid values."""
+    cdef = """
+    struct inner {
+        uint8   a;
+        char    b[2];
+    };
+
+    struct nested {
+        uint16  c;
+        inner   d;
+    };
+
+    struct test {
+        uint8   e;
+        nested  f;
+        uint8   g;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"\x01\x02\x00\x03ab\x04"
+    obj = cs.test(buf)
+    assert obj.dumps() == buf
+    assert obj.dumps(endian=">") == b"\x01\x00\x02\x03ab\x04"
+
+    # Any other value that isn't a structure doesn't have the attributes to write
+    with pytest.raises(AttributeError, match="'int' object has no attribute"):
+        cs.test(e=1, f=5, g=4).dumps()
+    with pytest.raises(AttributeError, match="'int' object has no attribute"):
+        cs.test(e=1, f=cs.nested(c=2, d=5), g=4).dumps()
+
+    with pytest.raises(ArraySizeError, match="Expected static array size 2, got 3 instead"):
+        cs.test(e=1, f=cs.nested(c=2, d=cs.inner(a=3, b=b"abc")), g=4).dumps()
+
+
+def test_structure_write_nested_padding(cs: cstruct, compiled: bool) -> None:
+    """Test that the padding of an offset in a nested structure is written as a part of that structure."""
+    cdef = """
+    struct nested {
+        uint8   a;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+    cs.nested.add_field("b", cs.uint16, offset=4)
+
+    cdef = """
+    struct test {
+        uint8   c;
+        nested  d;
+        uint8   e;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    fh = BytesIO()
+    assert cs.test(c=1, d=cs.nested(a=2, b=3), e=4).write(fh) == 8
+    assert fh.getvalue() == b"\x01\x02\x00\x00\x00\x03\x00\x04"
+
+
+@pytest.mark.parametrize(
+    ("offset", "expected"),
+    [
+        # Padding
+        (8, b"\x01\x02\x00\x00\x00\x00\x00\x00\x03\x00\x04"),
+        # Exactly at the current position
+        (5, b"\x01\x02\x00\x00\x00\x03\x00\x04"),
+        # Before the current position, writing doesn't go back
+        (2, b"\x01\x02\x00\x00\x00\x03\x00\x04"),
+    ],
+)
+def test_structure_write_offset(cs: cstruct, compiled: bool, offset: int, expected: bytes) -> None:
+    """Test that fields with an offset get padding if they're ahead of the stream, and that writing doesn't go back."""
+    cdef = """
+    struct test {
+        uint8   a;
+        uint32  b;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+    cs.test.add_field("c", cs.uint16, offset=offset)
+    cs.test.add_field("d", cs.uint8)
+
+    assert verify_compiled(cs.test, compiled)
+
+    fh = BytesIO()
+    assert cs.test(a=1, b=2, c=3, d=4).write(fh) == len(expected)
+    assert fh.getvalue() == expected
+
+
+def test_structure_write_offset_not_packed(cs: cstruct, compiled: bool) -> None:
+    """Test that a field with an offset gets padding if it's written using its own type."""
+    cdef = """
+    struct test {
+        uint8   a;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+    cs.test.add_field("b", cs.uint8[2][1], offset=4)
+    cs.test.add_field("c", cs.uint8)
+
+    assert verify_compiled(cs.test, compiled)
+
+    fh = BytesIO()
+    assert cs.test(a=1, b=[[2, 3]], c=4).write(fh) == 7
+    assert fh.getvalue() == b"\x01\x00\x00\x00\x02\x03\x04"
+
+
+def test_structure_write_offset_after_dynamic_field(cs: cstruct, compiled: bool) -> None:
+    """Test that a field with an offset after a dynamic field only gets padding if the dynamic field is short enough."""
+    cdef = """
+    struct test {
+        uint8   n;
+        uint8   a[n];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+    cs.test.add_field("b", cs.uint8, offset=4)
+    cs.test.add_field("c", cs.uint8, offset=6)
+    cs.test.add_field("d", cs.uint8)
+
+    assert verify_compiled(cs.test, compiled)
+
+    # Padding only if the dynamic field is short enough
+    fh = BytesIO()
+    assert cs.test(n=1, a=[2], b=3, c=4, d=5).write(fh) == 8
+    assert fh.getvalue() == b"\x01\x02\x00\x00\x03\x00\x04\x05"
+
+    fh = BytesIO()
+    assert cs.test(n=5, a=[2, 2, 2, 2, 2], b=3, c=4, d=5).write(fh) == 9
+    assert fh.getvalue() == b"\x05\x02\x02\x02\x02\x02\x03\x04\x05"
+
+
+def test_structure_write_field_names(cs: cstruct, compiled: bool) -> None:
+    """Test that field names that aren't valid identifiers and duplicate field names are written correctly."""
+    cdef = """
+    struct test {
+        uint8   class;
+        uint8   from;
+        uint8   _;
+        uint8   _;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    # Duplicate fields use the same attribute
+    obj = cs.test(b"\x01\x02\x03\x04")
+    assert obj.dumps() == b"\x01\x02\x04\x04"
+
+
+def test_structure_write_none(cs: cstruct, compiled: bool) -> None:
+    """Test that values of ``None`` are written with the default value of their type, for every kind of field."""
+    cdef = """
+    enum Test : uint8 {
+        A = 1
+    };
+
+    struct nested {
+        uint8 a;
+    };
+
+    struct test {
+        uint16  b;
+        uint24  c;
+        Test    d;
+        char    e;
+        char    f[2];
+        wchar   g;
+        wchar   h[2];
+        uint8   i[2];
+        uint24  j[1];
+        nested  k;
+        uint8   l : 4;
+        uint8   m : 4;
+        uint8   n[2][1];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    obj = cs.test()
+    for field in cs.test.__fields__:
+        setattr(obj, field._name, None)
+
+    assert obj.dumps() == bytes(24)

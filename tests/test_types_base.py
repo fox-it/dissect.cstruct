@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import struct
 from typing import TYPE_CHECKING, BinaryIO
 
 import pytest
@@ -299,3 +300,57 @@ def test_reads_non_buffer(cs: cstruct) -> None:
     """Test that reading from something that isn't bytes-like raises the same error as the generic implementation."""
     with pytest.raises(TypeError, match="a bytes-like object is required"):
         cs.uint32.reads(io.BytesIO(b"\x00" * 4))
+
+
+def test_array_struct_write(cs: cstruct, compiled: bool) -> None:
+    """Test that arrays in a structure are written from any sequence, and pad values that are too short."""
+    cdef = """
+    struct test {
+        uint8   a;
+        uint16  b[2];
+        uint16  c[2];
+        uint8   d[0];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"\x01\x01\x00\x02\x00\x03\x00\x04\x00"
+    assert cs.test(a=1, b=[1, 2], c=[3, 4]).dumps() == buf
+    assert cs.test(a=1, b=(1, 2), c=[3, 4]).dumps() == buf
+
+    # Shorter values are padded
+    assert cs.test(a=1, b=[1], c=[3, 4]).dumps() == b"\x01\x01\x00\x00\x00\x03\x00\x04\x00"
+
+    # The total amount of values is right, but the second array is too long
+    with pytest.raises(ArraySizeError, match="Expected static array size 2, got 3 instead"):
+        cs.test(a=1, b=[1], c=[2, 3, 4]).dumps()
+
+    with pytest.raises(struct.error):
+        cs.test(a=1, b=[1, 2**16], c=[3, 4]).dumps()
+
+    with pytest.raises(ArraySizeError, match="Expected static array size 0, got 1 instead"):
+        cs.test(a=1, b=[1, 2], c=[3, 4], d=[1]).dumps()
+
+
+def test_array_multidimensional_write_padding(cs: cstruct, compiled: bool) -> None:
+    """Test that the entries of multi-dimensional arrays and arrays of structures are padded too."""
+    cdef = """
+    struct nested {
+        uint8 a;
+    };
+
+    struct test {
+        uint8   a[2][2];
+        char    b[2][2];
+        nested  c[2];
+        uint8   d;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    obj = cs.test(a=[[1], [2, 3]], b=[b"a", b"bc"], c=[cs.nested(a=5)], d=7)
+    assert obj.dumps() == b"\x01\x00\x02\x03a\x00bc\x05\x00\x07"

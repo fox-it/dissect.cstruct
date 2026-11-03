@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import logging
+import struct
 from enum import Enum
 from itertools import groupby, repeat
 from keyword import iskeyword
@@ -11,7 +12,7 @@ from operator import itemgetter
 from textwrap import indent
 from typing import TYPE_CHECKING, Any
 
-from dissect.cstruct.exception import ExpressionParserError
+from dissect.cstruct.exception import ArraySizeError, ExpressionParserError
 from dissect.cstruct.expression import SOURCE_GLOBALS, Expression
 from dissect.cstruct.types import (
     Array,
@@ -30,7 +31,7 @@ from dissect.cstruct.types import (
     WcharArray,
 )
 from dissect.cstruct.types.enum import EnumMetaType
-from dissect.cstruct.types.structure import UnionMetaType, UnionProxy
+from dissect.cstruct.types.structure import StructureMetaType, UnionMetaType, UnionProxy
 from dissect.cstruct.util import ENDIANNESS_TO_BYTEORDER_MAP, _struct
 
 if TYPE_CHECKING:
@@ -63,25 +64,33 @@ python_compile = compile
 
 
 def compile_structure(cls: type[Structure]) -> type[Structure]:
-    """Compile the ``_read`` method of a structure or union type, if the compiler supports it.
+    """Compile the ``_read`` and ``_write`` methods of a structure or union type, if the compiler supports it.
 
     The compilation happens on first use.
     """
     try:
         _check_supported(cls, cls.__fields__)
         cls._read = _LazyCompileRead(cls)
+        cls._write = _LazyCompileWrite(cls)
         cls.__compiled__ = True
     except Exception as e:
-        # Revert to the interpreted reader
+        # Revert to the interpreted reader and writer
         log.debug("Failed to compile %s", cls, exc_info=e)
-        cls._read = classmethod(type(cls)._read)
-        cls.__compiled__ = False
+        _revert_to_interpreted(cls)
 
     return cls
 
 
-class _LazyCompileRead:
-    """Descriptor that compiles the ``_read`` method of a structure on first access and replaces itself with it."""
+def _revert_to_interpreted(cls: type[Structure]) -> None:
+    cls._read = classmethod(type(cls)._read)
+    cls._write = classmethod(type(cls)._write)
+    cls.__compiled__ = False
+
+
+class _LazyCompile:
+    """Descriptor that compiles a method of a structure on first access and replaces itself with it."""
+
+    name: str
 
     def __init__(self, cls: type[Structure]):
         self.cls = cls
@@ -103,17 +112,46 @@ class _LazyCompileRead:
             inline = all(type_.__dict__.get("__init__") is init for type_, init in self.snapshot.items())
 
             try:
-                self.method = _ReadSourceGenerator(cls, self.fields, inline).generate()
+                self.method = self._generator(inline).generate()
             except Exception as e:
-                # Revert to the slower loop based method
+                # Revert to the slower interpreted method
                 log.debug("Failed to compile %s", cls, exc_info=e)
-                self.method = classmethod(type(cls)._read)
-                cls.__compiled__ = False
+                self.method = self._revert()
 
-            if cls.__dict__.get("_read") is self:
-                cls._read = self.method
+            if cls.__dict__.get(self.name) is self:
+                setattr(cls, self.name, self.method)
 
         return self.method
+
+    def _generator(self, inline: bool) -> _SourceGenerator:
+        raise NotImplementedError
+
+    def _revert(self) -> classmethod:
+        """Return the interpreted version of the method."""
+        return classmethod(getattr(type(self.cls), self.name))
+
+
+class _LazyCompileRead(_LazyCompile):
+    """Descriptor that compiles the ``_read`` method of a structure on first access and replaces itself with it."""
+
+    name = "_read"
+
+    def _generator(self, inline: bool) -> _SourceGenerator:
+        return _ReadSourceGenerator(self.cls, self.fields, inline)
+
+    def _revert(self) -> classmethod:
+        # The structure no longer counts as compiled, so adding a field won't recompile _write either
+        _revert_to_interpreted(self.cls)
+        return super()._revert()
+
+
+class _LazyCompileWrite(_LazyCompile):
+    """Descriptor that compiles the ``_write`` method of a structure on first access and replaces itself with it."""
+
+    name = "_write"
+
+    def _generator(self, inline: bool) -> _SourceGenerator:
+        return _WriteSourceGenerator(self.cls, self.fields, inline)
 
 
 def _snapshot_structures(fields: list[Field], result: dict[type, Any]) -> dict[type, Any]:
@@ -166,7 +204,29 @@ _ENDIANNESS = ("<", ">", "!", "@", "=")
 # Types of which the value can be used as an integer directly
 _INTEGER_TYPES = (Int, Packed, Enum, Flag)
 
-# Globals that are available to all generated read functions
+# Types of which the value can be packed, unless they have a custom way of writing
+_PACKABLE_TYPES = (Array, Char, CharArray, Int, Packed, Pointer, Void, VoidArray, Wchar, WcharArray)
+
+
+def _field_bytes(type_: type[BaseType], value: Any, endian: str) -> bytes:
+    """Return the bytes of a char or wchar field that isn't of the right type yet or doesn't fit."""
+    buf = type_.dumps(type_.__default__() if value is None else value, endian=endian)
+    if len(buf) > type_.__size__:
+        raise ArraySizeError(f"Expected {type_.__size__} bytes for {type_.__name__}, got {len(buf)} instead.")
+    return buf
+
+
+def _array_values(type_: type[Array], value: list[Any] | None) -> list[Any]:
+    """Return the values of an array field that doesn't have the right size yet."""
+    return type_.__default__() if value is None else type_._pad(value)
+
+
+def _or_default(value: Any, type_: type[BaseType]) -> Any:
+    """Return the value of a field, or the default of its type if it's ``None``."""
+    return type_.__default__() if value is None else value
+
+
+# Globals that are available to all generated functions
 _GLOBALS = {
     "_type_call": type.__call__,
     "_object_new": object.__new__,
@@ -178,6 +238,12 @@ _GLOBALS = {
     "_getattr": getattr,
     "_UnionProxy": UnionProxy,
     "_union_read": UnionMetaType._read,
+    "_struct_write": StructureMetaType._write,
+    "_union_write": UnionMetaType._write,
+    "_struct_error": struct.error,
+    "_field_bytes": _field_bytes,
+    "_array_values": _array_values,
+    "_or_default": _or_default,
     **SOURCE_GLOBALS,
 }
 
@@ -727,6 +793,319 @@ class _Unpack:
         return _struct_functions(_optimize_struct_fmt(self.items), name)
 
 
+class _WriteSourceGenerator(_SourceGenerator):
+    """Generates the source code of an optimized ``_write`` method for a structure or union."""
+
+    name = "_write"
+
+    def __init__(self, cls: type[Structure], fields: list[Field], inline: bool = True):
+        super().__init__(cls, fields, inline)
+
+        self._uses_start = False
+
+    def _generate_method_source(self, interpreted: str, lines: Iterable[str]) -> str:
+        """Generate the code of the method, ``interpreted`` is the name of the method to fall back to."""
+        write_code = "\n".join(lines)
+
+        # Fall back to the generic method if any of the inlined types was modified after compilation
+        checks = [f"cls is not {self._add_symbol(self.cls, 'cls')}", *self._modified_checks()]
+
+        preamble = [f"if {' or '.join(checks)}: return {interpreted}(cls, stream, data, endian=endian)"]
+        if self._uses_start:
+            preamble.append("start = stream.tell()")
+
+        code = indent("\n".join([*preamble, write_code]), "    ")
+
+        return f"def _write(cls, stream, data, *, endian):\n{code}"
+
+    def _generate_struct_source(self) -> str:
+        """Generate the code for writing a structure."""
+        return self._generate_method_source("_struct_write", list(self._generate_fields_source()))
+
+    def _generate_union_source(self) -> str:
+        """Generate the code for writing a union."""
+        if not _can_pack(self.cls):
+            raise TypeError(f"Unsupported union for compiler: {self.cls}")
+
+        pack = _Pack()
+        self._pack_union("data", self.cls, pack)
+
+        lines = [self._generate_pack_source(pack), f"return {self.cls.__size__}"]
+        return self._generate_method_source("_union_write", lines)
+
+    def _generate_fields_source(self) -> Iterator[str]:
+        """Generate the code for writing all fields."""
+        # The offset of the current field in the structure, None if it's unknown due to a dynamic field
+        current_offset = 0
+        current_block: list[Field] = []
+        current_bits: list[Field] = []
+
+        def flush() -> Iterator[str]:
+            if current_block:
+                yield from self._generate_packed_source(current_block)
+                current_block[:] = []
+            if current_bits:
+                yield from self._generate_bits_source(current_bits)
+                current_bits[:] = []
+
+        def align_to_field(field: Field) -> Iterator[str]:
+            nonlocal current_offset
+
+            if field.offset is not None and field.offset != current_offset:
+                if current_offset is None:
+                    # This only writes padding if the stream is before the offset, otherwise the amount is negative
+                    yield f'stream.write(b"\\x00" * (start + {field.offset} - stream.tell()))'
+                else:
+                    yield f"stream.write({bytes(field.offset - current_offset)!r})"
+                    current_offset = field.offset
+
+            if self.align and field.offset is None:
+                yield f'stream.write(b"\\x00" * (-stream.tell() & ({field.alignment} - 1)))'
+
+        for field in self.fields:
+            if not field.bits:
+                self._bits = None
+                if current_bits:
+                    yield from flush()
+
+            # Unlike reading, we can't move back in the stream
+            if None not in (field.offset, current_offset) and field.offset < current_offset:
+                raise TypeError(f"Unsupported offset for compiler: {field}")
+
+            size = field.type.__size__
+
+            # Bit fields
+            if field.bits:
+                if self._starts_bit_value(field):
+                    if not _can_pack_bits(field):
+                        raise TypeError(f"Unsupported type for bit field: {field.type}")
+
+                    yield from flush()
+                    yield from align_to_field(field)
+                elif field.offset is not None:
+                    raise TypeError(f"Unsupported offset for bit field: {field}")
+                else:
+                    # Only the first bit field of a value moves the stream
+                    size = 0
+
+                self._advance_bits(field)
+                current_bits.append(field)
+
+            # Basic and composite types (and arrays of them), and inlined structures
+            elif _can_pack(field.type):
+                if field.offset is None:
+                    # The alignment depends on the position in the stream, so this needs a new block
+                    if self.align:
+                        yield from flush()
+                elif current_offset is None:
+                    yield from flush()
+                elif current_block:
+                    current_offset = field.offset
+
+                if not current_block:
+                    yield from align_to_field(field)
+                current_block.append(field)
+
+            # Everything else - sub structures, arrays of structures, multi-dimensional and dynamic arrays
+            else:
+                yield from flush()
+                yield from align_to_field(field)
+                yield from self._generate_field_source(field)
+
+                # An aligned structure writes more than its size if the stream isn't aligned
+                if self.align:
+                    size = None
+
+            if current_offset is not None:
+                current_offset = None if size is None else current_offset + size
+
+        yield from flush()
+
+        if self.align:
+            self._uses_start = True
+            yield 'stream.write(b"\\x00" * (-stream.tell() & (cls.__alignment__ - 1)))'
+
+        yield "return stream.tell() - start" if self._uses_start else f"return {current_offset}"
+
+    def _generate_field_source(self, field: Field) -> Iterator[str]:
+        """Generate the code for writing a field using its type."""
+        self._uses_start = True
+        type_ = self._type_symbol(field.type)
+        lines = [
+            f"_value = {_get_attribute('data', field._name)}",
+            f"if _value is None: _value = {type_}.__default__()",
+            f"{type_}._write(stream, _value, endian=endian)",
+        ]
+
+        yield _block(lines)
+
+    def _generate_bits_source(self, fields: list[Field]) -> Iterator[str]:
+        """Generate the code for writing the bit fields that share a value of the bit buffer."""
+        type_ = _get_bits_type(fields[0])
+
+        pack = _Pack()
+        little = []
+        other = []
+        remaining = type_.__size__ * 8
+        for field in fields:
+            value = self._load_value(field, _get_attribute("data", field._name), pack)
+            if issubclass(field.type, (Enum, Flag)):
+                value += "._value_"
+
+            remaining -= field.bits
+            little.append(f"{value} << {type_.__size__ * 8 - remaining - field.bits}")
+            other.append(f"{value} << {remaining}")
+
+        # The bit buffer only writes the least significant bits first for explicit little endian
+        self._pack_number(type_, f"({' | '.join(little)} if endian == '<' else {' | '.join(other)})", pack)
+
+        yield self._generate_pack_source(pack)
+
+    def _generate_packed_source(self, fields: list[Field]) -> Iterator[str]:
+        """Generate the code for writing consecutive packed fields."""
+        pack = _Pack()
+        self._pack_fields(fields, "data", pack)
+
+        if pack.items:
+            yield self._generate_pack_source(pack)
+
+    def _generate_pack_source(self, pack: _Pack) -> str:
+        """Generate the code for checking, packing and writing values."""
+        function = f"{self._add_symbol(pack.functions('pack'), 'pack')}[endian]"
+        if pack.values == pack.retry:
+            return _block([*pack.lines, f"stream.write({function}({', '.join(pack.values)}))"])
+
+        # Numbers aren't checked for None up front, since struct.pack raises an error for those
+        return _block(
+            [
+                *pack.lines,
+                "try:",
+                f"    buf = {function}({', '.join(pack.values)})",
+                "except _struct_error:",
+                f"    buf = {function}({', '.join(pack.retry)})",
+                "stream.write(buf)",
+            ]
+        )
+
+    def _load_value(self, field: Field, value: str, pack: _Pack) -> str:
+        """Generate the code for loading a value, using the default of its type if it's ``None``."""
+        var = self._var("value")
+        pack.lines.append(f"if ({var} := {value}) is None: {var} = {self._type_symbol(field.type)}.__default__()")
+        return var
+
+    def _pack_fields(self, fields: list[Field], var: str, pack: _Pack, proxied: bool = False) -> None:
+        """Generate the code for packing the given fields of the object in ``var``.
+
+        The fields of objects in a union are proxied, in which case we use the object behind the proxy.
+        """
+        for field, count, char in _generate_struct_info(fields, inline=_inline_kind):
+            if field is None:
+                # Padding
+                pack.add(count, "x")
+                continue
+
+            value = _get_attribute(var, field._name)
+
+            if char in ("S", "U"):
+                # Inlined structure or union
+                self._witness(field.type)
+                nested = self._load_value(field, value, pack)
+                if proxied:
+                    pack.lines.append(f"if type({nested}) is _UnionProxy: {nested} = {nested}.__target__")
+
+                if char == "S":
+                    self._pack_fields(field.type.__fields__, nested, pack, proxied)
+                else:
+                    self._pack_union(nested, field.type, pack)
+                continue
+
+            self._pack_field(field, value, count, char, pack)
+
+    def _pack_union(self, var: str, type_: type[Union], pack: _Pack) -> None:
+        """Generate the code for packing the union in ``var``, by the field the interpreted writer uses."""
+        # Changing a nested structure can change which field is the largest
+        for field in type_.__fields__:
+            if issubclass(field.type, Structure):
+                self._witness(field.type)
+
+        self._pack_fields([type_._write_field()], var, pack, proxied=True)
+
+    def _pack_field(self, field: Field, value: str, count: int, char: str, pack: _Pack) -> None:
+        """Generate the code for checking and packing a field."""
+        field_type = field.type
+        read_type = _get_read_type(field_type)
+        type_ = self._type_symbol(field_type)
+
+        if issubclass(field_type, Array):
+            read_type = _get_read_type(field_type.__type__)
+            var = self._var("value")
+            num = field_type.__num_entries__
+            pack.lines.append(
+                f"if ({var} := {value}) is None or len({var}) != {num}: {var} = _array_values({type_}, {var})"
+            )
+
+            # Entries can be enum members or plain integers, both can be packed as they are
+            if issubclass(read_type, Int):
+                pack.add(count, "s", f"b''.join([{_int_to_bytes(read_type, 'item')} for item in {var}])")
+            else:
+                pack.add(count, char, f"*{var}")
+
+        elif issubclass(field_type, (Char, CharArray, Wchar, WcharArray)):
+            var = self._var("value")
+
+            # The format pads values that are too short with zeroes
+            if issubclass(field_type, (Wchar, WcharArray)):
+                encoding = self._add_symbol(Wchar.__encoding_map__, "encoding")
+                pack.lines.append(
+                    f"if ({var} := {value}) is None or "
+                    f"len({var} := {var}.encode({encoding}[endian], 'surrogatepass')) > {count}: "
+                    f"{var} = _field_bytes({type_}, {value}, endian)"
+                )
+            else:
+                pack.lines.append(
+                    f"if not isinstance({var} := {value}, bytes) or len({var}) > {count}: "
+                    f"{var} = _field_bytes({type_}, {var}, endian)"
+                )
+
+            pack.add(count, "s", var)
+
+        elif issubclass(field_type, (Enum, Flag)):
+            self._pack_number(read_type, f"{self._load_value(field, value, pack)}._value_", pack)
+
+        elif issubclass(read_type, Packed):
+            pack.add(1, read_type.__fmt__, value, f"_or_default({value}, {type_})")
+
+        else:
+            self._pack_number(read_type, self._load_value(field, value, pack), pack)
+
+    def _pack_number(self, type_: type[BaseType], value: str, pack: _Pack) -> None:
+        """Generate the code for packing a value of an integer or packed type."""
+        if issubclass(type_, Int):
+            pack.add(type_.__size__, "s", _int_to_bytes(type_, value))
+        else:
+            pack.add(1, type_.__fmt__, value)
+
+
+class _Pack:
+    """Tracks consecutive struct pack formats, and the code for the values to pack."""
+
+    def __init__(self):
+        self.items: list[tuple[int, str]] = []
+        self.lines: list[str] = []
+        self.values: list[str] = []
+        self.retry: list[str] = []
+
+    def add(self, count: int, char: str, value: str | None = None, retry: str | None = None) -> None:
+        self.items.append((count, char))
+        if value is not None:
+            self.values.append(value)
+            self.retry.append(retry or value)
+
+    def functions(self, name: str) -> dict[str, Callable]:
+        """Return the given function of the struct for every endianness."""
+        return _struct_functions(_optimize_struct_fmt(self.items), name)
+
+
 def _check_union(cls: type[Union], fields: list[Field], inline: bool = True) -> int:
     """Check if the compiler supports the union. Returns its size."""
     size = cls.__size__
@@ -794,6 +1173,52 @@ def _can_inline_fields(fields: list[Field], size: int, is_union: bool, in_union:
 def _uses_generated_init(type_: type[Structure]) -> bool:
     """Return whether a structure type uses a generated ``__init__``, so we can bypass it by setting attributes."""
     return "__init__" in type_.__dict__ and type_.__new__ is object.__new__
+
+
+def _can_pack(type_: type[BaseType]) -> bool:
+    """Determine if a value of a type can be written by packing it, instead of by using the ``_write`` method."""
+    if type_.__size__ is None:
+        return False
+
+    if issubclass(type_, (Enum, Flag)):
+        return _can_pack(type_.__type__)
+
+    if issubclass(type_, Structure):
+        kind = _inline_kind(type_)
+        if kind == "U":
+            field = type_._write_field()
+            return field is not None and bool(field.type.__size__) and _can_pack(field.type)
+        return kind == "S" and all(_can_pack(field.type) for field in type_.__fields__)
+
+    if issubclass(type_, Array) and (
+        issubclass(type_.__type__, (Structure, BaseArray)) or not _can_pack(type_.__type__)
+    ):
+        return False
+
+    return any(issubclass(type_, base) and _has_default_write(type_, base) for base in _PACKABLE_TYPES)
+
+
+def _can_pack_bits(field: Field) -> bool:
+    """Determine if the value of the bit buffer for a bit field can be written by packing it."""
+    type_ = _get_bits_type(field)
+    return issubclass(type_, (Int, Packed)) and _can_pack(type_)
+
+
+def _has_default_write(type_: type[BaseType], base: type[BaseType]) -> bool:
+    """Return whether a type uses the write methods of its base type, and doesn't have custom ones."""
+    return all(getattr(type_, name).__func__ is getattr(base, name).__func__ for name in ("_write", "_write_array"))
+
+
+def _int_to_bytes(type_: type[Int], value: str) -> str:
+    """Return the code to convert a value of an integer type to bytes."""
+    return f"{value}.to_bytes({type_.__size__}, _byteorder[endian], signed={bool(type_.signed)})"
+
+
+def _get_attribute(var: str, name: str) -> str:
+    """Return the code to get an attribute."""
+    if name.isidentifier() and not iskeyword(name):
+        return f"{var}.{name}"
+    return f"_getattr({var}, {name!r})"
 
 
 def _set_attribute(var: str, name: str, value: str) -> str:

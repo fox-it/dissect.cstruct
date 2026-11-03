@@ -171,9 +171,24 @@ def test_wchar_array_surrogate_pair(cs: cstruct, compiled: bool) -> None:
     assert obj.a == "\U0001f600x\x00"
     assert obj.dumps() == buf
 
+    with pytest.raises(ArraySizeError, match="Expected static array size 4, got 5 instead"):
+        cs.test(a="abcde", b=1).dumps()
 
-def test_wchar_write_too_long(cs: cstruct) -> None:
+    with pytest.raises(ArraySizeError, match="Expected static array size 4, got 6 instead"):
+        cs.test(a="\U0001f600\U0001f600\U0001f600", b=1).dumps()
+
+
+def test_wchar_write_too_long(cs: cstruct, compiled: bool) -> None:
     """Test that writing more than a single character to a ``wchar`` raises an error, instead of writing all of it."""
+    cdef = """
+    struct test {
+        uint8 a;
+        wchar b;
+        uint8 c;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
     assert cs.wchar.dumps("x") == b"x\x00"
 
     with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
@@ -182,6 +197,12 @@ def test_wchar_write_too_long(cs: cstruct) -> None:
     # A surrogate pair doesn't fit a single wchar
     with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
         cs.wchar.dumps("\U0001f600")
+
+    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+        cs.test(a=1, b="xy", c=2).dumps()
+
+    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+        cs.test(a=1, b="\U0001f600", c=2).dumps()
 
 
 def test_wchar_write_too_short(cs: cstruct, compiled: bool) -> None:

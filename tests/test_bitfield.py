@@ -369,6 +369,15 @@ def test_bitfield_after_dynamic_field(cs: cstruct, compiled: bool) -> None:
         uint16 c : 12;
         uint8  d;
     };
+
+    struct test_types {
+        uint8  n;
+        uint8  a[n];
+        uint8  b : 4;
+        uint16 c : 4;
+        uint16 d : 4;
+        uint8  e;
+    };
     """
     cs.load(cdef, compiled=compiled)
 
@@ -380,6 +389,9 @@ def test_bitfield_after_dynamic_field(cs: cstruct, compiled: bool) -> None:
     assert obj.c == 0x123
     assert obj.d == 3
     assert obj.dumps() == buf
+
+    # Different types don't share a value of the bit buffer
+    assert cs.test_types(n=1, a=[2], b=3, c=4, d=5, e=6).dumps() == b"\x01\x02\x03\x54\x00\x06"
 
 
 def test_bitfield_char_and_uint8(cs: cstruct, compiled: bool) -> None:
@@ -401,3 +413,27 @@ def test_bitfield_char_and_uint8(cs: cstruct, compiled: bool) -> None:
     assert obj.a == 1
     assert obj.b == 2
     assert obj.c == 3
+
+
+def test_bitfield_in_nested_struct_write(cs: cstruct, compiled: bool) -> None:
+    """Test that a nested structure that can't be inlined is written using its own ``_write`` method."""
+    cdef = """
+    struct nested {
+        uint8   a : 4;
+        uint8   b : 4;
+        char    c;
+    };
+
+    struct test {
+        uint8   d;
+        nested  e;
+        uint16  f;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    fh = io.BytesIO()
+    assert cs.test(d=1, e=cs.nested(a=1, b=2, c=b"x"), f=3).write(fh) == 5
+    assert fh.getvalue() == b"\x01\x21x\x03\x00"

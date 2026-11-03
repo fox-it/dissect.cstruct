@@ -157,6 +157,7 @@ def test_packed_float_struct(cs: cstruct, compiled: bool) -> None:
 
     assert obj.a == 0.6513671875
     assert obj.b == 42069.69140625
+    assert obj.dumps() == buf
 
 
 def test_packed_float_struct_be(cs: cstruct, compiled: bool) -> None:
@@ -176,6 +177,7 @@ def test_packed_float_struct_be(cs: cstruct, compiled: bool) -> None:
 
     assert obj.a == 0.388916015625
     assert obj.b == 42069.69140625
+    assert obj.dumps() == buf
 
 
 def test_packed_default(cs: cstruct) -> None:
@@ -229,3 +231,26 @@ def test_packed_memoryview_formats(cs: cstruct) -> None:
             cs.uint32(view)
     else:
         assert cs.uint32(view) == expected
+
+
+def test_packed_struct_write_range(cs: cstruct, compiled: bool) -> None:
+    """Test that a value that doesn't fit its field raises an error when writing a structure."""
+    cdef = """
+    struct test {
+        uint8   a;
+        int16   b;
+        uint32  c;
+        double  d;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    assert cs.test(a=1, b=-2, c=3, d=1.0).dumps() == b"\x01\xfe\xff\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f"
+
+    with pytest.raises(struct.error):
+        cs.test(a=1, b=2, c=2**32, d=4.0).dumps()
+
+    with pytest.raises(struct.error):
+        cs.test(a=256, b=2, c=3, d=4.0).dumps()

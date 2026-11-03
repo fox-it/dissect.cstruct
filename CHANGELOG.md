@@ -21,6 +21,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Compiled structures calculate the sizes of dynamic arrays directly, instead of evaluating the expression.
   - Faster paths for parsing primitive types from bytes-like objects, enum and flag lookups and flag operators.
   - Null-terminated strings are read in chunks from seekable streams.
+- Improve writing performance:
+  - The compiler now generates code for writing structures and unions too! It uses a similar approach, grouping fields and writes where possible.
+  - `obj.dumps()` and `obj.write()` no longer create a `functools.partial` on every access. As a result, they no longer accept a `value` argument.
 
 ### Fixed
 
