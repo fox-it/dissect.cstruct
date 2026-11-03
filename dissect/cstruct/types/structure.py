@@ -7,7 +7,7 @@ from collections.abc import MutableMapping
 from contextlib import contextmanager
 from enum import Enum
 from functools import lru_cache
-from itertools import chain
+from itertools import chain, repeat
 from operator import attrgetter
 from textwrap import dedent
 from types import FunctionType
@@ -18,6 +18,7 @@ from dissect.cstruct.expression import Expression
 from dissect.cstruct.lexer import IDENTIFIER_TYPES
 from dissect.cstruct.types.base import (
     _BUFFER_TYPES,
+    _IMMUTABLE_TYPES,
     BaseArray,
     BaseType,
     MetaType,
@@ -141,7 +142,6 @@ class StructureMetaType(MetaType):
         else:
             size, alignment = cls._calculate_size_and_offsets(fields, align)
 
-        # TODO: compile _write
         # TODO: generate cached_property for lazy reading
 
         classdict["__size__"] = size
@@ -193,7 +193,7 @@ class StructureMetaType(MetaType):
                     # Moved to a bit field of another type, e.g. uint16 f1 : 8, uint32 f2 : 8;
                     or field_type != bits_type
                     # Still processing a bit field, but it's at a different offset due to alignment or a manual offset
-                    or (bits_type is not None and offset > bits_field_offset + bits_type.__size__)
+                    or (None not in (offset, bits_field_offset) and offset > bits_field_offset + bits_type.__size__)
                 ):
                     # ... if any of this is true, we have to move to the next field
                     bits_type = field_type
@@ -299,7 +299,6 @@ class StructureMetaType(MetaType):
     def _write(cls, stream: BinaryIO, data: Structure, *, endian: Endianness) -> int:
         bit_buffer = None
         struct_start = stream.tell()
-        num = 0
 
         for field in cls.__fields__:
             field_type = field.type
@@ -331,7 +330,7 @@ class StructureMetaType(MetaType):
                     stream.write(b"\x00" * align_pad)
                     offset += align_pad
 
-            value = getattr(data, field._name, None)
+            value = getattr(data, field._name)
             if value is None:
                 value = field_type.__default__()
 
@@ -345,7 +344,6 @@ class StructureMetaType(MetaType):
                     bit_buffer.write(field_type, value, field.bits)
             else:
                 field_type._write(stream, value, endian=endian)
-                num += stream.tell() - offset
 
         if bit_buffer is not None and bit_buffer._type is not None:
             bit_buffer.flush()
@@ -354,7 +352,7 @@ class StructureMetaType(MetaType):
             # Align the stream
             stream.write(b"\x00" * (-stream.tell() & (cls.__alignment__ - 1)))
 
-        return num
+        return stream.tell() - struct_start
 
     def add_field(cls, name: str, type_: type[BaseType], bits: int | None = None, offset: int | None = None) -> None:
         field = Field(name, type_, bits=bits, offset=offset)
@@ -698,6 +696,10 @@ class UnionMetaType(StructureMetaType):
 
         return obj
 
+    def _write_field(cls) -> Field | None:
+        """Return the field to write a union by, its largest field and preferably not an anonymous structure."""
+        return max(cls.__fields__, key=lambda e: (e.type.__size__ or 0, e.name is not None), default=None)
+
     def _write(cls, stream: BinaryIO, data: Union, *, endian: Endianness) -> int:
         if cls.__dynamic__:
             raise NotImplementedError("Writing dynamic unions is not yet supported")
@@ -705,24 +707,9 @@ class UnionMetaType(StructureMetaType):
         offset = stream.tell()
         expected_offset = offset + len(cls)
 
-        # Sort by largest field
-        fields = sorted(cls.__fields__, key=lambda e: e.type.__size__ or 0, reverse=True)
-        anonymous_struct = False
-
-        # Try to write by largest field
-        for field in fields:
-            if isinstance(field.type, StructureMetaType) and field.name is None:
-                # Prefer to write regular fields initially
-                anonymous_struct = field.type
-                continue
-
+        if (field := cls._write_field()) is not None:
             # Write the value
             field.type._write(stream, getattr(data, field._name), endian=endian)
-            break
-
-        # If we haven't written anything yet and we initially skipped an anonymous struct, write it now
-        if stream.tell() == offset and anonymous_struct:
-            anonymous_struct._write(stream, data, endian=endian)
 
         # If we haven't filled the union size yet, pad it
         if remaining := expected_offset - stream.tell():
@@ -745,7 +732,9 @@ class Union(Structure, metaclass=UnionMetaType):
             raise NotImplementedError("Modifying a dynamic union is not yet supported")
 
         super().__setattr__(attr, value)
-        self._rebuild(attr)
+        # Fields of an anonymous structure are rebuilt through the proxy of that structure
+        if attr in self.__class__.__lookup__:
+            self._rebuild(attr)
 
     def _rebuild(self, attr: str) -> None:
         if (cur_buf := getattr(self, "_buf", None)) is None:
@@ -773,13 +762,17 @@ class Union(Structure, metaclass=UnionMetaType):
         object.__setattr__(self, "__dynamic_sizes__", sizes)
 
     def _proxify(self) -> None:
-        def _proxy_structure(value: Structure) -> None:
+        def _proxy_structure(value: Structure, attr: str | None = None) -> None:
             for field in value.__class__.__fields__:
                 if issubclass(field.type, Structure):
                     nested_value = getattr(value, field._name)
-                    proxy = UnionProxy(self, field._name, nested_value)
-                    object.__setattr__(value, field._name, proxy)
-                    _proxy_structure(nested_value)
+                    # Changing a nested field rebuilds the union from the top level field it's in
+                    member = attr or field._name
+                    object.__setattr__(value, field._name, UnionProxy(self, member, nested_value))
+                    # The value of a nested union is already a proxy, so continue with the value behind it
+                    if isinstance(nested_value, UnionProxy):
+                        nested_value = nested_value.__target__
+                    _proxy_structure(nested_value, member)
 
         _proxy_structure(self)
 
@@ -864,7 +857,7 @@ def _make_structure__init__(fields: list[str]) -> str:
     """
     field_args = ", ".join(f"{field} = None" for field in fields)
     field_init = "\n".join(
-        f" self.{name} = {name} if {name} is not None else _{i}_default" for i, name in enumerate(fields)
+        f" self.{name} = {name} if {name} is not None else _{i}_default()" for i, name in enumerate(fields)
     )
 
     code = f"def __init__(self{', ' + field_args or ''}):\n"
@@ -880,7 +873,7 @@ def _make_union__init__(fields: list[str]) -> str:
     """
     field_args = ", ".join(f"{field} = None" for field in fields)
     field_init = "\n".join(
-        f" object.__setattr__(self, '{name}', {name} if {name} is not None else _{i}_default)"
+        f" object.__setattr__(self, '{name}', {name} if {name} is not None else _{i}_default())"
         for i, name in enumerate(fields)
     )
 
@@ -976,7 +969,7 @@ def _generate_structure__init__(fields: list[Field]) -> FunctionType:
             co_names=_remap_co_values(template.__code__.co_names, mapping),
             co_varnames=_remap_co_values(template.__code__.co_varnames, mapping),
         ),
-        template.__globals__ | {f"__{field._name}_default__": field.type.__default__() for field in fields},
+        template.__globals__ | {f"__{field._name}_default__": _default_factory(field.type) for field in fields},
         argdefs=template.__defaults__,
     )
 
@@ -996,9 +989,15 @@ def _generate_union__init__(fields: list[Field]) -> FunctionType:
             co_names=_remap_co_values(template.__code__.co_names, mapping),
             co_varnames=_remap_co_values(template.__code__.co_varnames, mapping),
         ),
-        template.__globals__ | {f"__{field._name}_default__": field.type.__default__() for field in fields},
+        template.__globals__ | {f"__{field._name}_default__": _default_factory(field.type) for field in fields},
         argdefs=template.__defaults__,
     )
+
+
+def _default_factory(type_: type[BaseType]) -> Callable[[], Any]:
+    """Return a function that returns default values of a type, which are only shared if they're immutable."""
+    value = type_.__default__()
+    return repeat(value).__next__ if isinstance(value, _IMMUTABLE_TYPES) else type_.__default__
 
 
 def _generate_co_mapping(fields: list[Field]) -> dict[str, str]:

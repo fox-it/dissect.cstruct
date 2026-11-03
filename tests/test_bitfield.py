@@ -357,3 +357,47 @@ def test_compiled_bits(endian: str) -> None:
         for size in range(len(compiled.resolve(name))):
             with pytest.raises(EOFError, match=r"^Read \d+ bytes, but expected \d+$"):
                 compiled.resolve(name)(bytes(range(1, 32))[:size], endian=endian)
+
+
+def test_bitfield_after_dynamic_field(cs: cstruct, compiled: bool) -> None:
+    """Test that bit fields sharing a value can be defined, read and written after a dynamic field."""
+    cdef = """
+    struct test {
+        uint8  n;
+        uint8  a[n];
+        uint16 b : 4;
+        uint16 c : 12;
+        uint8  d;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    buf = b"\x02\x01\x02\x34\x12\x03"
+    obj = cs.test(buf)
+
+    assert obj.a == [1, 2]
+    assert obj.b == 4
+    assert obj.c == 0x123
+    assert obj.d == 3
+    assert obj.dumps() == buf
+
+
+def test_bitfield_char_and_uint8(cs: cstruct, compiled: bool) -> None:
+    """Test that ``char`` and ``uint8`` bit fields don't share a value, even though both are read as ``uint8``."""
+    cdef = """
+    struct test {
+        char a : 4;
+        uint8 b : 4;
+        uint8 c;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+    assert len(cs.test) == 3
+
+    # Different types don't share a value of the bit buffer, also if one is read as the other
+    obj = cs.test(b"\x01\x02\x03")
+    assert obj.a == 1
+    assert obj.b == 2
+    assert obj.c == 3

@@ -783,11 +783,11 @@ def test_codegen_make_init() -> None:
     result = _make__init__([f"_{n}" for n in range(5)])
     expected = """
     def __init__(self, _0 = None, _1 = None, _2 = None, _3 = None, _4 = None):
-     self._0 = _0 if _0 is not None else _0_default
-     self._1 = _1 if _1 is not None else _1_default
-     self._2 = _2 if _2 is not None else _2_default
-     self._3 = _3 if _3 is not None else _3_default
-     self._4 = _4 if _4 is not None else _4_default
+     self._0 = _0 if _0 is not None else _0_default()
+     self._1 = _1 if _1 is not None else _1_default()
+     self._2 = _2 if _2 is not None else _2_default()
+     self._3 = _3 if _3 is not None else _3_default()
+     self._4 = _4 if _4 is not None else _4_default()
     """
     assert result == dedent(expected[1:].rstrip())
 
@@ -1168,3 +1168,89 @@ def test_structure_subclass_init(cs: cstruct, compiled: bool) -> None:
     obj = cs.test(b"\x01\x00\x00\x00\x02\x00\x00\x00")
     assert type(obj) is cs.test
     assert list(obj.__dict__) == ["a", "b", "__dynamic_sizes__"]
+
+
+def test_structure_default_not_shared(cs: cstruct, compiled: bool) -> None:
+    """Test that nested structures and arrays in default values aren't shared between instances or array entries."""
+    cdef = """
+    struct nested {
+        uint8 a;
+    };
+
+    struct test {
+        nested b;
+        uint8  c[2];
+        nested d[2];
+        uint8  e[2][2];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    obj = cs.test()
+    obj.b.a = 1
+    obj.c[0] = 2
+    obj.d[0].a = 3
+    obj.e[0][0] = 4
+
+    # Entries of an array are separate values
+    assert obj.d[1].a == 0
+    assert obj.e[1] == [0, 0]
+
+    # Values of different instances are separate values
+    assert cs.test().dumps() == b"\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+
+
+def test_structure_write_return_value(cs: cstruct, compiled: bool) -> None:
+    """Test that writing a structure returns the amount of bytes written, including padding and bit fields."""
+    cdef = """
+    struct test {
+        uint8  a;
+        uint16 b : 4;
+        uint16 c : 12;
+        uint32 d;
+        uint8  e;
+    };
+    """
+    cs.load(cdef, compiled=compiled, align=True)
+
+    assert verify_compiled(cs.test, compiled)
+
+    fh = BytesIO()
+    assert cs.test(a=1, b=2, c=3, d=4, e=5).write(fh) == 12
+    assert fh.getvalue() == b"\x01\x00\x32\x00\x04\x00\x00\x00\x05\x00\x00\x00"
+
+
+def test_structure_write_missing_attribute(cs: cstruct, compiled: bool) -> None:
+    """Test that writing a structure raises an error for missing attributes, instead of writing a default value."""
+    cdef = """
+    struct nested {
+        uint8 a;
+    };
+
+    struct test {
+        uint8  b;
+        nested c;
+        uint8  n;
+        uint8  d[n];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    obj = cs.test(b=1, c=cs.nested(a=2), n=1, d=[3])
+    assert obj.dumps() == b"\x01\x02\x01\x03"
+
+    del obj.b
+    with pytest.raises(AttributeError, match="'test' object has no attribute 'b'"):
+        obj.dumps()
+
+    obj = cs.test(b=1, c=cs.nested(a=2), n=1, d=[3])
+    del obj.d
+    with pytest.raises(AttributeError, match="'test' object has no attribute 'd'"):
+        obj.dumps()
+
+    obj = cs.test(b=1, c=cs.nested(a=2), n=1, d=[3])
+    del obj.c.a
+    with pytest.raises(AttributeError, match="'nested' object has no attribute 'a'"):
+        obj.dumps()

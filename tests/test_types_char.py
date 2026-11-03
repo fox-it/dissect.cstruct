@@ -103,3 +103,47 @@ def test_char_null_terminated(cs: cstruct, stream_type: type, length: int) -> No
 
     with pytest.raises(EOFError, match="Read 0 bytes, but expected 1"):
         cs.char[None](stream_type(data))
+
+
+def test_char_array_bytearray_not_modified(cs: cstruct, compiled: bool) -> None:
+    """Test that writing a ``bytearray`` to a ``char`` array doesn't modify the ``bytearray`` when padding it."""
+    cdef = """
+    struct test {
+        char a[4];
+        char b[];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    a = bytearray(b"a")
+    b = bytearray(b"b")
+    assert cs.test(a=a, b=b).dumps() == b"a\x00\x00\x00b\x00"
+    assert a == b"a"
+    assert b == b"b"
+
+
+def test_char_write_too_long(cs: cstruct) -> None:
+    """Test that writing more than a single character to a ``char`` raises an error, instead of writing all of it."""
+    assert cs.char.dumps(b"x") == b"x"
+    assert cs.char.dumps("x") == b"x"
+    assert cs.char.dumps(0x78) == b"x"
+
+    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+        cs.char.dumps(b"xy")
+
+    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+        cs.char.dumps("xy")
+
+
+def test_char_write_too_short(cs: cstruct, compiled: bool) -> None:
+    """Test that an empty ``char`` is padded, so that a structure always writes all of its fields."""
+    cdef = """
+    struct test {
+        uint8 a;
+        char  b;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert cs.char.dumps(b"") == b"\x00"
+    assert cs.test(a=1, b=b"").dumps() == b"\x01\x00"

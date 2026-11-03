@@ -28,12 +28,15 @@ class WcharArray(str, BaseArray):
         if cls.__null_terminated__:
             data += "\x00"
 
-        if not cls.__dynamic__ and (remaining := cls.__num_entries__ - (actual_size := len(data))):
+        buf = data.encode(Wchar.__encoding_map__[endian], "surrogatepass")
+
+        # A surrogate pair is a single character that takes up two entries of the array
+        if not cls.__dynamic__ and (remaining := cls.__num_entries__ - (actual_size := len(buf) // 2)):
             if remaining < 0:
                 raise ArraySizeError(f"Expected static array size {cls.__num_entries__}, got {actual_size} instead.")
-            data += "\x00" * remaining
+            buf += b"\x00\x00" * remaining
 
-        return stream.write(data.encode(Wchar.__encoding_map__[endian]))
+        return stream.write(buf)
 
 
 class Wchar(str, BaseType):
@@ -42,6 +45,7 @@ class Wchar(str, BaseType):
     __ArrayType__ = WcharArray
 
     __slots__ = ()
+    # Decode with "surrogatepass" so lone surrogates are handled correctly
     __encoding_map__: ClassVar[dict[Endianness, str]] = {
         "@": f"utf-16-{sys.byteorder[0]}e",
         "=": f"utf-16-{sys.byteorder[0]}e",
@@ -72,12 +76,13 @@ class Wchar(str, BaseType):
         if count != EOF and len(data) != count:
             raise EOFError(f"Read {len(data)} bytes, but expected {count}")
 
-        return type.__call__(cls, str(data, cls.__encoding_map__[endian]))
+        return type.__call__(cls, str(data, cls.__encoding_map__[endian], "surrogatepass"))
 
     @classmethod
     def _read_0(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Wchar:
         if _is_seekable(stream):
-            return type.__call__(cls, _read_null_terminated(stream, 2).decode(cls.__encoding_map__[endian]))
+            data = _read_null_terminated(stream, 2)
+            return type.__call__(cls, data.decode(cls.__encoding_map__[endian], "surrogatepass"))
 
         buf = []
         while True:
@@ -90,8 +95,14 @@ class Wchar(str, BaseType):
 
             buf.append(point)
 
-        return type.__call__(cls, b"".join(buf).decode(cls.__encoding_map__[endian]))
+        return type.__call__(cls, b"".join(buf).decode(cls.__encoding_map__[endian], "surrogatepass"))
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: str, *, endian: Endianness) -> int:
-        return stream.write(data.encode(cls.__encoding_map__[endian]))
+        buf = data.encode(cls.__encoding_map__[endian], "surrogatepass")
+
+        # A surrogate pair is a single character that doesn't fit in a single wchar
+        if (actual_size := len(buf) // 2) > 1:
+            raise ValueError(f"Expected a single character, got {actual_size} instead.")
+
+        return stream.write(buf or b"\x00\x00")

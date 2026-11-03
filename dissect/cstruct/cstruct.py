@@ -86,7 +86,7 @@ class cstruct:
             "int24": self._make_int_type("int24", 3, True, alignment=4),
             "uint24": self._make_int_type("uint24", 3, False, alignment=4),
             "int48": self._make_int_type("int48", 6, True, alignment=8),
-            "uint48": self._make_int_type("int48", 6, False, alignment=8),
+            "uint48": self._make_int_type("uint48", 6, False, alignment=8),
             "int128": self._make_int_type("int128", 16, True, alignment=16),
             "uint128": self._make_int_type("uint128", 16, False, alignment=16),
 

@@ -269,3 +269,23 @@ def test_pointer_changing_endian(cs: cstruct) -> None:
     assert obj.dumps(endian=">") == b"\x00\x02"
     assert obj.dereference() == 0x01020304
     assert obj.dereference(endian="<") == 0x04030201
+
+
+def test_pointer_int_type_array(cs: cstruct, compiled: bool) -> None:
+    """Test that compiled structures read arrays of pointers of ``Int`` types by the size of their entries."""
+    cdef = """
+    struct test {
+        uint8   *a[2];
+        uint8   b;
+    };
+    """
+    cs.pointer = cs.uint24
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"\x01\x00\x00\x02\x00\x00\x03"
+    obj = cs.test(buf)
+    assert obj.a == [1, 2]
+    assert obj.b == 3
+    assert obj.dumps() == buf

@@ -380,3 +380,27 @@ def test_align_field_after_nested_struct(cs: cstruct, compiled: bool) -> None:
     assert obj.d == 0x0C
 
     assert obj.dumps() == buf
+
+
+def test_align_after_dynamic_field(cs: cstruct, compiled: bool) -> None:
+    """Test that fields after a dynamic field are aligned to the position in the stream."""
+    cdef = """
+    struct test {
+        uint8  n;
+        uint8  a[n];
+        uint8  b;
+        uint32 c;
+        uint8  d;
+    };
+    """
+    cs.load(cdef, compiled=compiled, align=True)
+
+    assert verify_compiled(cs.test, compiled)
+
+    # Fields after a dynamic field are aligned to the position in the stream, not relative to their preceding field
+    buf = b"\x01\xaa\xbb\x00\x01\x02\x03\x04\xcc\x00\x00\x00"
+    obj = cs.test(buf)
+    assert obj.b == 0xBB
+    assert obj.c == 0x04030201
+    assert obj.d == 0xCC
+    assert obj.dumps() == buf

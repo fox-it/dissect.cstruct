@@ -788,3 +788,98 @@ def test_compiled_union_member_offset() -> None:
             messages.append(str(exc.value))
 
         assert messages[0] == messages[1]
+
+
+UNION_NESTED = """
+struct inner {
+    uint8 a;
+    uint8 b;
+};
+
+struct middle {
+    inner c;
+    uint16 d;
+};
+
+union test {
+    middle e;
+    uint8 f[4];
+    uint32 g;
+};
+"""
+
+
+def test_union_default_nested(cs: cstruct, compiled: bool) -> None:
+    """Test that a union with doubly nested structures can be created with separate default values."""
+    cs.load(UNION_NESTED, compiled=compiled)
+
+    assert cs.test().dumps() == b"\x00\x00\x00\x00"
+    assert cs.test().e.c.a == 0
+
+    # Default values of different instances are separate values
+    obj = cs.test()
+    obj.e.d = 1
+    assert obj.g == 0x10000
+    assert cs.test().e.d == 0
+
+
+def test_union_update_nested_field(cs: cstruct, compiled: bool) -> None:
+    """Test that setting a doubly nested field of a union rebuilds the union from its top level field."""
+    cs.load(UNION_NESTED, compiled=compiled)
+
+    obj = cs.test(b"\x01\x02\x03\x04")
+    obj.e.c.a = 5
+    assert obj.f == [5, 2, 3, 4]
+    assert obj.g == 0x04030205
+    assert obj.dumps() == b"\x05\x02\x03\x04"
+
+
+def test_union_update_anonymous_field(cs: cstruct, compiled: bool) -> None:
+    """Test that setting a field of an anonymous structure in a union doesn't try to rebuild from that field."""
+    cdef = """
+    union test {
+        struct {
+            uint16 a;
+            uint16 b;
+        };
+        uint32 c;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    obj = cs.test(b"\x01\x00\x02\x00")
+    obj.a = 3
+    assert obj.a == 3
+    assert obj.c == 0x0020003
+    assert obj.dumps() == b"\x03\x00\x02\x00"
+
+
+def test_union_in_union(cs: cstruct, compiled: bool) -> None:
+    """Test that a union nested in a union can be created, read and updated."""
+    cdef = """
+    union test {
+        struct {
+            union {
+                struct {
+                    uint8 a;
+                } b;
+                uint8 c;
+            } d;
+        } e;
+        uint8 f;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert cs.test().dumps() == b"\x00"
+
+    obj = cs.test(b"\x01")
+    assert obj.e.d.b.a == 1
+    assert obj.e.d.c == 1
+    assert obj.f == 1
+
+    obj.e.d.b.a = 2
+    assert obj.e.d.b.a == 2
+    assert obj.e.d.c == 2
+    assert obj.f == 2
+    assert obj.dumps() == b"\x02"

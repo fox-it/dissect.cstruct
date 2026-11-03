@@ -27,7 +27,7 @@ def f(field_type: type[BaseType], offset: int | None = 0, name: str = "") -> Fie
     return Field(name, field_type, offset=offset)
 
 
-def generator(cs: cstruct, fields: list[Field]) -> compiler._ReadSourceGenerator:
+def read_generator(cs: cstruct, fields: list[Field]) -> compiler._ReadSourceGenerator:
     return compiler._ReadSourceGenerator(cs._make_struct("test", []), fields)
 
 
@@ -101,6 +101,7 @@ def test_generate_struct_info_offsets(cs: cstruct) -> None:
         ([(1, "B"), (0, "x"), (2, "x"), (1, "H")], "B2xH"),
         ([(0, "x"), (1, "B"), (1, "B")], "2B"),
         ([(1, "B"), (0, "H"), (1, "B")], "BB"),
+        ([(2, "s"), (3, "s"), (1, "B")], "2s3sB"),
         ([], ""),
     ],
 )
@@ -115,7 +116,7 @@ def test_generate_packed_read(cs: cstruct) -> None:
         f(cs.uint32, name="c"),
         f(cs.int64, name="d"),
     ]
-    code = next(generator(cs, fields)._generate_packed_source(fields))
+    code = next(read_generator(cs, fields)._generate_packed_source(fields))
 
     expected = """
     buf = stream.read(15)
@@ -137,7 +138,7 @@ def test_generate_packed_read_array(cs: cstruct) -> None:
         f(cs.uint32[4], name="c"),
         f(cs.int64[5], name="d"),
     ]
-    code = next(generator(cs, fields)._generate_packed_source(fields))
+    code = next(read_generator(cs, fields)._generate_packed_source(fields))
 
     expected = """
     buf = stream.read(64)
@@ -161,21 +162,21 @@ def test_generate_packed_read_byte_types(cs: cstruct) -> None:
         f(cs.int24, name="e"),
         f(cs.int24[2], name="f"),
     ]
-    code = next(generator(cs, fields)._generate_packed_source(fields))
+    code = next(read_generator(cs, fields)._generate_packed_source(fields))
 
     expected = """
     buf = stream.read(18)
     if len(buf) != 18: raise EOFError(f"Read {len(buf)} bytes, but expected 18")
     _value0 = _type_call(_type0, buf[0:1])
     _value1 = _type_call(_type1, buf[1:3])
-    _value2 = _type_call(_type2, str(buf[3:5], _encoding0[endian]))
-    _value3 = _type_call(_type3, str(buf[5:9], _encoding0[endian]))
+    _value2 = _type_call(_type2, str(buf[3:5], _encoding0[endian], 'surrogatepass'))
+    _value3 = _type_call(_type3, str(buf[5:9], _encoding0[endian], 'surrogatepass'))
     _value4 = _type_call(_type4, _int_from_bytes(buf[9:12], _byteorder[endian], signed=True))
     _array_buf = buf[12:18]
     """
     expected = dedent(expected) + (
-        "_value5 = _type_call(_type5, [_type_call(_type4, "
-        "_int_from_bytes(_array_buf[i:i + 3], _byteorder[endian], signed=True)) for i in range(0, 6, 3)])\n"
+        "_value5 = _type_call(_type5, list(map(_type_call, _repeat(_type4), "
+        "[_int_from_bytes(_array_buf[i:i + 3], _byteorder[endian], signed=True) for i in range(0, 6, 3)])))\n"
     )
 
     assert code == expected
@@ -191,7 +192,7 @@ def test_generate_packed_read_composite_types(cs: cstruct, TestEnum: type[Enum])
         f(cs.void),
         f(TestEnum[2], name="c"),
     ]
-    code = next(generator(cs, fields)._generate_packed_source(fields))
+    code = next(read_generator(cs, fields)._generate_packed_source(fields))
 
     expected = """
     buf = stream.read(11)
@@ -213,7 +214,7 @@ def test_generate_packed_read_offsets(cs: cstruct) -> None:
         f(cs.uint8, name="a"),
         f(cs.uint8, 8, name="b"),
     ]
-    code = next(generator(cs, fields)._generate_packed_source(fields))
+    code = next(read_generator(cs, fields)._generate_packed_source(fields))
 
     expected = """
     buf = stream.read(9)
@@ -228,7 +229,7 @@ def test_generate_packed_read_offsets(cs: cstruct) -> None:
 
 def test_generate_structure_read(cs: cstruct) -> None:
     field = Field("a", Mock(__alignment__=None, __dynamic__=True, __anonymous__=False))
-    code = next(generator(cs, [field])._generate_field_source(field))
+    code = next(read_generator(cs, [field])._generate_field_source(field))
 
     expected = """
     values = {}
@@ -242,7 +243,7 @@ def test_generate_structure_read(cs: cstruct) -> None:
 
 def test_generate_structure_read_anonymous(cs: cstruct) -> None:
     field = Field("a", Mock(__alignment__=None, __dynamic__=True, __anonymous__=True))
-    code = next(generator(cs, [field])._generate_field_source(field))
+    code = next(read_generator(cs, [field])._generate_field_source(field))
 
     expected = """
     values = {}
@@ -256,7 +257,7 @@ def test_generate_structure_read_anonymous(cs: cstruct) -> None:
 
 def test_generate_array_read(cs: cstruct) -> None:
     field = Field("a", Mock(__alignment__=None, __dynamic__=True))
-    code = next(generator(cs, [field])._generate_field_source(field))
+    code = next(read_generator(cs, [field])._generate_field_source(field))
 
     expected = """
     values = {}
@@ -270,7 +271,7 @@ def test_generate_array_read(cs: cstruct) -> None:
 
 def test_generate_bits_read(cs: cstruct, TestEnum: type[Enum]) -> None:
     field = Field("a", cs.int8, 2)
-    code = next(generator(cs, [field])._generate_bits_source(field))
+    code = next(read_generator(cs, [field])._generate_bits_source(field))
 
     expected = """
     _bit_buffer = _type0._read(stream, endian=endian)
@@ -282,7 +283,7 @@ def test_generate_bits_read(cs: cstruct, TestEnum: type[Enum]) -> None:
     assert code == dedent(expected)
 
     field = Field("b", TestEnum, 2)
-    code = next(generator(cs, [field])._generate_bits_source(field))
+    code = next(read_generator(cs, [field])._generate_bits_source(field))
 
     expected = """
     _bit_buffer = _type0._read(stream, endian=endian)
@@ -306,7 +307,7 @@ def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, oth
         Field("c", cs.char[Expression("size")], offset=3),
     ]
 
-    output = "\n".join(generator(cs, fields)._generate_fields_source())
+    output = "\n".join(read_generator(cs, fields)._generate_fields_source())
 
     shift = _type.__size__ * 8 - 4
     expected = f"""
@@ -351,7 +352,7 @@ def test_generate_fields_dynamic_before_bitfield(cs: cstruct, TestEnum: Enum, ot
         Field("c", cs.char[Expression("size")], offset=3),
     ]
 
-    output = "\n".join(generator(cs, fields)._generate_fields_source())
+    output = "\n".join(read_generator(cs, fields)._generate_fields_source())
 
     shift = _type.__size__ * 8 - 4
     expected = f"""

@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import warnings
 from io import SEEK_CUR, BytesIO
+from types import MethodType
 from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, TypeVar
 
 from dissect.cstruct.exception import ArraySizeError
@@ -18,6 +19,8 @@ if TYPE_CHECKING:
 
 
 EOF = -0xE0F  # Negative counts are illegal anyway, so abuse that for our EOF sentinel
+
+_IMMUTABLE_TYPES = (int, float, bytes, str)
 
 
 class MetaType(type):
@@ -218,7 +221,8 @@ class MetaType(type):
             array: The array to write.
             endian: The endianness to use when parsing (little, big, network, <, >, !, @ or =).
         """
-        return sum(cls._write(stream, entry, endian=endian) for entry in array)
+        write = cls._write
+        return sum(write(stream, entry, endian=endian) for entry in array)
 
     def _write_0(cls, stream: BinaryIO, array: list[Self], *, endian: Endianness) -> int:  # type: ignore
         """Internal function for writing null-terminated arrays.
@@ -295,20 +299,29 @@ class _overload:
         b'\\x7b\\x00\\x00\\x00'
     """
 
-    def __init__(self, func: Callable[..., Any]) -> None:
+    def __init__(self, func: Callable[..., Any], method: Callable[..., Any]) -> None:
         self.func = func
+        self.method = method
 
-    def __get__(self, instance: BaseType | None, owner: type[BaseType]) -> Callable[[], bytes]:
+    def __get__(self, instance: BaseType | None, owner: type[BaseType]) -> Callable[..., Any]:
         if instance is None:
             return functools.partial(self.func, owner)
-        return functools.partial(self.func, instance.__class__, value=instance)
+        return MethodType(self.method, instance)
+
+
+def _instance_dumps(self: BaseType, *, endian: AllowedEndianness | None = None) -> bytes:
+    return MetaType.dumps(self.__class__, self, endian=endian)
+
+
+def _instance_write(self: BaseType, stream: BinaryIO, *, endian: AllowedEndianness | None = None) -> int:
+    return MetaType.write(self.__class__, stream, self, endian=endian)
 
 
 class BaseType(metaclass=MetaType):
     """Base class for cstruct type classes."""
 
-    dumps = _overload(MetaType.dumps)
-    write = _overload(MetaType.write)
+    dumps = _overload(MetaType.dumps, _instance_dumps)
+    write = _overload(MetaType.write, _instance_write)
 
     def __len__(self) -> int:
         """Return the byte size of the type."""
@@ -338,9 +351,10 @@ class BaseArray(BaseType):
 
     @classmethod
     def __default__(cls) -> BaseType:
-        return type.__call__(
-            cls, [cls.__type__.__default__()] * (cls.__num_entries__ if isinstance(cls.__num_entries__, int) else 0)
-        )
+        count = cls.__num_entries__ if isinstance(cls.__num_entries__, int) else 0
+        if isinstance(value := cls.__type__.__default__(), _IMMUTABLE_TYPES):
+            return type.__call__(cls, [value] * count)
+        return type.__call__(cls, [cls.__type__.__default__() for _ in range(count)])
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> list[BaseType]:

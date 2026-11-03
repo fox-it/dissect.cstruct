@@ -182,8 +182,10 @@ _GLOBALS = {
 }
 
 
-class _ReadSourceGenerator:
-    """Generates the source code of an optimized ``_read`` method for a structure or union."""
+class _SourceGenerator:
+    """Base class for generating the source code of an optimized method of a structure or union."""
+
+    name: str
 
     def __init__(self, cls: type[Structure], fields: list[Field], inline: bool = True):
         self.cls = cls
@@ -191,23 +193,16 @@ class _ReadSourceGenerator:
         self.align = cls.__align__
         self.inline = inline and not self.align
 
-        # Witnesses of inlined structure types (symbol of the type -> symbol of its __init__ at compile time)
-        self._witnesses: dict[str, str] = {}
-        self._fallback_symbol: str | None = None
-
-        # The state of the bit buffer: the type of its current value and the remaining bits
-        self._bits: tuple[type[BaseType], int] | None = None
-        self._var_ids: dict[str, int] = {}
-
         # The values available to the generated code
         self.symbols: dict[str, Any] = {"cs": cls.__cs__}
         self._symbol_names: dict[int, str] = {}
 
-        # (field name, local variable name) of all fields assigned so far
-        self._assigned: list[tuple[str, str]] = []
-        self._has_context = False
-        self._uses_start = False
-        self._uses_sizes = False
+        # Witnesses of inlined structure types (symbol of the type -> symbol of its __init__ at compile time)
+        self._witnesses: dict[str, str] = {}
+
+        # The state of the bit buffer: the type of its current value and the remaining bits
+        self._bits: tuple[type[BaseType], int] | None = None
+        self._var_ids: dict[str, int] = {}
 
     def _type_symbol(self, type_: type[BaseType]) -> str:
         """Add a type as symbol, returns its name."""
@@ -220,6 +215,72 @@ class _ReadSourceGenerator:
             self.symbols[symbol] = value
         return symbol
 
+    def _var(self, name: str) -> str:
+        """Return a unique variable name for the generated code."""
+        index = self._var_ids.get(name, 0)
+        self._var_ids[name] = index + 1
+        return f"_{name}{index}"
+
+    def _witness(self, type_: type[Structure]) -> str:
+        """Add an inlined type as symbol, with a witness to detect modifications to it after compilation."""
+        symbol = self._type_symbol(type_)
+        self._witnesses[symbol] = self._add_symbol(type_.__init__, "init")
+        return symbol
+
+    def _modified_checks(self) -> list[str]:
+        """Return the conditions that are true if any of the inlined types were modified after compilation."""
+        return [f"{type_}.__init__ is not {init}" for type_, init in self._witnesses.items()]
+
+    def _starts_bit_value(self, field: Field) -> bool:
+        """Return whether a bit field is the first of a new value of the bit buffer."""
+        return self._bits is None or self._bits[1] == 0 or self._bits[0] is not _get_bit_buffer_type(field)
+
+    def _advance_bits(self, field: Field) -> int:
+        """Update the state of the bit buffer for a bit field, returns the bits that were remaining before it."""
+        if self._starts_bit_value(field):
+            self._bits = (_get_bit_buffer_type(field), _get_bits_type(field).__size__ * 8)
+        remaining = self._bits[1]
+        self._bits = (self._bits[0], remaining - field.bits)
+        return remaining
+
+    def generate(self) -> MethodType:
+        source = self.generate_source()
+
+        code = python_compile(source, f"<compiled {self.cls.__name__}.{self.name}>", "exec")
+        exec(code, {**_GLOBALS, **self.symbols}, d := {})
+        obj = d.popitem()[1]
+        obj.__source__ = source
+
+        return classmethod(obj)
+
+    def generate_source(self) -> str:
+        if issubclass(self.cls, Union):
+            return self._generate_union_source()
+        return self._generate_struct_source()
+
+    def _generate_struct_source(self) -> str:
+        raise NotImplementedError
+
+    def _generate_union_source(self) -> str:
+        raise NotImplementedError
+
+
+class _ReadSourceGenerator(_SourceGenerator):
+    """Generates the source code of an optimized ``_read`` method for a structure or union."""
+
+    name = "_read"
+
+    def __init__(self, cls: type[Structure], fields: list[Field], inline: bool = True):
+        super().__init__(cls, fields, inline)
+
+        self._fallback_symbol: str | None = None
+
+        # (field name, local variable name) of all fields assigned so far
+        self._assigned: list[tuple[str, str]] = []
+        self._has_context = False
+        self._uses_start = False
+        self._uses_sizes = False
+
     def _context(self, lines: list[str]) -> str:
         """Return the name of the context dictionary, creating it from the fields read so far if needed."""
         if not self._has_context:
@@ -228,12 +289,6 @@ class _ReadSourceGenerator:
             lines.append(f"values = {{{items}}}")
 
         return "values"
-
-    def _var(self, name: str) -> str:
-        """Return a unique variable name for the generated code."""
-        index = self._var_ids.get(name, 0)
-        self._var_ids[name] = index + 1
-        return f"_{name}{index}"
 
     def _assign(self, field: Field, value: str) -> str:
         """Assign a value to a new local variable for the given field, and the context dictionary if it exists."""
@@ -252,31 +307,6 @@ class _ReadSourceGenerator:
             fallback = _Fallback(self.cls, self.fields)
             self._fallback_symbol = self._add_symbol(fallback, "fallback")
         return self._fallback_symbol
-
-    def _witness(self, type_: type[Structure]) -> str:
-        """Add an inlined type as symbol, with a witness to detect modifications to it after compilation."""
-        symbol = self._type_symbol(type_)
-        self._witnesses[symbol] = self._add_symbol(type_.__init__, "init")
-        return symbol
-
-    def _modified_checks(self) -> list[str]:
-        """Return the conditions that are true if any of the inlined types were modified after compilation."""
-        return [f"{type_}.__init__ is not {init}" for type_, init in self._witnesses.items()]
-
-    def generate(self) -> MethodType:
-        source = self.generate_source()
-
-        code = python_compile(source, f"<compiled {self.cls.__name__}._read>", "exec")
-        exec(code, {**_GLOBALS, **self.symbols}, d := {})
-        obj = d.popitem()[1]
-        obj.__source__ = source
-
-        return classmethod(obj)
-
-    def generate_source(self) -> str:
-        if issubclass(self.cls, Union):
-            return self._generate_union_source()
-        return self._generate_struct_source()
 
     def _generate_struct_source(self) -> str:
         """Generate the code for reading a structure."""
@@ -405,6 +435,16 @@ class _ReadSourceGenerator:
 
             # Everything else - basic and composite types (and arrays of them), and inlined structures
             else:
+                if field.offset is None:
+                    # The alignment depends on the position in the stream, so this needs a new block
+                    if self.align:
+                        yield from flush()
+                # A block is read in order, so a field before the current position needs a new block
+                elif current_offset is None or field.offset < current_offset:
+                    yield from flush()
+                elif current_block:
+                    current_offset = field.offset
+
                 if not current_block:
                     yield from align_to_field(field)
                 current_block.append(field)
@@ -456,18 +496,11 @@ class _ReadSourceGenerator:
         element = self._type_symbol(field.type.__type__)
         return f"_type_call({type_}, {element}._read_array(stream, _count, context={context}, endian=endian))"
 
-    def _starts_bit_value(self, field: Field) -> bool:
-        """Return whether a bit field is read from a new value of the bit buffer."""
-        return self._bits is None or self._bits[1] == 0 or self._bits[0] is not _get_bits_type(field)
-
     def _generate_bits_source(self, field: Field) -> Iterator[str]:
         """Generate the code for reading a bit field."""
         read_type = _get_bits_type(field)
         new_value = self._starts_bit_value(field)
-        if new_value:
-            self._bits = (read_type, read_type.__size__ * 8)
-        remaining = self._bits[1]
-        self._bits = (read_type, remaining - field.bits)
+        remaining = self._advance_bits(field)
 
         lines = []
         if new_value:
@@ -498,7 +531,7 @@ class _ReadSourceGenerator:
         """Generate the code for reading consecutive packed fields."""
         unpack = _Unpack("data")
         reads = []
-        size = self._pack_fields(fields, 0, unpack, reads, self._assign_local, self.align)
+        size = self._pack_fields(fields, 0, unpack, reads, self._assign_local)
 
         lines = [f"buf = stream.read({size})", _check_eof(size)]
         if unpack.has_values():
@@ -513,7 +546,6 @@ class _ReadSourceGenerator:
         unpack: _Unpack,
         lines: list[str],
         target: Callable[[Field, str], list[str]],
-        align: bool = False,
     ) -> int:
         """Generate the code for reading the given fields from ``buf``, starting at the given offset.
 
@@ -523,7 +555,7 @@ class _ReadSourceGenerator:
         Returns the offset after the last field.
         """
         inline = _inline_kind if self.inline else None
-        for field, count, char in _generate_struct_info(fields, align, inline=inline):
+        for field, count, char in _generate_struct_info(fields, inline=inline):
             if field is None:
                 # Padding
                 unpack.add(count, "x")
@@ -595,16 +627,15 @@ class _ReadSourceGenerator:
         lines.append(f"_object_setattr({var}, '_endian', endian)")
         self._proxify(var, var, fields, lines)
 
-    def _proxify(self, union: str, var: str, fields: list[Field], lines: list[str]) -> None:
+    def _proxify(self, union: str, var: str, fields: list[Field], lines: list[str], attr: str | None = None) -> None:
         """Generate the code equivalent to ``Union._proxify``."""
         for field in fields:
             if issubclass(field.type, Structure):
                 nested = self._var("nested")
+                member = attr or field._name
                 lines.append(f"{nested} = _getattr({var}, {field._name!r})")
-                lines.append(
-                    f"_object_setattr({var}, {field._name!r}, _UnionProxy({union}, {field._name!r}, {nested}))"
-                )
-                self._proxify(union, nested, field.type.__fields__, lines)
+                lines.append(f"_object_setattr({var}, {field._name!r}, _UnionProxy({union}, {member!r}, {nested}))")
+                self._proxify(union, nested, field.type.__fields__, lines, member)
 
     def _generate_packed_field_source(
         self,
@@ -622,19 +653,18 @@ class _ReadSourceGenerator:
             array = self._type_symbol(field.type)
             element = self._type_symbol(field_type.__type__)
 
-            if issubclass(field_type.__type__, Int):
-                elem_size = field_type.__type__.__size__
-                signed = bool(field_type.__type__.signed)
+            if issubclass(read_type, Int):
+                # Everything that's read as an integer type is sliced directly out of the buffer
+                elem_size = read_type.__size__
+                signed = bool(read_type.signed)
                 lines.append(f"_array_buf = {getter}")
                 raw = f"_int_from_bytes(_array_buf[i:i + {elem_size}], _byteorder[endian], signed={signed})"
-                value = f"[_type_call({element}, {raw}) for i in range(0, {count}, {elem_size})]"
-            elif issubclass(field_type.__type__, Pointer):
+                getter = f"[{raw} for i in range(0, {count}, {elem_size})]"
+
+            if issubclass(field_type.__type__, Pointer):
                 context = self._context(lines)
                 item = f"{element}.__new__({element}, value, stream, context={context}, endian=endian)"
                 value = f"[{item} for value in {getter}]"
-            elif issubclass(read_type, (Wchar, Int)):
-                # Preserve the behaviour of the generic parsing path for these types
-                value = f"[{element}(value) for value in {getter}]"
             else:
                 value = f"list(map(_type_call, _repeat({element}), {getter}))"
 
@@ -647,7 +677,7 @@ class _ReadSourceGenerator:
             encoding = self._add_symbol(read_type.__encoding_map__, "encoding")
             # Using str() instead of .decode() also supports other bytes-like objects returned by the stream
             type_ = self._type_symbol(field.type)
-            lines.extend(target(field, f"_type_call({type_}, str({getter}, {encoding}[endian]))"))
+            lines.extend(target(field, f"_type_call({type_}, str({getter}, {encoding}[endian], 'surrogatepass'))"))
 
         elif issubclass(field_type, Pointer):
             context = self._context(lines)
@@ -694,8 +724,7 @@ class _Unpack:
 
     def functions(self, name: str) -> dict[str, Callable]:
         """Return the given function of the struct for every endianness."""
-        fmt = _optimize_struct_fmt(self.items)
-        return {endian: getattr(_struct(endian, fmt), name) for endian in _ENDIANNESS}
+        return _struct_functions(_optimize_struct_fmt(self.items), name)
 
 
 def _check_union(cls: type[Union], fields: list[Field], inline: bool = True) -> int:
@@ -809,24 +838,17 @@ def _block(lines: list[str]) -> str:
 
 def _generate_struct_info(
     fields: list[Field],
-    align: bool = False,
     inline: Callable[[type[BaseType]], str | None] | None = None,
 ) -> Iterator[tuple[Field, int, str]]:
     if not fields:
         return
 
     current_offset = fields[0].offset
-    imaginary_offset = 0
     for field in fields:
         # We moved -- probably due to alignment
         if field.offset is not None and (drift := field.offset - current_offset) > 0:
             yield None, drift, "x"
             current_offset += drift
-
-        if align and field.offset is None and (drift := -imaginary_offset & (field.alignment - 1)) > 0:
-            # Assume we started at a correctly aligned boundary
-            yield None, drift, "x"
-            imaginary_offset += drift
 
         count = 1
         read_type = _get_read_type(field.type)
@@ -853,25 +875,41 @@ def _generate_struct_info(
         elif issubclass(read_type, (Char, Wchar, Int)):
             yield field, count * read_type.__size__, "x"
 
-        size = count * read_type.__size__
-        imaginary_offset += size
         if current_offset is not None:
-            current_offset += size
+            current_offset += count * read_type.__size__
 
 
 def _optimize_struct_fmt(items: Iterable[tuple[int, str]]) -> str:
-    """Create a struct format string from ``(count, char)`` items, merging consecutive items of the same char."""
+    """Create a struct format string from ``(count, char)`` items, merging consecutive items of the same char.
+
+    Byte strings aren't merged, since those are a single value regardless of their count.
+    """
     chars = []
     for char, group in groupby(items, key=itemgetter(1)):
-        if count := sum(count for count, _ in group):
+        if char == "s":
+            chars.extend(f"{count}{char}" for count, _ in group)
+        elif count := sum(count for count, _ in group):
             chars.append(f"{count if count > 1 else ''}{char}")
 
     return "".join(chars)
 
 
+def _struct_functions(fmt: str, name: str) -> dict[str, Callable]:
+    """Return the given function of a struct with the given format for every endianness.
+
+    The ``@`` endianness uses the ``=`` format, since ``@`` would add padding between items to align them.
+    """
+    return {endian: getattr(_struct("=" if endian == "@" else endian, fmt), name) for endian in _ENDIANNESS}
+
+
+def _get_bit_buffer_type(field: Field) -> type[BaseType]:
+    """Return the type that ``BitBuffer`` uses for a bit field, only bit fields of the same type share a value."""
+    return field.type.__type__ if issubclass(field.type, (Enum, Flag)) else field.type
+
+
 def _get_bits_type(field: Field) -> type[BaseType]:
     """Return the type that ``BitBuffer`` reads a bit field as."""
-    type_ = field.type.__type__ if issubclass(field.type, (Enum, Flag)) else field.type
+    type_ = _get_bit_buffer_type(field)
     return type_.__cs__.uint8 if issubclass(type_, Char) else type_
 
 
