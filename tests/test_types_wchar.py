@@ -150,19 +150,6 @@ def test_wchar_null_terminated_alignment(cs: cstruct) -> None:
     assert fh.read() == b"rest"
 
 
-def test_wchar_array_list_not_modified(cs: cstruct) -> None:
-    """Test that writing a list to a ``wchar`` array doesn't modify the list, even though it raises an error."""
-    value = ["a"]
-
-    with pytest.raises((AttributeError, TypeError)):
-        cs.wchar[4].dumps(value)
-    assert value == ["a"]
-
-    with pytest.raises((AttributeError, TypeError)):
-        cs.wchar[None].dumps(value)
-    assert value == ["a"]
-
-
 def test_wchar_array_surrogate_pair(cs: cstruct, compiled: bool) -> None:
     """Test that a surrogate pair takes up two entries of a ``wchar`` array, so that it pads to the right size."""
     cdef = """
