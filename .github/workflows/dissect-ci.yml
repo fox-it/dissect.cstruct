@@ -14,6 +14,7 @@ jobs:
     secrets: inherit
     with:
       run-benchmarks: true
+      benchmark-mode: simulation
 
   publish:
     if: ${{ github.ref_name == 'main' || github.ref_type == 'tag' }}
