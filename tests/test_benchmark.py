@@ -11,15 +11,32 @@ from dissect.cstruct.lexer import tokenize
 from dissect.cstruct.parser import CStyleParser, _join_line_continuations
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from pytest_benchmark.fixture import BenchmarkFixture
 
     from dissect.cstruct.cstruct import cstruct
     from dissect.cstruct.lexer import Token
+    from dissect.cstruct.types import BaseType
+
+
+@pytest.fixture(params=["read", "write"])
+def read_or_write(request: pytest.FixtureRequest, benchmark: BenchmarkFixture) -> Callable:
+    """Benchmark parsing with the given function, or writing the value that it parses."""
+
+    def run(parse: Callable[[], BaseType]) -> None:
+        if request.param == "read":
+            benchmark(parse)
+        else:
+            obj = parse()
+            benchmark(lambda: obj.dumps())
+
+    return run
 
 
 @pytest.mark.benchmark
-def test_benchmark_basic(cs: cstruct, compiled: bool, benchmark: BenchmarkFixture) -> None:
-    """Benchmark the parsing of a simple struct with both the compiled and interpreted backends."""
+def test_benchmark_basic(cs: cstruct, compiled: bool, read_or_write: Callable) -> None:
+    """Benchmark the parsing and writing of a simple struct with both the compiled and interpreted backends."""
     cdef = """
     struct test {
         uint32  a;
@@ -30,12 +47,12 @@ def test_benchmark_basic(cs: cstruct, compiled: bool, benchmark: BenchmarkFixtur
     """
     cs.load(cdef, compiled=compiled)
 
-    benchmark(lambda: cs.test(b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x03\x00\x04"))
+    read_or_write(lambda: cs.test(b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x03\x00\x04"))
 
 
 @pytest.mark.benchmark
-def test_benchmark_union(cs: cstruct, compiled: bool, benchmark: BenchmarkFixture) -> None:
-    """Benchmark the parsing of a simple union with both the compiled and interpreted backends."""
+def test_benchmark_union(cs: cstruct, compiled: bool, read_or_write: Callable) -> None:
+    """Benchmark the parsing and writing of a simple union with both the compiled and interpreted backends."""
     cdef = """
     union test {
         uint32  a;
@@ -46,12 +63,12 @@ def test_benchmark_union(cs: cstruct, compiled: bool, benchmark: BenchmarkFixtur
     """
     cs.load(cdef, compiled=compiled)
 
-    benchmark(lambda: cs.test(b"\x01\x02\x03\x04\x05\x06\x07\x08"))
+    read_or_write(lambda: cs.test(b"\x01\x02\x03\x04\x05\x06\x07\x08"))
 
 
 @pytest.mark.benchmark
-def test_benchmark_union_nested(cs: cstruct, compiled: bool, benchmark: BenchmarkFixture) -> None:
-    """Benchmark the parsing of a union with nested structures with both the compiled and interpreted backends."""
+def test_benchmark_union_nested(cs: cstruct, compiled: bool, read_or_write: Callable) -> None:
+    """Benchmark the parsing and writing of a union with nested structures with both backends."""
     cdef = """
     union test {
         struct {
@@ -68,12 +85,12 @@ def test_benchmark_union_nested(cs: cstruct, compiled: bool, benchmark: Benchmar
     """
     cs.load(cdef, compiled=compiled)
 
-    benchmark(lambda: cs.test(b"\x01\x02\x03\x04\x05\x06\x07\x08"))
+    read_or_write(lambda: cs.test(b"\x01\x02\x03\x04\x05\x06\x07\x08"))
 
 
 @pytest.mark.benchmark
-def test_benchmark_union_array(cs: cstruct, compiled: bool, benchmark: BenchmarkFixture) -> None:
-    """Benchmark the parsing of an array of unions with both the compiled and interpreted backends."""
+def test_benchmark_union_array(cs: cstruct, compiled: bool, read_or_write: Callable) -> None:
+    """Benchmark the parsing and writing of an array of unions with both the compiled and interpreted backends."""
     cdef = """
     union test {
         uint32  a;
@@ -83,7 +100,7 @@ def test_benchmark_union_array(cs: cstruct, compiled: bool, benchmark: Benchmark
     cs.load(cdef, compiled=compiled)
 
     buf = bytes(range(64))
-    benchmark(lambda: cs.test[16](buf))
+    read_or_write(lambda: cs.test[16](buf))
 
 
 @pytest.mark.benchmark
@@ -241,8 +258,8 @@ def test_benchmark_lexer_and_parser(cs: cstruct, benchmark: BenchmarkFixture) ->
 
 
 @pytest.mark.benchmark
-def test_benchmark_nested_dynamic(cs: cstruct, compiled: bool, benchmark: BenchmarkFixture) -> None:
-    """Benchmark the parsing of a realistic struct with nested structs and dynamically sized arrays."""
+def test_benchmark_nested_dynamic(cs: cstruct, compiled: bool, read_or_write: Callable) -> None:
+    """Benchmark the parsing and writing of a realistic struct with nested structs and dynamically sized arrays."""
     cs.load(_BENCHMARK_CDEF, compiled=compiled)
 
     buf = (
@@ -254,12 +271,12 @@ def test_benchmark_nested_dynamic(cs: cstruct, compiled: bool, benchmark: Benchm
         + b"\x15\x00\x00\x00" * 4  # Sid.SubAuthority
     )
 
-    benchmark(lambda: cs.ACCESS_ALLOWED_OBJECT_ACE(buf))
+    read_or_write(lambda: cs.ACCESS_ALLOWED_OBJECT_ACE(buf))
 
 
 @pytest.mark.benchmark
-def test_benchmark_enum_flag_bits(cs: cstruct, compiled: bool, benchmark: BenchmarkFixture) -> None:
-    """Benchmark the parsing of a struct with enums, flags and bit fields."""
+def test_benchmark_enum_flag_bits(cs: cstruct, compiled: bool, read_or_write: Callable) -> None:
+    """Benchmark the parsing and writing of a struct with enums, flags and bit fields."""
     cdef = """
     enum Type : uint16 {
         A = 1,
@@ -282,7 +299,7 @@ def test_benchmark_enum_flag_bits(cs: cstruct, compiled: bool, benchmark: Benchm
     """
     cs.load(cdef, compiled=compiled)
 
-    benchmark(lambda: cs.test(b"\x01\x00\x05\x00\x34\x12\x01\x00\x00\x00"))
+    read_or_write(lambda: cs.test(b"\x01\x00\x05\x00\x34\x12\x01\x00\x00\x00"))
 
 
 @pytest.mark.benchmark
@@ -302,8 +319,8 @@ def test_benchmark_flag_operators(cs: cstruct, benchmark: BenchmarkFixture) -> N
 
 
 @pytest.mark.benchmark
-def test_benchmark_strings(cs: cstruct, compiled: bool, benchmark: BenchmarkFixture) -> None:
-    """Benchmark the parsing of a struct with fixed size and null-terminated strings."""
+def test_benchmark_strings(cs: cstruct, compiled: bool, read_or_write: Callable) -> None:
+    """Benchmark the parsing and writing of a struct with fixed size and null-terminated strings."""
     cdef = """
     struct test {
         wchar   name[8];
@@ -320,7 +337,7 @@ def test_benchmark_strings(cs: cstruct, compiled: bool, benchmark: BenchmarkFixt
         + b"\x00\x00"
     )
 
-    benchmark(lambda: cs.test(buf))
+    read_or_write(lambda: cs.test(buf))
 
 
 @pytest.mark.benchmark
@@ -348,23 +365,6 @@ def test_benchmark_array(cs: cstruct, benchmark: BenchmarkFixture) -> None:
     buf = bytes(range(64))
 
     benchmark(lambda: cs.uint32[16](buf))
-
-
-@pytest.mark.benchmark
-def test_benchmark_dumps(cs: cstruct, benchmark: BenchmarkFixture) -> None:
-    """Benchmark the writing of a simple struct."""
-    cdef = """
-    struct test {
-        uint32  a;
-        uint64  b;
-        uint16  c;
-        uint8   d;
-    };
-    """
-    cs.load(cdef)
-    obj = cs.test(b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x03\x00\x04")
-
-    benchmark(lambda: obj.dumps())
 
 
 @pytest.mark.benchmark
