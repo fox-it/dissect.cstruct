@@ -419,3 +419,29 @@ def test_int_default(cs: cstruct) -> None:
 
     assert cs.int24[1].__default__() == [0]
     assert cs.int24[None].__default__() == []
+
+
+def test_int_struct_write_range(cs: cstruct, compiled: bool) -> None:
+    """Test that a value that doesn't fit its ``Int`` type raises an error when writing a structure, also in arrays."""
+    cdef = """
+    struct test {
+        uint24  a;
+        int24   b;
+        uint24  c[2];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    assert cs.test(a=1, b=-2, c=[3, 4]).dumps() == b"\x01\x00\x00\xfe\xff\xff\x03\x00\x00\x04\x00\x00"
+
+    with pytest.raises(OverflowError):
+        cs.test(a=1, b=2**23, c=[3, 4]).dumps()
+
+    # A negative value only fits a signed type
+    with pytest.raises(OverflowError):
+        cs.test(a=-1, b=2, c=[3, 4]).dumps()
+
+    with pytest.raises(OverflowError):
+        cs.test(a=1, b=2, c=[3, 2**24]).dumps()

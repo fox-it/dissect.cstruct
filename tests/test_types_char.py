@@ -7,7 +7,7 @@ import pytest
 
 from dissect.cstruct.exception import ArraySizeError
 
-from .utils import NonSeekableStream
+from .utils import NonSeekableStream, verify_compiled
 
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
@@ -122,8 +122,17 @@ def test_char_array_bytearray_not_modified(cs: cstruct, compiled: bool) -> None:
     assert b == b"b"
 
 
-def test_char_write_too_long(cs: cstruct) -> None:
+def test_char_write_too_long(cs: cstruct, compiled: bool) -> None:
     """Test that writing more than a single character to a ``char`` raises an error, instead of writing all of it."""
+    cdef = """
+    struct test {
+        uint8 a;
+        char  b;
+        uint8 c;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
     assert cs.char.dumps(b"x") == b"x"
     assert cs.char.dumps("x") == b"x"
     assert cs.char.dumps(0x78) == b"x"
@@ -133,6 +142,12 @@ def test_char_write_too_long(cs: cstruct) -> None:
 
     with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
         cs.char.dumps("xy")
+
+    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+        cs.test(a=1, b=b"xy", c=2).dumps()
+
+    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+        cs.test(a=1, b="xy", c=2).dumps()
 
 
 def test_char_write_too_short(cs: cstruct, compiled: bool) -> None:
@@ -147,3 +162,58 @@ def test_char_write_too_short(cs: cstruct, compiled: bool) -> None:
 
     assert cs.char.dumps(b"") == b"\x00"
     assert cs.test(a=1, b=b"").dumps() == b"\x01\x00"
+
+
+def test_char_struct_write(cs: cstruct, compiled: bool) -> None:
+    """Test that ``char`` fields accept everything that the ``char`` type can convert."""
+    cdef = """
+    struct test {
+        uint8 a;
+        char  b;
+        uint8 c;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    assert cs.test(a=1, b=b"x", c=2).dumps() == b"\x01x\x02"
+    assert cs.test(a=1, b=bytearray(b"x"), c=2).dumps() == b"\x01x\x02"
+
+    # Integers and strings are converted
+    assert cs.test(a=1, b=0x78, c=2).dumps() == b"\x01x\x02"
+    assert cs.test(a=1, b="x", c=2).dumps() == b"\x01x\x02"
+
+
+def test_char_array_struct_write(cs: cstruct, compiled: bool) -> None:
+    """Test that ``char`` arrays accept everything that their type can convert, and pad values that are too short."""
+    cdef = """
+    struct test {
+        uint8 a;
+        char  b[4];
+        uint8 c;
+        char  d[0];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"\x01abcd\x02"
+    assert cs.test(a=1, b=b"abcd", c=2).dumps() == buf
+    assert cs.test(a=1, b=bytearray(b"abcd"), c=2).dumps() == buf
+    assert cs.test(a=1, b=memoryview(b"abcd"), c=2).dumps() == buf
+    assert cs.test(a=1, b="abcd", c=2).dumps() == buf
+    assert cs.test(a=1, b=[97, 98, 99, 100], c=2).dumps() == buf
+
+    # Shorter values are padded
+    buf = b"\x01a\x00\x00\x00\x02"
+    assert cs.test(a=1, b=b"a", c=2).dumps() == buf
+    assert cs.test(a=1, b=[97], c=2).dumps() == buf
+
+    # Longer values aren't accepted
+    with pytest.raises(ArraySizeError, match="Expected static array size 4, got 5 instead"):
+        cs.test(a=1, b=b"abcde", c=2).dumps()
+
+    with pytest.raises(ArraySizeError, match="Expected static array size 0, got 1 instead"):
+        cs.test(a=1, b=b"abcd", c=2, d=b"e").dumps()

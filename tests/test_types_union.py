@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import io
 from textwrap import dedent
 
 import pytest
@@ -883,3 +884,121 @@ def test_union_in_union(cs: cstruct, compiled: bool) -> None:
     assert obj.e.d.c == 2
     assert obj.f == 2
     assert obj.dumps() == b"\x02"
+
+
+def test_union_write_largest_field(cs: cstruct, compiled: bool) -> None:
+    """Test that a union is written by its largest field, and raises errors for invalid and missing values."""
+    cdef = """
+    union test {
+        uint8   a;
+        uint32  b;
+        char    c[2];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"\x01\x02\x03\x04"
+    obj = cs.test(buf)
+    assert obj.dumps() == buf
+    assert obj.dumps(endian=">") == buf[::-1]
+
+    fh = io.BytesIO()
+    assert obj.write(fh) == 4
+
+
+def test_union_write_empty(cs: cstruct, compiled: bool) -> None:
+    """Test that a union without any fields doesn't write anything."""
+    cs.load("union test {};", compiled=compiled)
+
+    assert cs.test().dumps() == b""
+
+
+def test_union_write_anonymous_largest(cs: cstruct, compiled: bool) -> None:
+    """Test that a union is written by its largest field, also if that's an anonymous structure."""
+    cdef = """
+    union larger {
+        struct {
+            uint32  a;
+            uint32  b;
+        };
+        uint16  c;
+    };
+
+    union only_anonymous {
+        struct {
+            uint8   a;
+        };
+        struct {
+            uint32  b;
+            uint32  c;
+        };
+    };
+
+    union same_size {
+        struct {
+            uint16  a;
+            uint16  b;
+        };
+        uint32  c;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.larger, compiled)
+
+    buf = b"\x01\x02\x03\x04\x05\x06\x07\x08"
+    assert cs.larger(buf).dumps() == buf
+    assert cs.only_anonymous(buf).dumps() == buf
+
+    # Changes to a field of the anonymous structure are written too
+    obj = cs.larger(buf)
+    obj.b = 0x11111111
+    assert obj.dumps() == b"\x01\x02\x03\x04\x11\x11\x11\x11"
+
+    obj.c = 0x2222
+    assert obj.dumps() == b"\x22\x22\x03\x04\x11\x11\x11\x11"
+
+    # A regular field of the same size is preferred, which only makes a difference for the other endianness
+    assert cs.same_size(b"\x01\x02\x03\x04").dumps(endian=">") == b"\x04\x03\x02\x01"
+
+
+def test_union_in_structure_write(cs: cstruct, compiled: bool) -> None:
+    """Test that unions in a structure are written with their changes, and with default values for ``None``."""
+    cdef = """
+    union nested {
+        struct {
+            uint16  a;
+            uint16  b;
+        } c;
+        uint8   d;
+    };
+
+    struct test {
+        uint8   e;
+        nested  f;
+        union {
+            uint16  g;
+            uint8   h;
+        };
+        uint8   i;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"\x01\x02\x00\x03\x00\x04\x05\x06"
+    obj = cs.test(buf)
+    assert obj.dumps() == buf
+
+    obj.f.c.a = 7
+    assert obj.dumps() == b"\x01\x07\x00\x03\x00\x04\x05\x06"
+
+    obj.g = 8
+    assert obj.dumps() == b"\x01\x07\x00\x03\x00\x08\x00\x06"
+
+    # Fields that are None have the default value
+    obj.f = None
+    assert obj.dumps() == b"\x01\x00\x00\x00\x00\x08\x00\x06"

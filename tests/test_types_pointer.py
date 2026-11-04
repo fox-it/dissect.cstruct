@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import struct
 from unittest.mock import patch
 
 import pytest
@@ -289,3 +290,23 @@ def test_pointer_int_type_array(cs: cstruct, compiled: bool) -> None:
     assert obj.a == [1, 2]
     assert obj.b == 3
     assert obj.dumps() == buf
+
+
+def test_pointer_struct_write(cs: cstruct, compiled: bool) -> None:
+    """Test that pointers are written by their value, and raise an error if it doesn't fit."""
+    cdef = """
+    struct test {
+        uint8   a;
+        uint32  *b;
+        uint8   *c[2];
+    };
+    """
+    cs.pointer = cs.uint16
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    assert cs.test(a=1, b=2, c=[3, 4]).dumps() == b"\x01\x02\x00\x03\x00\x04\x00"
+
+    with pytest.raises(struct.error):
+        cs.test(a=1, b=2, c=[3, 2**16]).dumps()

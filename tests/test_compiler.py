@@ -3,8 +3,8 @@ from __future__ import annotations
 import io
 from operator import itemgetter
 from textwrap import dedent
-from typing import TYPE_CHECKING
-from unittest.mock import Mock
+from typing import TYPE_CHECKING, BinaryIO
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -12,13 +12,15 @@ from dissect.cstruct import compiler
 from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exception import ExpressionParserError
 from dissect.cstruct.expression import Expression
+from dissect.cstruct.types import Packed
 from dissect.cstruct.types.structure import Field
 
-from .utils import parsed_state, source_lines
+from .utils import parsed_state, source_lines, verify_compiled
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from dissect.cstruct.cstruct import Endianness
     from dissect.cstruct.types.base import BaseType
     from dissect.cstruct.types.enum import Enum
 
@@ -29,6 +31,10 @@ def f(field_type: type[BaseType], offset: int | None = 0, name: str = "") -> Fie
 
 def read_generator(cs: cstruct, fields: list[Field]) -> compiler._ReadSourceGenerator:
     return compiler._ReadSourceGenerator(cs._make_struct("test", []), fields)
+
+
+def write_generator(cs: cstruct, fields: list[Field]) -> compiler._WriteSourceGenerator:
+    return compiler._WriteSourceGenerator(cs._make_struct("test", []), fields)
 
 
 def strip_fields(info: Iterator[tuple[Field, int, str]]) -> list[tuple[int, str]]:
@@ -683,3 +689,599 @@ def test_lazy_compile(cs: cstruct) -> None:
     assert cs.test._read.__source__ == dedent(expected).strip()
     assert isinstance(cs.test.__dict__["_read"], classmethod)
     assert cs.test(b"\x01\x00\x00\x00").a == 1
+
+
+def test_generate_packed_write(cs: cstruct) -> None:
+    """Test the generated code for packing numbers."""
+    fields = [f(cs.uint8, name="a"), f(cs.int16, name="b"), f(cs.uint32, name="c")]
+    code = next(write_generator(cs, fields)._generate_packed_source(fields))
+
+    expected = """
+    try:
+        buf = _pack0[endian](data.a, data.b, data.c)
+    except _struct_error:
+        buf = _pack0[endian](_or_default(data.a, _type0), _or_default(data.b, _type1), _or_default(data.c, _type2))
+    stream.write(buf)
+    """
+
+    assert code == dedent(expected)
+
+
+def test_generate_packed_write_arrays(cs: cstruct, TestEnum: type[Enum]) -> None:
+    """Test the generated code for packing arrays."""
+    fields = [f(cs.uint16[2], name="a"), f(TestEnum[2], name="b"), f(cs.uint24[2], name="c")]
+    gen = write_generator(cs, fields)
+    code = next(gen._generate_packed_source(fields))
+
+    expected = """
+    if (_value0 := data.a) is None or len(_value0) != 2: _value0 = _array_values(_type0, _value0)
+    if (_value1 := data.b) is None or len(_value1) != 2: _value1 = _array_values(_type1, _value1)
+    if (_value2 := data.c) is None or len(_value2) != 2: _value2 = _array_values(_type2, _value2)
+    stream.write(_pack0[endian](*_value0, *_value1, b''.join([item.to_bytes(3, _byteorder[endian], signed=False) for item in _value2])))
+    """  # noqa: E501
+
+    assert code == dedent(expected)
+    assert gen.symbols["_pack0"]["<"].__self__.format == "<2H2B6s"
+
+
+def test_generate_packed_write_byte_types(cs: cstruct) -> None:
+    """Test the generated code for packing ``char`` and ``wchar`` fields."""
+    fields = [f(cs.char, name="a"), f(cs.char[2], name="b"), f(cs.wchar, name="c"), f(cs.wchar[2], name="d")]
+    gen = write_generator(cs, fields)
+    code = next(gen._generate_packed_source(fields))
+
+    expected = """
+    if not isinstance(_value0 := data.a, bytes) or len(_value0) > 1: _value0 = _field_bytes(_type0, _value0, endian)
+    if not isinstance(_value1 := data.b, bytes) or len(_value1) > 2: _value1 = _field_bytes(_type1, _value1, endian)
+    if (_value2 := data.c) is None or len(_value2 := _value2.encode(_encoding0[endian], 'surrogatepass')) > 2: _value2 = _field_bytes(_type2, data.c, endian)
+    if (_value3 := data.d) is None or len(_value3 := _value3.encode(_encoding0[endian], 'surrogatepass')) > 4: _value3 = _field_bytes(_type3, data.d, endian)
+    stream.write(_pack0[endian](_value0, _value1, _value2, _value3))
+    """  # noqa: E501
+
+    assert code == dedent(expected)
+    assert gen.symbols["_pack0"]["<"].__self__.format == "<1s2s2s4s"
+
+
+def test_generate_packed_write_numbers(cs: cstruct, TestEnum: type[Enum]) -> None:
+    """Test the generated code for packing enums, pointers and ``Int`` types together with a default value check."""
+    cs.pointer = cs.uint64
+    fields = [f(TestEnum, name="a"), f(cs._make_pointer(TestEnum), name="b"), f(cs.uint24, name="c")]
+    gen = write_generator(cs, fields)
+    code = next(gen._generate_packed_source(fields))
+
+    expected = """
+    if (_value0 := data.a) is None: _value0 = _type0.__default__()
+    if (_value1 := data.c) is None: _value1 = _type2.__default__()
+    try:
+        buf = _pack0[endian](_value0._value_, data.b, _value1.to_bytes(3, _byteorder[endian], signed=False))
+    except _struct_error:
+        buf = _pack0[endian](_value0._value_, _or_default(data.b, _type1), _value1.to_bytes(3, _byteorder[endian], signed=False))
+    stream.write(buf)
+    """  # noqa: E501
+
+    assert code == dedent(expected)
+    assert gen.symbols["_pack0"]["<"].__self__.format == "<BQ3s"
+
+
+def test_generate_field_write(cs: cstruct) -> None:
+    """Test the generated code for writing a field using its own type."""
+    field = Field("a", cs.uleb128)
+    code = next(write_generator(cs, [field])._generate_field_source(field))
+
+    expected = """
+    _value = data.a
+    if _value is None: _value = _type0.__default__()
+    _type0._write(stream, _value, endian=endian)
+    """
+
+    assert code == dedent(expected)
+
+
+def test_generate_bits_write(cs: cstruct, TestEnum: type[Enum]) -> None:
+    """Test the generated code for writing the bit fields that share a value of the bit buffer."""
+    fields = [Field("a", cs.uint8, 2), Field("b", TestEnum, 6)]
+    code = next(write_generator(cs, fields)._generate_bits_source(fields))
+
+    expected = """
+    if (_value0 := data.a) is None: _value0 = _type0.__default__()
+    if (_value1 := data.b) is None: _value1 = _type1.__default__()
+    stream.write(_pack0[endian]((_value0 << 0 | _value1._value_ << 2 if endian == '<' else _value0 << 6 | _value1._value_ << 0)))
+    """  # noqa: E501
+
+    assert code == dedent(expected)
+
+
+def test_generate_structure_write(cs: cstruct) -> None:
+    """Test the generated code of a complete structure with packed, inlined, dynamic and bit fields."""
+    cdef = """
+    struct nested {
+        uint8   a;
+    };
+
+    struct test {
+        uint32  b;
+        char    c[2];
+        nested  d;
+        uint8   n;
+        uint8   e[n];
+        uint16  f : 4;
+        uint16  g : 12;
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test.__compiled__
+    assert isinstance(cs.test.__dict__["_write"], compiler._LazyCompileWrite)
+
+    expected = """
+    def _write(cls, stream, data, *, endian):
+        if cls is not _cls0 or _type2.__init__ is not _init0: return _struct_write(cls, stream, data, endian=endian)
+        start = stream.tell()
+
+        if not isinstance(_value0 := data.c, bytes) or len(_value0) > 2: _value0 = _field_bytes(_type1, _value0, endian)
+        if (_value1 := data.d) is None: _value1 = _type2.__default__()
+        try:
+            buf = _pack0[endian](data.b, _value0, _value1.a, data.n)
+        except _struct_error:
+            buf = _pack0[endian](_or_default(data.b, _type0), _value0, _or_default(_value1.a, _type3), _or_default(data.n, _type3))
+        stream.write(buf)
+
+
+        _value = data.e
+        if _value is None: _value = _type4.__default__()
+        _type4._write(stream, _value, endian=endian)
+
+
+        if (_value2 := data.f) is None: _value2 = _type5.__default__()
+        if (_value3 := data.g) is None: _value3 = _type5.__default__()
+        stream.write(_pack1[endian]((_value2 << 0 | _value3 << 4 if endian == '<' else _value2 << 12 | _value3 << 0)))
+
+        return stream.tell() - start
+    """  # noqa: E501
+    assert cs.test._write.__source__ == dedent(expected).strip()
+    assert isinstance(cs.test.__dict__["_write"], classmethod)
+
+    obj = cs.test(b=1, c=b"ab", d=cs.nested(a=2), n=1, e=[3], f=4, g=5)
+    assert obj.dumps() == b"\x01\x00\x00\x00ab\x02\x01\x03\x54\x00"
+
+
+def test_generate_union_write(cs: cstruct) -> None:
+    """Test the generated code of a union, which is written by its largest field and unwraps its proxies."""
+    cdef = """
+    union test {
+        struct {
+            uint16  a;
+            uint16  b;
+        } c;
+        uint16  d;
+    };
+    """
+    cs.load(cdef)
+
+    expected = """
+    def _write(cls, stream, data, *, endian):
+        if cls is not _cls0 or _type0.__init__ is not _init0: return _union_write(cls, stream, data, endian=endian)
+
+        if (_value0 := data.c) is None: _value0 = _type0.__default__()
+        if type(_value0) is _UnionProxy: _value0 = _value0.__target__
+        try:
+            buf = _pack0[endian](_value0.a, _value0.b)
+        except _struct_error:
+            buf = _pack0[endian](_or_default(_value0.a, _type1), _or_default(_value0.b, _type1))
+        stream.write(buf)
+
+        return 4
+    """
+    assert cs.test._write.__source__ == dedent(expected).strip()
+
+
+def test_generate_align_write(cs: cstruct) -> None:
+    """Test the generated code of an aligned structure, which pads to the position in the stream."""
+    cdef = """
+    struct test {
+        uint8   n;
+        uint8   a[n];
+        uint32  b;
+    };
+    """
+    cs.load(cdef, align=True)
+
+    expected = r"""
+    def _write(cls, stream, data, *, endian):
+        if cls is not _cls0: return _struct_write(cls, stream, data, endian=endian)
+        start = stream.tell()
+
+        try:
+            buf = _pack0[endian](data.n)
+        except _struct_error:
+            buf = _pack0[endian](_or_default(data.n, _type0))
+        stream.write(buf)
+
+
+        _value = data.a
+        if _value is None: _value = _type1.__default__()
+        _type1._write(stream, _value, endian=endian)
+
+        stream.write(b"\x00" * (-stream.tell() & (4 - 1)))
+
+        try:
+            buf = _pack1[endian](data.b)
+        except _struct_error:
+            buf = _pack1[endian](_or_default(data.b, _type2))
+        stream.write(buf)
+
+        stream.write(b"\x00" * (-stream.tell() & (cls.__alignment__ - 1)))
+        return stream.tell() - start
+    """
+    assert cs.test._write.__source__ == dedent(expected).strip()
+
+
+def test_generate_static_write(cs: cstruct) -> None:
+    """Test that the generated code of a static structure doesn't need the position in the stream."""
+    cdef = """
+    struct test {
+        uint32  a;
+        uint8   b;
+    };
+    """
+    cs.load(cdef)
+
+    expected = """
+    def _write(cls, stream, data, *, endian):
+        if cls is not _cls0: return _struct_write(cls, stream, data, endian=endian)
+
+        try:
+            buf = _pack0[endian](data.a, data.b)
+        except _struct_error:
+            buf = _pack0[endian](_or_default(data.a, _type0), _or_default(data.b, _type1))
+        stream.write(buf)
+
+        return 5
+    """
+    assert cs.test._write.__source__ == dedent(expected).strip()
+
+
+def test_generate_offset_write(cs: cstruct) -> None:
+    """Test the generated code for a field with an offset after a dynamic field, which pads depending on the stream."""
+    cdef = """
+    struct test {
+        uint8   n;
+        uint8   a[n];
+    };
+    """
+    cs.load(cdef)
+    cs.test.add_field("b", cs.uint8)
+    cs.test.add_field("c", cs.uint8, offset=4)
+
+    expected = r"""
+    def _write(cls, stream, data, *, endian):
+        if cls is not _cls0: return _struct_write(cls, stream, data, endian=endian)
+        start = stream.tell()
+
+        try:
+            buf = _pack0[endian](data.n)
+        except _struct_error:
+            buf = _pack0[endian](_or_default(data.n, _type0))
+        stream.write(buf)
+
+
+        _value = data.a
+        if _value is None: _value = _type1.__default__()
+        _type1._write(stream, _value, endian=endian)
+
+
+        try:
+            buf = _pack1[endian](data.b)
+        except _struct_error:
+            buf = _pack1[endian](_or_default(data.b, _type0))
+        stream.write(buf)
+
+        stream.write(b"\x00" * (start + 4 - stream.tell()))
+
+        try:
+            buf = _pack2[endian](data.c)
+        except _struct_error:
+            buf = _pack2[endian](_or_default(data.c, _type0))
+        stream.write(buf)
+
+        return stream.tell() - start
+    """
+    assert cs.test._write.__source__ == dedent(expected).strip()
+
+
+def test_generate_static_call_write(cs: cstruct) -> None:
+    """Test that the generated code keeps track of the position through a static field written using its type."""
+    cdef = """
+    struct test {
+        uint8   a[1][1];
+        uint8   b;
+        uint8   c;
+    };
+    """
+    cs.load(cdef)
+
+    expected = """
+    def _write(cls, stream, data, *, endian):
+        if cls is not _cls0: return _struct_write(cls, stream, data, endian=endian)
+        start = stream.tell()
+
+        _value = data.a
+        if _value is None: _value = _type0.__default__()
+        _type0._write(stream, _value, endian=endian)
+
+
+        try:
+            buf = _pack0[endian](data.b, data.c)
+        except _struct_error:
+            buf = _pack0[endian](_or_default(data.b, _type1), _or_default(data.c, _type1))
+        stream.write(buf)
+
+        return stream.tell() - start
+    """
+    assert cs.test._write.__source__ == dedent(expected).strip()
+
+
+def test_write_not_compiled(cs: cstruct) -> None:
+    """Test that anything that can't be written by packing it uses the interpreted writer for the entire structure."""
+    cdef = """
+    struct unsupported {
+        uleb128 a;
+    };
+
+    union dynamic {
+        struct {
+            uint8 n;
+            char  a[n];
+        } b;
+        uint8 c;
+    };
+
+    union empty_field {
+        char a[0];
+    };
+
+    struct wchar_bits {
+        wchar a : 4;
+    };
+
+    struct backwards {
+        uint32 a;
+    };
+
+    struct bits_offset {
+        uint16 a : 4;
+    };
+    """
+    cs.load(cdef)
+    cs.backwards.add_field("b", cs.uint8, offset=2)
+    cs.bits_offset.add_field("b", cs.uint16, bits=4, offset=8)
+
+    assert not hasattr(cs.unsupported._write, "__source__")
+    assert not hasattr(cs.dynamic._write, "__source__")
+    assert not hasattr(cs.empty_field._write, "__source__")
+    assert not hasattr(cs.wchar_bits._write, "__source__")
+    assert not hasattr(cs.backwards._write, "__source__")
+    assert not hasattr(cs.bits_offset._write, "__source__")
+
+    # Reading them is still compiled
+    for type_ in (cs.wchar_bits, cs.backwards, cs.bits_offset):
+        assert type_.__compiled__
+        assert hasattr(type_._read, "__source__")
+
+
+def test_write_after_add_field(cs: cstruct) -> None:
+    """Test that adding a field to a compiled or inlined structure is noticed before and after the first write."""
+    cdef = """
+    struct nested {
+        uint8   a;
+    };
+
+    struct test {
+        uint8   b;
+        nested  c;
+        uint8   d;
+    };
+    """
+    cs.load(cdef)
+
+    # Before the first write
+    cs.nested.add_field("e", cs.uint8)
+    assert cs.test(b=1, c=cs.nested(a=2, e=3), d=4).dumps() == b"\x01\x02\x03\x04"
+
+    # After the first write, in the structure that was compiled
+    cs.test.add_field("f", cs.uint8)
+    assert cs.test(b=1, c=cs.nested(a=2, e=3), d=4, f=5).dumps() == b"\x01\x02\x03\x04\x05"
+
+    # After the first write, in the structure that was inlined
+    cs.nested.add_field("g", cs.uint8)
+    assert cs.test(b=1, c=cs.nested(a=2, e=3, g=6), d=4, f=5).dumps() == b"\x01\x02\x03\x06\x04\x05"
+
+    # A field that isn't supported by the compiler
+    cs.test.add_field("h", cs.uleb128)
+    assert cs.test(b=1, c=cs.nested(a=2, e=3, g=6), d=4, f=5, h=7).dumps() == b"\x01\x02\x03\x06\x04\x05\x07"
+
+    cdef = """
+    struct nested_last {
+        uint8   a;
+    };
+
+    struct test_last {
+        uint8   b;
+        nested_last c;
+    };
+    """
+    cs.load(cdef)
+
+    # After the first write, in a structure that was inlined without any fields after it
+    assert cs.test_last(b=1, c=cs.nested_last(a=2)).dumps() == b"\x01\x02"
+    cs.nested_last.add_field("d", cs.uint8)
+    assert cs.test_last(b=1, c=cs.nested_last(a=2, d=3)).dumps() == b"\x01\x02\x03"
+
+
+def test_write_generate_failure(cs: cstruct) -> None:
+    """Test that a failure to compile ``_read`` also reverts ``_write`` to the interpreted version."""
+    cdef = """
+    struct test {
+        uint8   a;
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test(a=1).dumps() == b"\x01"
+
+    with patch.object(compiler._ReadSourceGenerator, "generate", side_effect=ValueError):
+        assert cs.test(b"\x01").a == 1
+
+    # Adding a field no longer recompiles the structure, so _write has to be the interpreted version too
+    assert not cs.test.__compiled__
+    cs.test.add_field("b", cs.uint8)
+    assert cs.test(a=1, b=2).dumps() == b"\x01\x02"
+
+
+def test_write_generate_failure_keeps_read(cs: cstruct) -> None:
+    """Test that a failure to compile ``_write`` doesn't revert ``_read``."""
+    cdef = """
+    struct test {
+        uint8   a;
+    };
+    """
+    cs.load(cdef)
+
+    with patch.object(compiler._WriteSourceGenerator, "generate", side_effect=ValueError):
+        assert cs.test(a=1).dumps() == b"\x01"
+
+    assert cs.test.__compiled__
+    assert not hasattr(cs.test._write, "__source__")
+    assert hasattr(cs.test._read, "__source__")
+
+
+def test_write_custom_types(cs: cstruct) -> None:
+    """Test that types with a custom ``_write`` or ``_write_array`` method aren't packed."""
+
+    class CustomWrite(int, Packed):
+        __fmt__ = "B"
+
+        @classmethod
+        def _write(cls, stream: BinaryIO, data: int, *, endian: Endianness) -> int:
+            return stream.write(b"write")
+
+    class CustomWriteArray(int, Packed):
+        __fmt__ = "B"
+
+        @classmethod
+        def _write_array(cls, stream: BinaryIO, data: list, *, endian: Endianness) -> int:
+            return stream.write(b"array")
+
+    cs.add_custom_type("custom_write", CustomWrite, size=1)
+    cs.add_custom_type("custom_write_array", CustomWriteArray, size=1)
+
+    cdef = """
+    struct test {
+        uint8               a;
+        custom_write        b;
+        custom_write_array  c[2];
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test(a=1, b=2, c=[3, 4]).dumps() == b"\x01writearray"
+
+    cdef = """
+    struct test_bits {
+        uint8           a;
+        custom_write    b : 4;
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test_bits(a=1, b=2).dumps() == b"\x01write"
+
+
+@pytest.mark.parametrize("endian", ["<", ">", "!", "@", "="])
+def test_native_alignment(endian: Endianness, compiled: bool) -> None:
+    """Test that the ``@`` endianness doesn't add native alignment padding between packed fields."""
+    cdef = """
+    struct test {
+        uint8   a;
+        uint32  b;
+        uint16  c;
+        uint64  d;
+    };
+    """
+    cs = cstruct(endian=endian)
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+    assert len(cs.test) == 15
+
+    # Packing or unpacking multiple values at once shouldn't add padding to align them
+    buf = cs.uint8.dumps(1) + cs.uint32.dumps(2) + cs.uint16.dumps(3) + cs.uint64.dumps(4)
+    obj = cs.test(buf)
+    assert obj.a == 1
+    assert obj.b == 2
+    assert obj.c == 3
+    assert obj.d == 4
+    assert obj.dumps() == buf
+
+
+def test_read_offset_before_position(cs: cstruct, compiled: bool) -> None:
+    """Test that compiled structures read a field with an offset before the current position from that offset."""
+    cdef = """
+    struct test {
+        uint8   a;
+        uint16  b;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+    cs.test.add_field("c", cs.uint8, offset=2)
+    cs.test.add_field("d", cs.uint8)
+
+    assert verify_compiled(cs.test, compiled)
+
+    obj = cs.test(bytes(range(16)))
+    assert obj.b == 0x0201
+    assert obj.c == 2
+    assert obj.d == 3
+
+
+def test_read_offset_before_position_after_gap(cs: cstruct, compiled: bool) -> None:
+    """Test that an offset before the current position is also noticed after an earlier offset moved forward."""
+    cdef = """
+    struct test {
+        uint8   a;
+        uint16  b;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+    cs.test.add_field("c", cs.uint8, offset=8)
+    cs.test.add_field("d", cs.uint8, offset=4)
+    cs.test.add_field("e", cs.uint8)
+
+    assert verify_compiled(cs.test, compiled)
+
+    obj = cs.test(bytes(range(16)))
+    assert obj.c == 8
+    assert obj.d == 4
+    assert obj.e == 5
+
+
+def test_read_offset_after_dynamic_field(cs: cstruct, compiled: bool) -> None:
+    """Test that a field with an offset after a dynamic field doesn't prevent the structure from being compiled."""
+    cdef = """
+    struct test {
+        uint8   n;
+        uint8   a[n];
+        uint8   b;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+    cs.test.add_field("c", cs.uint8, offset=6)
+    cs.test.add_field("d", cs.uint8)
+
+    obj = cs.test(bytes((1, *range(1, 16))))
+    assert obj.a == [1]
+    assert obj.b == 2
+    assert obj.c == 6
+    assert obj.d == 7
+
+    assert verify_compiled(cs.test, compiled)

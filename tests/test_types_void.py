@@ -54,10 +54,18 @@ def test_void_struct(cs: cstruct, compiled: bool) -> None:
         void    b[4];
         void    c[];
     };
+
+    struct test_fields {
+        uint8   a;
+        void    b;
+        uint8   c;
+        void    d[2];
+    };
     """
     cs.load(cdef, compiled=compiled)
 
     assert verify_compiled(cs.test, compiled)
+    assert verify_compiled(cs.test_fields, compiled)
 
     stream = io.BytesIO(b"AAAA")
 
@@ -69,3 +77,10 @@ def test_void_struct(cs: cstruct, compiled: bool) -> None:
     assert stream.tell() == 0
 
     assert obj.dumps() == b""
+
+    # Void fields between other fields don't write anything either
+    buf = b"\x01\x02"
+    assert cs.test_fields(buf).dumps() == buf
+
+    # The value of a void field doesn't matter
+    assert cs.test_fields(a=1, b=5, c=2, d=5).dumps() == buf

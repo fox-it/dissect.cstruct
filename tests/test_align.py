@@ -404,3 +404,55 @@ def test_align_after_dynamic_field(cs: cstruct, compiled: bool) -> None:
     assert obj.c == 0x04030201
     assert obj.d == 0xCC
     assert obj.dumps() == buf
+
+
+def test_align_stream_position(cs: cstruct, compiled: bool) -> None:
+    """Test that padding after a dynamic field or at the end of a structure follows the position in the stream."""
+    cdef = """
+    struct test_static {
+        uint8   a;
+        uint32  b;
+        uint8   c;
+    };
+
+    struct test_dynamic {
+        uint8   n;
+        uint8   a[n];
+        uint32  b;
+        uint8   c;
+    };
+
+    struct nested {
+        uint8   a;
+        uint32  b;
+    };
+
+    struct test_nested {
+        uint8   c;
+        nested  d;
+        uint64  e;
+    };
+    """
+    cs.load(cdef, compiled=compiled, align=True)
+
+    assert verify_compiled(cs.test_static, compiled)
+    assert verify_compiled(cs.test_dynamic, compiled)
+    assert verify_compiled(cs.test_nested, compiled)
+
+    # The padding between static fields depends on the structure, the padding at the end on the stream
+    fh = BytesIO(b"\xff")
+    fh.seek(1)
+    assert cs.test_static(a=1, b=2, c=3).write(fh) == 11
+    assert fh.getvalue() == b"\xff\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00"
+
+    # The padding after a dynamic field depends on the stream
+    fh = BytesIO(b"\xff")
+    fh.seek(1)
+    assert cs.test_dynamic(n=1, a=[2], b=3, c=4).write(fh) == 11
+    assert fh.getvalue() == b"\xff\x01\x02\x00\x03\x00\x00\x00\x04\x00\x00\x00"
+
+    # The padding at the end of a nested structure depends on the stream too
+    fh = BytesIO(b"\xff")
+    fh.seek(1)
+    assert cs.test_nested(c=1, d=cs.nested(a=2, b=3), e=4).write(fh) == 31
+    assert fh.getvalue() == (b"\xff\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x04" + bytes(14))
