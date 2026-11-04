@@ -23,8 +23,9 @@ class CharArray(bytes, BaseArray):
         return type.__call__(cls, super()._read(stream, context=context, endian=endian))
 
     @classmethod
-    def _write(cls, stream: BinaryIO, data: bytes | str | list[int], *, endian: Endianness) -> int:
-        if isinstance(data, list):
+    def _write(cls, stream: BinaryIO, data: bytes | bytearray | str | list[int], *, endian: Endianness) -> int:
+        # Copy mutable data types to bytes so we don't modify them in place
+        if isinstance(data, (list, bytearray)):
             data = bytes(data)
         elif isinstance(data, str):
             data = data.encode("latin-1")
@@ -92,4 +93,7 @@ class Char(bytes, BaseType):
         if isinstance(data, str):
             data = data.encode("latin-1")
 
-        return stream.write(data)
+        if (actual_size := len(data)) > 1:
+            raise ValueError(f"Expected a single character, got {actual_size} instead.")
+
+        return stream.write(data or b"\x00")

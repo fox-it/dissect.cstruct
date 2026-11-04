@@ -7,7 +7,7 @@ import pytest
 
 from dissect.cstruct.exception import ArraySizeError
 
-from .utils import NonSeekableStream
+from .utils import NonSeekableStream, verify_compiled
 
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
@@ -148,3 +148,162 @@ def test_wchar_null_terminated_alignment(cs: cstruct) -> None:
     fh = io.BytesIO(data + b"\x00\x00rest")
     assert cs.wchar[None](fh) == "x" * 127
     assert fh.read() == b"rest"
+
+
+def test_wchar_array_surrogate_pair(cs: cstruct, compiled: bool) -> None:
+    """Test that a surrogate pair takes up two entries of a ``wchar`` array, so that it pads to the right size."""
+    cdef = """
+    struct test {
+        wchar a[4];
+        uint8 b;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert cs.wchar[4].dumps("\U0001f600") == b"\x3d\xd8\x00\xde\x00\x00\x00\x00"
+    assert cs.wchar[2].dumps("\U0001f600") == b"\x3d\xd8\x00\xde"
+
+    with pytest.raises(ArraySizeError, match="Expected static array size 1, got 2 instead"):
+        cs.wchar[1].dumps("\U0001f600")
+
+    buf = b"\x3d\xd8\x00\xdex\x00\x00\x00\x01"
+    obj = cs.test(buf)
+    assert obj.a == "\U0001f600x\x00"
+    assert obj.dumps() == buf
+
+
+def test_wchar_write_too_long(cs: cstruct) -> None:
+    """Test that writing more than a single character to a ``wchar`` raises an error, instead of writing all of it."""
+    assert cs.wchar.dumps("x") == b"x\x00"
+
+    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+        cs.wchar.dumps("xy")
+
+    # A surrogate pair doesn't fit a single wchar
+    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+        cs.wchar.dumps("\U0001f600")
+
+
+def test_wchar_write_too_short(cs: cstruct, compiled: bool) -> None:
+    """Test that an empty ``wchar`` is padded, so that a structure always writes all of its fields."""
+    cdef = """
+    struct test {
+        uint8 a;
+        wchar b;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert cs.wchar.dumps("") == b"\x00\x00"
+    assert cs.test(a=1, b="").dumps() == b"\x01\x00\x00"
+
+
+@pytest.mark.parametrize(
+    ("endian", "buf", "expected"),
+    [
+        ("<", b"a\x00\x00\xd8", "a\ud800"),
+        ("<", b"\x00\xd8a\x00", "\ud800a"),
+        ("<", b"a\x00\x00\xdc", "a\udc00"),
+        ("<", b"\x00\xdca\x00", "\udc00a"),
+        ("<", b"\x00\xdc\x00\xd8", "\udc00\ud800"),
+        ("<", b"\x00\xd8\x00\xd8", "\ud800\ud800"),
+        (">", b"\x00a\xd8\x00", "a\ud800"),
+        (">", b"\xdc\x00\xd8\x00", "\udc00\ud800"),
+    ],
+)
+def test_wchar_lone_surrogate(cs: cstruct, compiled: bool, endian: str, buf: bytes, expected: str) -> None:
+    """Test that a lone surrogate is read and written back as stored, for every kind of ``wchar`` array."""
+    cdef = """
+    struct dynamic_array {
+        uint8 length;
+        wchar text[length];
+    };
+
+    struct static_array {
+        wchar text[2];
+        uint8 after;
+    };
+
+    struct null_terminated {
+        wchar text[];
+        uint8 after;
+    };
+
+    struct until_eof {
+        wchar text[EOF];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+    cs.endian = endian
+
+    assert verify_compiled(cs.dynamic_array, compiled)
+    assert verify_compiled(cs.static_array, compiled)
+    assert verify_compiled(cs.null_terminated, compiled)
+    assert verify_compiled(cs.until_eof, compiled)
+
+    data = b"\x02" + buf
+    obj = cs.dynamic_array(data)
+    assert obj.text == expected
+    assert obj.dumps() == data
+
+    data = buf + b"\x01"
+    obj = cs.static_array(data)
+    assert obj.text == expected
+    assert obj.after == 1
+    assert obj.dumps() == data
+
+    data = buf + b"\x00\x00\x01"
+    obj = cs.null_terminated(data)
+    assert obj.text == expected
+    assert obj.after == 1
+    assert obj.dumps() == data
+
+    for stream_type in (io.BytesIO, NonSeekableStream):
+        assert cs.wchar[None](stream_type(data)) == expected
+
+    obj = cs.until_eof(buf)
+    assert obj.text == expected
+    assert obj.dumps() == buf
+
+
+def test_wchar_lone_surrogate_single(cs: cstruct, compiled: bool) -> None:
+    """Test that a single ``wchar`` can hold a lone surrogate."""
+    cdef = """
+    struct test {
+        wchar a;
+        wchar b;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    assert cs.wchar(b"\x00\xd8") == "\ud800"
+    assert cs.wchar.dumps("\ud800") == b"\x00\xd8"
+
+    buf = b"\x3d\xd8\x00\xde"
+    obj = cs.test(buf)
+    assert obj.a == "\ud83d"
+    assert obj.b == "\ude00"
+    assert obj.dumps() == buf
+
+    # Two lone surrogates take up the same space as the surrogate pair they make up
+    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+        cs.wchar.dumps("\ud83d\ude00")
+
+
+def test_wchar_truncated(cs: cstruct, compiled: bool) -> None:
+    """Test that half of a ``wchar`` still raises an error, unlike a lone surrogate."""
+    cdef = """
+    struct test {
+        wchar text[EOF];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    assert cs.test(b"\x00\xd8").text == "\ud800"
+
+    with pytest.raises(UnicodeDecodeError, match="truncated data"):
+        cs.test(b"\x00\xd8\x00")

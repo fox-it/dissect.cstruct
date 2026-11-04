@@ -484,3 +484,26 @@ def test_enum_call_fast_path(cs: cstruct) -> None:
 
     assert cs.Test(1337) == cs.Test(1337)
     assert hash(cs.Test(1337)) == hash(cs.Test(1337))
+
+
+def test_enum_int_type_array(cs: cstruct, compiled: bool) -> None:
+    """Test that compiled structures read arrays of enums of ``Int`` types by the size of their entries."""
+    cdef = """
+    enum Test : uint24 {
+        A, B, C
+    };
+
+    struct test {
+        uint8 a;
+        Test  b[2];
+        uint8 c;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    buf = b"\x01" + b"\x02\x00\x00" + b"\x09\x00\x00" + b"\x03"
+    obj = cs.test(buf)
+
+    assert obj.b == [cs.Test.C, cs.Test(9)]
+    assert obj.c == 3
+    assert obj.dumps() == buf
