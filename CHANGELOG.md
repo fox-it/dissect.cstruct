@@ -22,6 +22,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Faster paths for parsing primitive types from bytes-like objects, enum and flag lookups and flag operators.
   - Null-terminated strings are read in chunks from seekable streams.
 
+### Fixed
+
+- Structures and unions no longer share nested structures and arrays between their default values.
+- Unions can be created with default values and read if they have doubly nested structures or nested unions.
+- Writing a `bytearray` to a `char` array no longer modifies the `bytearray`.
+- Writing a structure correctly returns the amount of bytes written, including padding and bit fields.
+- Writing a structure raises an `AttributeError` for missing attributes and for values of a nested structure field that aren't a structure, instead of writing default values.
+- A surrogate pair takes up two entries of a `wchar` array, so writing it no longer writes more bytes than the size of the array.
+- A `wchar` string can hold a lone surrogate, instead of raising an error for the whole structure when reading or writing it. Bytes are written back as they were stored.
+- Writing more than a single character to a `char` or `wchar` raises a `ValueError`, instead of writing all of it and moving the fields after it. An empty value is padded.
+
 ## [4.5] - 20-05-2025
 
 ### Added
