@@ -293,7 +293,7 @@ def _describe_fields(structure: Structure, start: int | None) -> list[dict[str, 
                     "offset": bits_offset,
                     "size": field_type.__size__,
                     "bits": field.bits,
-                    "value": _format_value(value),
+                    "display": _format_value(value),
                 }
             )
             continue
@@ -316,7 +316,7 @@ def _describe_value(
     """Describe a field or array element as a node.
 
     Structures and unions, and arrays of them, get their fields or elements as child nodes. Other values, including
-    arrays of other types, are formatted as a human-readable ``value``.
+    arrays of other types, are formatted as a human-readable ``display``.
     """
     if isinstance(value, UnionProxy):
         # Nested Structure members inside a Union are proxied; unwrap to the real Structure
@@ -344,7 +344,7 @@ def _describe_value(
             if offset is not None:
                 offset = None if element_node["size"] is None else offset + element_node["size"]
     else:
-        node["value"] = _format_value(value)
+        node["display"] = _format_value(value)
 
     if size is None and node["offset"] is not None and "fields" in node:
         # Parsing doesn't record the sizes of array elements, so a dynamic element ends where its last field ends
@@ -398,7 +398,7 @@ def _render_fields(
     """
     for node in nodes:
         offset, size = node["offset"], node["size"]
-        if ("value" in node or node["kind"] == "union") and offset is not None and size and offset >= colored_end:
+        if ("display" in node or node["kind"] == "union") and offset is not None and size and offset >= colored_end:
             if offset > colored_end:
                 # Leave padding uncolored
                 palette.append((offset - colored_end, ""))
@@ -406,7 +406,7 @@ def _render_fields(
             colored_end = offset + size
 
         if "fields" not in node:
-            lines.append((indent, node["name"], node["value"]))
+            lines.append((indent, node["name"], node["display"]))
         elif node["name"] is None:
             colored_end = _render_fields(node["fields"], indent, lines, palette, colored_end)
         else:
@@ -435,12 +435,12 @@ def dumpstruct(
         - fields: list of field nodes
 
     A field node has a ``name``, ``type``, ``offset`` and ``size``, where ``offset`` is the position in ``bytes``.
-    Values have a human-readable ``value``. Bit fields also have ``bits``, and share the ``offset`` and ``size`` of
-    their storage unit. Nested structs and unions have a ``kind`` and ``fields`` instead of a ``value``, and so do
+    Values have a human-readable ``display``. Bit fields also have ``bits``, and share the ``offset`` and ``size`` of
+    their storage unit. Nested structs and unions have a ``kind`` and ``fields`` instead of a ``display``, and so do
     arrays of them: ``kind`` is ``array`` and ``fields`` are the elements, named ``[0]``, ``[1]``, etc.
     Anonymous struct/union members (``struct { ... };``) have no ``name``, anonymous types have no ``type``.
-    ``offset`` and ``size`` are ``None`` when they're unknown, and so is the ``value`` of a field the structure doesn't
-    keep (all but the last of repeated ``_`` fields).
+    ``offset`` and ``size`` are ``None`` when they're unknown, and so is the ``display`` of a field the structure
+    doesn't keep (all but the last of repeated ``_`` fields).
 
     For an array, ``name`` includes the dimensions as written in the definition and ``type`` is the element type,
     e.g. ``uint8 matrix[2][3];`` has ``name`` ``matrix[2][3]`` and ``type`` ``uint8``.

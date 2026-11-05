@@ -151,7 +151,7 @@ def test_dumpstruct_enum(cs: cstruct, compiled: bool) -> None:
         "type": "test",
         "kind": "struct",
         "fields": [
-            {"name": "testval", "type": "Test16", "offset": 0, "size": 2, "value": "<Test16.B: 2>"},
+            {"name": "testval", "type": "Test16", "offset": 0, "size": 2, "display": "<Test16.B: 2>"},
         ],
     }
 
@@ -183,8 +183,8 @@ def test_dumpstruct_dict_basic(cs: cstruct, compiled: bool) -> None:
         "type": "test",
         "kind": "struct",
         "fields": [
-            {"name": "testval", "type": "uint32", "offset": 0, "size": 4, "value": "0x539"},
-            {"name": "other", "type": "uint16", "offset": 4, "size": 2, "value": "0x1"},
+            {"name": "testval", "type": "uint32", "offset": 0, "size": 4, "display": "0x539"},
+            {"name": "other", "type": "uint16", "offset": 4, "size": 2, "display": "0x1"},
         ],
     }
 
@@ -213,8 +213,8 @@ def test_dumpstruct_dict_array(cs: cstruct, compiled: bool) -> None:
         "type": "test",
         "kind": "struct",
         "fields": [
-            {"name": "magic[4]", "type": "uint8", "offset": 0, "size": 4, "value": "[127, 69, 76, 70]"},
-            {"name": "value", "type": "uint16", "offset": 4, "size": 2, "value": "0x2"},
+            {"name": "magic[4]", "type": "uint8", "offset": 0, "size": 4, "display": "[127, 69, 76, 70]"},
+            {"name": "value", "type": "uint16", "offset": 4, "size": 2, "display": "0x2"},
         ],
     }
 
@@ -246,7 +246,7 @@ def test_dumpstruct_dict_anonymous_struct_array(cs: cstruct, compiled: bool) -> 
                     "offset": 0,
                     "size": 1,
                     "kind": "struct",
-                    "fields": [{"name": "x", "type": "uint8", "offset": 0, "size": 1, "value": "0x1"}],
+                    "fields": [{"name": "x", "type": "uint8", "offset": 0, "size": 1, "display": "0x1"}],
                 },
                 {
                     "name": "[1]",
@@ -254,7 +254,7 @@ def test_dumpstruct_dict_anonymous_struct_array(cs: cstruct, compiled: bool) -> 
                     "offset": 1,
                     "size": 1,
                     "kind": "struct",
-                    "fields": [{"name": "x", "type": "uint8", "offset": 1, "size": 1, "value": "0x2"}],
+                    "fields": [{"name": "x", "type": "uint8", "offset": 1, "size": 1, "display": "0x2"}],
                 },
             ],
         },
@@ -285,7 +285,7 @@ def test_dumpstruct_anonymous_union(cs: cstruct, compiled: bool) -> None:
         "type": "test",
         "kind": "struct",
         "fields": [
-            {"name": "before", "type": "uint16", "offset": 0, "size": 2, "value": "0xbbaa"},
+            {"name": "before", "type": "uint16", "offset": 0, "size": 2, "display": "0xbbaa"},
             {
                 "name": None,
                 "type": None,
@@ -293,11 +293,11 @@ def test_dumpstruct_anonymous_union(cs: cstruct, compiled: bool) -> None:
                 "size": 4,
                 "kind": "union",
                 "fields": [
-                    {"name": "as_int", "type": "uint32", "offset": 2, "size": 4, "value": "0x4030201"},
-                    {"name": "as_bytes[4]", "type": "uint8", "offset": 2, "size": 4, "value": "[1, 2, 3, 4]"},
+                    {"name": "as_int", "type": "uint32", "offset": 2, "size": 4, "display": "0x4030201"},
+                    {"name": "as_bytes[4]", "type": "uint8", "offset": 2, "size": 4, "display": "[1, 2, 3, 4]"},
                 ],
             },
-            {"name": "after", "type": "uint16", "offset": 6, "size": 2, "value": "0xddcc"},
+            {"name": "after", "type": "uint16", "offset": 6, "size": 2, "display": "0xddcc"},
         ],
     }
 
@@ -367,14 +367,14 @@ def test_dumpstruct_dict_bitfields(cs: cstruct, compiled: bool) -> None:
         "type": "Multi",
         "kind": "struct",
         "fields": [
-            {"name": "a", "type": "uint32", "offset": 0, "size": 4, "bits": 1, "value": "0x1"},
-            {"name": "b", "type": "uint32", "offset": 0, "size": 4, "bits": 31, "value": "0x1"},
-            {"name": "gap", "type": "uint16", "offset": 4, "size": 2, "value": "0xffff"},
-            {"name": "c", "type": "uint8", "offset": 6, "size": 1, "bits": 4, "value": "0x5"},
-            {"name": "d", "type": "uint8", "offset": 6, "size": 1, "bits": 4, "value": "0x3"},
-            {"name": "e", "type": "uint8", "offset": 7, "size": 1, "bits": 4, "value": "0x7"},
-            {"name": "gap2", "type": "uint8", "offset": 8, "size": 1, "value": "0xaa"},
-            {"name": "f", "type": "uint8", "offset": 9, "size": 1, "bits": 4, "value": "0x9"},
+            {"name": "a", "type": "uint32", "offset": 0, "size": 4, "bits": 1, "display": "0x1"},
+            {"name": "b", "type": "uint32", "offset": 0, "size": 4, "bits": 31, "display": "0x1"},
+            {"name": "gap", "type": "uint16", "offset": 4, "size": 2, "display": "0xffff"},
+            {"name": "c", "type": "uint8", "offset": 6, "size": 1, "bits": 4, "display": "0x5"},
+            {"name": "d", "type": "uint8", "offset": 6, "size": 1, "bits": 4, "display": "0x3"},
+            {"name": "e", "type": "uint8", "offset": 7, "size": 1, "bits": 4, "display": "0x7"},
+            {"name": "gap2", "type": "uint8", "offset": 8, "size": 1, "display": "0xaa"},
+            {"name": "f", "type": "uint8", "offset": 9, "size": 1, "bits": 4, "display": "0x9"},
         ],
     }
 
@@ -449,9 +449,9 @@ def test_dumpstruct_comprehensive(cs: cstruct, compiled: bool) -> None:
         "type": "complex",
         "kind": "struct",
         "fields": [
-            {"name": "flags", "type": "uint32", "offset": 0, "size": 4, "bits": 4, "value": "0x5"},
-            {"name": "version", "type": "uint32", "offset": 0, "size": 4, "bits": 4, "value": "0x3"},
-            {"name": "reserved", "type": "uint32", "offset": 0, "size": 4, "bits": 24, "value": "0x1"},
+            {"name": "flags", "type": "uint32", "offset": 0, "size": 4, "bits": 4, "display": "0x5"},
+            {"name": "version", "type": "uint32", "offset": 0, "size": 4, "bits": 4, "display": "0x3"},
+            {"name": "reserved", "type": "uint32", "offset": 0, "size": 4, "bits": 24, "display": "0x1"},
             {
                 "name": "origin",
                 "type": "point",
@@ -459,8 +459,8 @@ def test_dumpstruct_comprehensive(cs: cstruct, compiled: bool) -> None:
                 "size": 4,
                 "kind": "struct",
                 "fields": [
-                    {"name": "x", "type": "uint16", "offset": 4, "size": 2, "value": "0xa"},
-                    {"name": "y", "type": "uint16", "offset": 6, "size": 2, "value": "0x14"},
+                    {"name": "x", "type": "uint16", "offset": 4, "size": 2, "display": "0xa"},
+                    {"name": "y", "type": "uint16", "offset": 6, "size": 2, "display": "0x14"},
                 ],
             },
             {
@@ -470,9 +470,9 @@ def test_dumpstruct_comprehensive(cs: cstruct, compiled: bool) -> None:
                 "size": 3,
                 "kind": "struct",
                 "fields": [
-                    {"name": "r", "type": "uint8", "offset": 8, "size": 1, "value": "0xff"},
-                    {"name": "g", "type": "uint8", "offset": 9, "size": 1, "value": "0x80"},
-                    {"name": "b", "type": "uint8", "offset": 10, "size": 1, "value": "0x40"},
+                    {"name": "r", "type": "uint8", "offset": 8, "size": 1, "display": "0xff"},
+                    {"name": "g", "type": "uint8", "offset": 9, "size": 1, "display": "0x80"},
+                    {"name": "b", "type": "uint8", "offset": 10, "size": 1, "display": "0x40"},
                 ],
             },
             {
@@ -482,12 +482,18 @@ def test_dumpstruct_comprehensive(cs: cstruct, compiled: bool) -> None:
                 "size": 4,
                 "kind": "union",
                 "fields": [
-                    {"name": "as_int", "type": "uint32", "offset": 11, "size": 4, "value": "0xdeadbeef"},
-                    {"name": "as_bytes[4]", "type": "uint8", "offset": 11, "size": 4, "value": "[239, 190, 173, 222]"},
+                    {"name": "as_int", "type": "uint32", "offset": 11, "size": 4, "display": "0xdeadbeef"},
+                    {
+                        "name": "as_bytes[4]",
+                        "type": "uint8",
+                        "offset": 11,
+                        "size": 4,
+                        "display": "[239, 190, 173, 222]",
+                    },
                 ],
             },
-            {"name": "matrix[2][3]", "type": "uint8", "offset": 15, "size": 6, "value": "[[1, 2, 3], [4, 5, 6]]"},
-            {"name": "checksum", "type": "uint16", "offset": 21, "size": 2, "value": "0xcafe"},
+            {"name": "matrix[2][3]", "type": "uint8", "offset": 15, "size": 6, "display": "[[1, 2, 3], [4, 5, 6]]"},
+            {"name": "checksum", "type": "uint16", "offset": 21, "size": 2, "display": "0xcafe"},
         ],
     }
     assert json.loads(dumpstruct(cs.complex, buf, output="json")) == result
@@ -666,11 +672,11 @@ def test_dumpstruct_padding(cs: cstruct, compiled: bool) -> None:
     result = dumpstruct(cs.test, buf, output="dict")
 
     assert result["fields"] == [
-        {"name": "a", "type": "uint8", "offset": 0, "size": 1, "value": "0x1"},
-        {"name": "b", "type": "uint32", "offset": 4, "size": 4, "value": "0x5040302"},
-        {"name": "count", "type": "uint8", "offset": 8, "size": 1, "value": "0x2"},
-        {"name": "data[count]", "type": "uint8", "offset": 9, "size": 2, "value": "[6, 7]"},
-        {"name": "c", "type": "uint32", "offset": 12, "size": 4, "value": "0xb0a0908"},
+        {"name": "a", "type": "uint8", "offset": 0, "size": 1, "display": "0x1"},
+        {"name": "b", "type": "uint32", "offset": 4, "size": 4, "display": "0x5040302"},
+        {"name": "count", "type": "uint8", "offset": 8, "size": 1, "display": "0x2"},
+        {"name": "data[count]", "type": "uint8", "offset": 9, "size": 2, "display": "[6, 7]"},
+        {"name": "c", "type": "uint32", "offset": 12, "size": 4, "display": "0xb0a0908"},
     ]
 
     assert _palette_regions(dumpstruct(cs.test, buf, color=True, output="string")) == [
@@ -698,9 +704,9 @@ def test_dumpstruct_unknown_size(cs: cstruct, compiled: bool) -> None:
     obj = cs.test(count=2, data=[6, 7], c=0x908)
 
     assert dumpstruct(obj, output="dict")["fields"] == [
-        {"name": "count", "type": "uint8", "offset": 0, "size": 1, "value": "0x2"},
-        {"name": "data[count]", "type": "uint8", "offset": 1, "size": None, "value": "[6, 7]"},
-        {"name": "c", "type": "uint16", "offset": None, "size": 2, "value": "0x908"},
+        {"name": "count", "type": "uint8", "offset": 0, "size": 1, "display": "0x2"},
+        {"name": "data[count]", "type": "uint8", "offset": 1, "size": None, "display": "[6, 7]"},
+        {"name": "c", "type": "uint16", "offset": None, "size": 2, "display": "0x908"},
     ]
 
     assert _palette_regions(dumpstruct(obj, color=True, output="string")) == [["02"]]
@@ -737,7 +743,7 @@ def test_dumpstruct_dict_struct_array(cs: cstruct, compiled: bool) -> None:
         "type": "test",
         "kind": "struct",
         "fields": [
-            {"name": "count", "type": "uint8", "offset": 0, "size": 1, "value": "0x2"},
+            {"name": "count", "type": "uint8", "offset": 0, "size": 1, "display": "0x2"},
             {
                 "name": "items[2]",
                 "type": "point",
@@ -752,8 +758,8 @@ def test_dumpstruct_dict_struct_array(cs: cstruct, compiled: bool) -> None:
                         "size": 4,
                         "kind": "struct",
                         "fields": [
-                            {"name": "x", "type": "uint16", "offset": 1, "size": 2, "value": "0xa"},
-                            {"name": "y", "type": "uint16", "offset": 3, "size": 2, "value": "0x14"},
+                            {"name": "x", "type": "uint16", "offset": 1, "size": 2, "display": "0xa"},
+                            {"name": "y", "type": "uint16", "offset": 3, "size": 2, "display": "0x14"},
                         ],
                     },
                     {
@@ -763,13 +769,13 @@ def test_dumpstruct_dict_struct_array(cs: cstruct, compiled: bool) -> None:
                         "size": 4,
                         "kind": "struct",
                         "fields": [
-                            {"name": "x", "type": "uint16", "offset": 5, "size": 2, "value": "0x1e"},
-                            {"name": "y", "type": "uint16", "offset": 7, "size": 2, "value": "0x28"},
+                            {"name": "x", "type": "uint16", "offset": 5, "size": 2, "display": "0x1e"},
+                            {"name": "y", "type": "uint16", "offset": 7, "size": 2, "display": "0x28"},
                         ],
                     },
                 ],
             },
-            {"name": "tail", "type": "uint8", "offset": 9, "size": 1, "value": "0xff"},
+            {"name": "tail", "type": "uint8", "offset": 9, "size": 1, "display": "0xff"},
         ],
     }
 
@@ -822,7 +828,7 @@ def test_dumpstruct_dynamic_struct_array(cs: cstruct, compiled: bool) -> None:
     result = dumpstruct(cs.test, b"\x02\x01a\x02bc\xff", output="dict")
     items, tail = result["fields"][1], result["fields"][2]
     assert [(element["offset"], element["size"]) for element in items["fields"]] == [(1, 2), (3, 3)]
-    assert tail == {"name": "tail", "type": "uint8", "offset": 6, "size": 1, "value": "0xff"}
+    assert tail == {"name": "tail", "type": "uint8", "offset": 6, "size": 1, "display": "0xff"}
 
 
 def test_dumpstruct_dynamic_struct_array_aligned(cs: cstruct, compiled: bool) -> None:
@@ -852,7 +858,7 @@ def test_dumpstruct_dynamic_struct_array_aligned(cs: cstruct, compiled: bool) ->
     result = dumpstruct(cs.test, buf, output="dict")
     items, tail = result["fields"][1], result["fields"][2]
     assert [(element["offset"], element["size"]) for element in items["fields"]] == [(2, 4), (6, 4)]
-    assert tail == {"name": "tail", "type": "uint8", "offset": 10, "size": 1, "value": "0xff"}
+    assert tail == {"name": "tail", "type": "uint8", "offset": 10, "size": 1, "display": "0xff"}
 
 
 def test_dumpstruct_union_array(cs: cstruct, compiled: bool) -> None:
@@ -879,8 +885,8 @@ def test_dumpstruct_union_array(cs: cstruct, compiled: bool) -> None:
             "size": 2,
             "kind": "union",
             "fields": [
-                {"name": "a", "type": "uint8", "offset": offset, "size": 1, "value": a},
-                {"name": "b", "type": "uint16", "offset": offset, "size": 2, "value": b},
+                {"name": "a", "type": "uint8", "offset": offset, "size": 1, "display": a},
+                {"name": "b", "type": "uint16", "offset": offset, "size": 2, "display": b},
             ],
         }
 
@@ -954,9 +960,9 @@ def test_dumpstruct_repeated_field_name(cs: cstruct, compiled: bool) -> None:
     assert verify_compiled(cs.test, compiled)
 
     assert dumpstruct(cs.test, b"\x01\x02\x03\x04", output="dict")["fields"] == [
-        {"name": "_", "type": "uint8", "offset": 0, "size": 1, "value": None},
-        {"name": "a", "type": "uint8", "offset": 1, "size": 1, "value": "0x2"},
-        {"name": "_", "type": "uint16", "offset": 2, "size": 2, "value": "0x403"},
+        {"name": "_", "type": "uint8", "offset": 0, "size": 1, "display": None},
+        {"name": "a", "type": "uint8", "offset": 1, "size": 1, "display": "0x2"},
+        {"name": "_", "type": "uint16", "offset": 2, "size": 2, "display": "0x403"},
     ]
 
 
@@ -980,8 +986,8 @@ def test_dumpstruct_union_root(cs: cstruct, compiled: bool) -> None:
         "type": "foo",
         "kind": "union",
         "fields": [
-            {"name": "as_int", "type": "uint32", "offset": 0, "size": 4, "value": "0x4030201"},
-            {"name": "as_bytes[4]", "type": "uint8", "offset": 0, "size": 4, "value": "[1, 2, 3, 4]"},
+            {"name": "as_int", "type": "uint32", "offset": 0, "size": 4, "display": "0x4030201"},
+            {"name": "as_bytes[4]", "type": "uint8", "offset": 0, "size": 4, "display": "[1, 2, 3, 4]"},
         ],
     }
 
@@ -1011,10 +1017,10 @@ def test_dumpstruct_union_nested_struct(cs: cstruct, compiled: bool) -> None:
     buf = b"\x01\x00\x00\x00\x02\x00\x00\x00"
 
     inner_fields = [
-        {"name": "a", "type": "uint32", "offset": 0, "size": 4, "value": "0x1"},
-        {"name": "b", "type": "uint32", "offset": 4, "size": 4, "value": "0x2"},
+        {"name": "a", "type": "uint32", "offset": 0, "size": 4, "display": "0x1"},
+        {"name": "b", "type": "uint32", "offset": 4, "size": 4, "display": "0x2"},
     ]
-    raw = {"name": "raw[8]", "type": "uint8", "offset": 0, "size": 8, "value": "[1, 0, 0, 0, 2, 0, 0, 0]"}
+    raw = {"name": "raw[8]", "type": "uint8", "offset": 0, "size": 8, "display": "[1, 0, 0, 0, 2, 0, 0, 0]"}
 
     result = dumpstruct(cs.outer, buf, output="dict")
     assert result["fields"] == [
