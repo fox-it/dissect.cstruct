@@ -27,3 +27,7 @@ class ArraySizeError(Error):
 
 class ExpressionParserError(Error):
     pass
+
+
+class UnknownIdentifierError(ExpressionParserError):
+    pass

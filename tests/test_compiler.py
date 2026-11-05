@@ -423,11 +423,11 @@ def test_compiled_dynamic_array_sizes() -> None:
     assert [line for line in lines if line.startswith("_count = ") or "._read" in line] == [
         "_count = max(0, int(_value0))",
         "_value3 = values['a'] = _type_call(_type3, _type4._read_array(stream, _count, context=values, endian=endian))",
-        "_count = max(0, (int(_value0) - _identifier(cs, values, 'HDR', 1)))",
+        "_count = max(0, (int(_value0) - _identifier(cs, values, 'HDR')))",
         "_value4 = values['b'] = _type_call(_type5, _type6._read_array(stream, _count, context=values, endian=endian))",
         "_count = max(0, (int(_value1) * 2))",
         "_value5 = values['c'] = _type_call(_type7, _type8._read_array(stream, _count, context=values, endian=endian))",
-        "_count = max(0, _identifier(cs, values, 'hdr.size', 1))",
+        "_count = max(0, _identifier(cs, values, 'hdr.size'))",
         "_value6 = values['d'] = _type_call(_type9, _type0._read_array(stream, _count, context=values, endian=endian))",
         "_count = max(0, (int(_value0) + _sizeof(cs, 'inner')))",
         "_value7 = values['e'] = _type_call(_type10, _type2._read_array("

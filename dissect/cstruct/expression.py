@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from dissect.cstruct.exception import ExpressionParserError
-from dissect.cstruct.lexer import IDENTIFIER_TYPES, Lexer, TokenCursor, TokenType
+from dissect.cstruct.exception import ExpressionParserError, UnknownIdentifierError
+from dissect.cstruct.lexer import IDENTIFIER_TYPES, Lexer, TokenCursor, TokenType, join_tokens
 from dissect.cstruct.util import offsetof, sizeof
 
 if TYPE_CHECKING:
@@ -87,11 +87,7 @@ FUNCTIONS: dict[TokenType, Callable[..., int]] = {
 }
 
 
-def _error(msg: str, line: int) -> ExpressionParserError:
-    return ExpressionParserError(f"line {line}: {msg}")
-
-
-def _identifier(cs: cstruct, context: dict[str, Any], ident: str, line: int) -> int:
+def _identifier(cs: cstruct, context: dict[str, Any], ident: str) -> int:
     """Resolve an identifier to an integer value."""
     obj = None
     for i, part in enumerate(ident.split(".")):
@@ -103,16 +99,16 @@ def _identifier(cs: cstruct, context: dict[str, Any], ident: str, line: int) -> 
             elif part in cs.types:
                 obj = cs.types[part]
             else:
-                raise _error(f"Unknown identifier: '{ident}'", line)
+                raise UnknownIdentifierError(f"Unknown identifier: '{ident}'")
         else:
             obj = obj.get(part, _MISSING) if isinstance(obj, dict) else getattr(obj, part, _MISSING)
             if obj is _MISSING:
-                raise _error(f"Unknown identifier: '{ident}'", line)
+                raise UnknownIdentifierError(f"Unknown identifier: '{ident}'")
 
     try:
         return int(obj)
     except (ValueError, TypeError):
-        raise _error(f"Identifier '{ident}' does not resolve to an integer", line)
+        raise ExpressionParserError(f"Identifier '{ident}' does not resolve to an integer")
 
 
 # Globals used by the source code of an expression
@@ -129,8 +125,8 @@ class _Evaluator:
     def number(self, value: int) -> int:
         return value
 
-    def identifier(self, ident: str, token: Token) -> int:
-        return _identifier(self.cs, self.context, ident, token.line)
+    def identifier(self, ident: str) -> int:
+        return _identifier(self.cs, self.context, ident)
 
     def unary(self, operator: TokenType, value: int) -> int:
         return UNARY_OPERATORS[operator](value)
@@ -152,10 +148,10 @@ class _SourceBuilder:
     def number(self, value: int) -> str:
         return repr(value)
 
-    def identifier(self, ident: str, token: Token) -> str:
+    def identifier(self, ident: str) -> str:
         if ident in self.variables:
             return self.variables[ident]
-        return f"_identifier(cs, {self.context}, {ident!r}, {token.line})"
+        return f"_identifier(cs, {self.context}, {ident!r})"
 
     def unary(self, operator: TokenType, value: str) -> str:
         return f"({OPERATOR_SOURCE[operator]}{value})"
@@ -195,7 +191,7 @@ class Expression(TokenCursor):
         self._queue = []
 
     def _error(self, msg: str, *, token: Token | None = None) -> ExpressionParserError:
-        return _error(msg, (token if token is not None else self._current()).line)
+        return ExpressionParserError(msg)
 
     def _evaluate_expression(self, backend: _Evaluator | _SourceBuilder) -> None:
         operator = self._stack.pop(-1)
@@ -266,18 +262,18 @@ class Expression(TokenCursor):
 
                 num_args = FUNCTION_TOKENS[func]
                 while num_args > 1:
-                    self._queue.append(self._collect_until(TokenType.COMMA))
+                    self._queue.append(join_tokens(self._collect_until(TokenType.COMMA)))
                     self._expect(TokenType.COMMA)
                     num_args -= 1
 
-                self._queue.append(self._collect_until(TokenType.RPAREN))
+                self._queue.append(join_tokens(self._collect_until(TokenType.RPAREN)))
                 self._expect(TokenType.RPAREN)
 
                 # Evaluate immediately
                 self._evaluate_expression(backend)
 
             elif token.type in IDENTIFIER_TYPES:
-                self._queue.append(backend.identifier(self._take().value, token))
+                self._queue.append(backend.identifier(self._take().value))
 
             elif token.type == TokenType.LPAREN:
                 if self._previous().type == TokenType.NUMBER:
