@@ -630,6 +630,78 @@ def test_preprocessor_define_from_enum_in_struct(cs: cstruct) -> None:
     assert cs.packet.__members__["payload"].type.__num_entries__ == 20
 
 
+@pytest.mark.parametrize(
+    ("cdef", "message"),
+    [
+        (
+            """
+            struct test {
+                uint8 a;
+                char  b[N];
+            };
+            """,
+            """\
+            line 4: Identifier 'N' does not resolve to an integer
+              2: struct test {
+              3:     uint8 a;
+              4:     char  b[N];
+            """,
+        ),
+        (
+            """
+            struct test {
+                uint8 a;
+                char  b[4 4];
+            };
+            """,
+            """\
+            line 4: Invalid expression: too many operands
+              2: struct test {
+              3:     uint8 a;
+              4:     char  b[4 4];
+            """,
+        ),
+        (
+            """
+            enum test : uint8 {
+                A = 1,
+                B = A +,
+                C
+            };
+            """,
+            """\
+            line 4: Invalid expression: not enough operands
+              2: enum test : uint8 {
+              3:     A = 1,
+              4:     B = A +,
+            """,
+        ),
+        (
+            """
+            enum test : uint8 {
+                A = 1,
+                B = ,
+                C
+            };
+            """,
+            """\
+            line 4: expected an expression
+              2: enum test : uint8 {
+              3:     A = 1,
+              4:     B = ,
+            """,
+        ),
+    ],
+)
+def test_expression_invalid(cs: cstruct, cdef: str, message: str) -> None:
+    """Test that an array size or enum value that is missing or can't be evaluated is an error at its line."""
+    cs.load("#define N LENGTH")
+
+    with pytest.raises(ParserError) as exc_info:
+        cs.load(textwrap.dedent(cdef))
+    assert str(exc_info.value) == textwrap.dedent(message.rstrip())
+
+
 def test_error_context(cs: cstruct) -> None:
     """Test the context window around errors: 1 line before, the error line, up to 2 lines after."""
     # Error on line 1: no preceding lines available; shows lines 1, 2, 3

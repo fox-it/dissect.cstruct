@@ -9,9 +9,10 @@ from dissect.cstruct.exception import (
     ExpressionParserError,
     LexerError,
     ParserError,
+    UnknownIdentifierError,
 )
 from dissect.cstruct.expression import Expression
-from dissect.cstruct.lexer import IDENTIFIER_TYPES, TokenCursor, TokenType, format_error_context, tokenize
+from dissect.cstruct.lexer import IDENTIFIER_TYPES, TokenCursor, TokenType, format_error_context, join_tokens, tokenize
 from dissect.cstruct.types import BaseArray, BaseType, Field, Structure
 
 if TYPE_CHECKING:
@@ -422,8 +423,13 @@ class CStyleParser(Parser):
                 member_name = self._expect(TokenType.IDENTIFIER).value
 
             if self._match(TokenType.EQUALS):
-                expression = self._collect_until(TokenType.COMMA, TokenType.RBRACE)
-                value = Expression(expression).evaluate(self.cs, values)
+                if not (tokens := self._collect_until(TokenType.COMMA, TokenType.RBRACE)):
+                    raise self._error("expected an expression")
+
+                try:
+                    value = Expression(join_tokens(tokens)).evaluate(self.cs, values)
+                except ExpressionParserError as e:
+                    raise self._error(str(e), token=tokens[0]) from None
             else:
                 value = next_value
 
@@ -508,17 +514,21 @@ class CStyleParser(Parser):
         dimensions: list[int | Expression] = []
 
         while self._match(TokenType.LBRACKET):
-            if self._at(TokenType.RBRACKET):
-                dimensions.append(None)
-            else:
-                expression = self._collect_until(TokenType.RBRACKET)
-                count = Expression(expression)
+            tokens = self._collect_until(TokenType.RBRACKET)
+            self._expect(TokenType.RBRACKET)
+
+            count = None
+            if tokens:
+                count = Expression(join_tokens(tokens))
                 try:
                     count = count.evaluate(self.cs)
-                except Exception:
+                except UnknownIdentifierError:
+                    # The size refers to a field, so it's evaluated when reading the structure
                     pass
-                dimensions.append(count)
-            self._expect(TokenType.RBRACKET)
+                except ExpressionParserError as e:
+                    raise self._error(str(e), token=tokens[0]) from None
+
+            dimensions.append(count)
 
         type_ = base_type
         for count in reversed(dimensions):

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from dissect.cstruct.exception import ExpressionParserError, LexerError, ResolveError
+from dissect.cstruct.exception import ExpressionParserError, LexerError, ResolveError, UnknownIdentifierError
 from dissect.cstruct.expression import SOURCE_GLOBALS, Expression
 
 if TYPE_CHECKING:
@@ -174,13 +174,13 @@ def test_expression(cs_with_consts: cstruct, expression: str, answer: int) -> No
         ),
         pytest.param(
             "UNKNOWN",
-            ExpressionParserError,
+            UnknownIdentifierError,
             "Unknown identifier: 'UNKNOWN'",
             id="unknown-identifier",
         ),
         pytest.param(
             "UNKNOWN.UNKNOWN",
-            ExpressionParserError,
+            UnknownIdentifierError,
             "Unknown identifier: 'UNKNOWN.UNKNOWN'",
             id="unknown-identifier",
         ),
@@ -261,7 +261,7 @@ def test_dotted_identifier_unknown_member(cs: cstruct) -> None:
     };
     """)
 
-    with pytest.raises(ExpressionParserError, match="Unknown identifier: 'color\\.NOTAMEMBER'"):
+    with pytest.raises(UnknownIdentifierError, match="Unknown identifier: 'color\\.NOTAMEMBER'"):
         Expression("color.NOTAMEMBER").evaluate(cs)
 
 
@@ -354,9 +354,9 @@ def test_expression_source_invalid(cs: cstruct, source: str) -> None:
         # Numbers in other bases
         ("0x10 + 0b101 - 0o7", "((16 + 5) - 7)"),
         # Functions, and identifiers that are resolved from the context
-        ("sizeof(test) * X - -1", "((_sizeof(cs, 'test') * _identifier(cs, context, 'X', 1)) - (-1))"),
+        ("sizeof(test) * X - -1", "((_sizeof(cs, 'test') * _identifier(cs, context, 'X')) - (-1))"),
         ("offsetof(test, b) + a", "(_offsetof(cs, 'test', 'b') + a)"),
-        ("hdr.size * 4", "(_identifier(cs, context, 'hdr.size', 1) * 4)"),
+        ("hdr.size * 4", "(_identifier(cs, context, 'hdr.size') * 4)"),
     ],
 )
 def test_expression_source_code(cs: cstruct, expression: str, source: str) -> None:
@@ -380,6 +380,6 @@ def test_expression_source_code(cs: cstruct, expression: str, source: str) -> No
 
 
 def test_expression_source_context() -> None:
-    """Test that identifiers are resolved from the context with the given name, with their line number."""
-    expected = "(_identifier(cs, values, 'X', 1) + _identifier(cs, values, 'b', 2))"
-    assert Expression("X +\nb").source(context="values") == expected
+    """Test that identifiers are resolved from the context with the given name."""
+    expected = "(_identifier(cs, values, 'X') + _identifier(cs, values, 'b'))"
+    assert Expression("X + b").source(context="values") == expected

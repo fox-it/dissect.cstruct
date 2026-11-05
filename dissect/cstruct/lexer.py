@@ -143,6 +143,11 @@ def format_error_context(data: str, lineno: int, window: int = 1) -> str:
     return "\n".join(f"{start + i + 1:>{no_len}}: {line}" for i, line in enumerate(context))
 
 
+def join_tokens(tokens: list[Token]) -> str:
+    """Join the values of the tokens with spaces, e.g. to evaluate them as an expression."""
+    return " ".join(token.value for token in tokens)
+
+
 class Lexer:
     """Lexer compatible with C-like syntax for struct definitions and preprocessor directives."""
 
@@ -566,11 +571,11 @@ class TokenCursor:
             raise self._error(f"expected {expected}, got {actual}")
         return self._take()
 
-    def _collect_until(self, *terminators: TokenType) -> str:
-        """Collect token values until one of the terminators is reached, tracking nesting."""
+    def _collect_until(self, *terminators: TokenType) -> list[Token]:
+        """Collect tokens until one of the terminators is reached, tracking nesting."""
         terminators_set = set(terminators)
         start = self._current()
-        parts: list[str] = []
+        tokens: list[Token] = []
         depth = 0
 
         while (token := self._current()).type != TokenType.EOF:
@@ -584,13 +589,13 @@ class TokenCursor:
                 if depth < 0:
                     raise self._error("unmatched closing bracket", token=token)
 
-            parts.append(token.value)
+            tokens.append(token)
             self._pos += 1
 
         if depth > 0:
             raise self._error("unclosed opening bracket", token=start)
 
-        return " ".join(parts)
+        return tokens
 
     def _error(self, msg: str, *, token: Token | None = None) -> Exception:
         """Subclasses should override to return an appropriate exception."""
