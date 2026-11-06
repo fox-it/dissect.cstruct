@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import functools
 import warnings
 from io import SEEK_CUR, BytesIO
@@ -7,6 +8,7 @@ from types import MethodType
 from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, TypeVar
 
 from dissect.cstruct.exception import ArraySizeError
+from dissect.cstruct.expression import Expression
 from dissect.cstruct.util import classproperty, normalize_endianness
 
 if TYPE_CHECKING:
@@ -15,7 +17,6 @@ if TYPE_CHECKING:
     from typing_extensions import Self
 
     from dissect.cstruct.cstruct import AllowedEndianness, Endianness, cstruct
-    from dissect.cstruct.expression import Expression
 
 
 EOF = -0xE0F  # Negative counts are illegal anyway, so abuse that for our EOF sentinel
@@ -73,8 +74,13 @@ class MetaType(type):
 
         return type.__call__(cls, *args, **kwargs)
 
-    def __getitem__(cls, num_entries: int | Expression | None) -> type[BaseArray]:
+    def __getitem__(cls, num_entries: int | str | Expression | None) -> type[BaseArray]:
         """Create a new array with the given number of entries."""
+        if isinstance(num_entries, str):
+            num_entries = Expression(num_entries)
+            with contextlib.suppress(Exception):
+                num_entries = num_entries.evaluate(cls.__cs__)
+
         return cls.__cs__._make_array(cls, num_entries)
 
     def __bool__(cls) -> bool:
