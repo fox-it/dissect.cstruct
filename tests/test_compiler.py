@@ -14,8 +14,7 @@ from dissect.cstruct.exception import ExpressionParserError
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.types import Packed
 from dissect.cstruct.types.structure import Field
-
-from .utils import parsed_state, source_lines, verify_compiled
+from tests.util import parsed_state, source_lines, verify_compiled
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

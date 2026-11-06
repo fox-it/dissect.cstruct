@@ -11,8 +11,7 @@ from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.structure import Field, Union, UnionProxy
-
-from .utils import parsed_state, source_lines, verify_compiled
+from tests.util import parsed_state, source_lines, verify_compiled
 
 
 @pytest.fixture

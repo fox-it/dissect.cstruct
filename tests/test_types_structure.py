@@ -14,8 +14,7 @@ from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.pointer import Pointer
 from dissect.cstruct.types.structure import Field, Structure, StructureMetaType
-
-from .utils import verify_compiled
+from tests.util import verify_compiled
 
 
 @pytest.fixture
@@ -755,21 +754,25 @@ def test_structure_partial_initialization(cs: cstruct) -> None:
     assert obj.a == 0
     assert obj.b == 0
     assert str(obj) == "<test a=0x0 b=0x0>"
+    assert obj.__sizes__ == {"a": 1, "b": 1}
 
     obj = cs.test(1, 1)
     assert obj.a == 1
     assert obj.b == 1
     assert str(obj) == "<test a=0x1 b=0x1>"
+    assert obj.__sizes__ == {"a": 1, "b": 1}
 
     obj = cs.test(1)
     assert obj.a == 1
     assert obj.b == 0
     assert str(obj) == "<test a=0x1 b=0x0>"
+    assert obj.__sizes__ == {"a": 1, "b": 1}
 
     obj = cs.test(a=1)
     assert obj.a == 1
     assert obj.b == 0
     assert str(obj) == "<test a=0x1 b=0x0>"
+    assert obj.__sizes__ == {"a": 1, "b": 1}
 
     obj = cs.test(b=1)
     assert obj.a == 0

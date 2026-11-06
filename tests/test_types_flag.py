@@ -9,8 +9,7 @@ import pytest
 
 from dissect.cstruct.types.enum import PY_311
 from dissect.cstruct.types.flag import Flag
-
-from .utils import verify_compiled
+from tests.util import verify_compiled
 
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct

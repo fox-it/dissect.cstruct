@@ -9,7 +9,7 @@ from dissect.cstruct.exception import ParserError, ResolveError
 from dissect.cstruct.lexer import tokenize
 from dissect.cstruct.parser import CStyleParser
 from dissect.cstruct.types import BaseArray, Pointer, Structure
-from tests.utils import verify_compiled
+from tests.util import verify_compiled
 
 
 def test_struct(cs: cstruct, compiled: bool) -> None:

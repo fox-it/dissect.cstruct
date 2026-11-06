@@ -6,8 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from dissect.cstruct.exception import ArraySizeError
-
-from .utils import NonSeekableStream, verify_compiled
+from tests.util import NonSeekableStream, verify_compiled
 
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct

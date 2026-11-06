@@ -24,9 +24,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Improve writing performance:
   - The compiler now generates code for writing structures and unions too! It uses a similar approach, grouping fields and writes where possible.
   - `obj.dumps()` and `obj.write()` no longer create a `functools.partial` on every access. As a result, they no longer accept a `value` argument.
+- `dumpstruct` can return a tree of all fields with their offset, size and value, with `output="dict"` or `output="json"`. `dumpstruct` and `hexdump` moved from `dissect.cstruct.util` to `dissect.cstruct.dump`.
+- `dumpstruct` shows the fields of every element of an array of structures or unions.
 
 ### Fixed
 
+- `dumpstruct` colors the right bytes of structures with padding and unions.
 - Structures and unions no longer share nested structures and arrays between their default values.
 - Unions can be created with default values and read if they have doubly nested structures or nested unions.
 - Writing a `bytearray` to a `char` array no longer modifies the `bytearray`.
