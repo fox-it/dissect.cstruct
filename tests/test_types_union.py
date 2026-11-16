@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import io
+import json
 from textwrap import dedent
 
 import pytest
@@ -10,7 +11,7 @@ from dissect.cstruct import compiler
 from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
-from dissect.cstruct.types.structure import Field, Union, UnionProxy
+from dissect.cstruct.types.structure import Field, JSONEncoder, Union, UnionProxy, asdict
 from tests.util import parsed_state, source_lines, verify_compiled
 
 
@@ -883,6 +884,49 @@ def test_union_in_union(cs: cstruct, compiled: bool) -> None:
     assert obj.e.d.c == 2
     assert obj.f == 2
     assert obj.dumps() == b"\x02"
+
+
+def test_union_asdict(cs: cstruct, compiled: bool) -> None:
+    """Test that asdict has all fields of a union, and unwraps the proxies of structures in (nested) unions."""
+    cdef = """
+    struct inner {
+        uint8   x;
+        uint8   y;
+    };
+
+    union test {
+        inner   nested;
+        uint16  raw;
+        struct {
+            uint8   lo;
+            uint8   hi;
+        };
+    };
+
+    union outer {
+        test    u;
+        uint16  raw;
+    };
+
+    struct holder {
+        uint8   a;
+        test    u;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+    assert verify_compiled(cs.holder, compiled)
+
+    test = {"nested": {"x": 1, "y": 2}, "raw": 0x0201, "lo": 1, "hi": 2}
+    assert asdict(cs.test(b"\x01\x02")) == test
+    assert asdict(cs.holder(b"\x00\x01\x02")) == {"a": 0, "u": test}
+
+    obj = cs.outer(b"\x01\x02")
+    assert isinstance(obj.u.nested.__target__, UnionProxy)
+    assert asdict(obj) == {"u": test, "raw": 0x0201}
+    assert asdict(obj.u.nested) == {"x": 1, "y": 2}
+    assert json.dumps(obj.u.nested, cls=JSONEncoder) == '{"x": 1, "y": 2}'
 
 
 def test_union_write_largest_field(cs: cstruct, compiled: bool) -> None:

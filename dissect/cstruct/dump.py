@@ -428,6 +428,9 @@ def dumpstruct(
 
     Prints a colorized hexdump and parsed structure output.
 
+    Note that this is different from :func:`asdict` and :func:`asjson`: those functions return the field values of a
+    structure or union, while this function describes the layout of the structure (hex bytes, offsets, display strings).
+
     The ``dict`` and ``json`` output formats describe the structure as a tree:
         - bytes: hex string of the raw data
         - type: type name of the structure

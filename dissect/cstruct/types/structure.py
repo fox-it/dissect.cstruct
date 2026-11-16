@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 import io
+import json
 import warnings
 from collections import ChainMap
 from collections.abc import MutableMapping
@@ -26,6 +28,7 @@ from dissect.cstruct.types.base import (
 )
 from dissect.cstruct.types.enum import EnumMetaType
 from dissect.cstruct.types.pointer import Pointer
+from dissect.cstruct.types.void import Void
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
@@ -806,6 +809,91 @@ class UnionProxy:
     def __setattr__(self, attr: str, value: Any) -> None:
         setattr(self.__target__, attr, value)
         self.__union__._rebuild(self.__attr__)
+
+
+def asdict(obj: Structure | UnionProxy) -> dict[str, Any]:
+    """Return the field values of a structure or union as a dict, like :func:`dataclasses.asdict`.
+
+    The keys are the field names in :attr:`StructureMetaType.__members__`, so the fields of anonymous structures and
+    unions are part of the parent, and a union has all of its fields. Nested structures and unions become dicts and
+    arrays become lists. Other values are returned as they are: enum members stay enum members, and pointers are not
+    dereferenced.
+
+    Note that this is different from :func:`dumpstruct` called with ``output="dict"``: this function returns a
+    dictionary with pairs of field names and values, rather than a dictionary that describes the layout of the
+    structure (hex bytes, offsets, display strings).
+
+    Args:
+        obj: The structure or union to convert.
+
+    Raises:
+        TypeError: If ``obj`` is not a structure or union instance.
+    """
+    while isinstance(obj, UnionProxy):
+        obj = obj.__target__
+
+    if not isinstance(obj, Structure):
+        raise TypeError("asdict() should be called on Structure instances")
+
+    return _asdict_value(obj)
+
+
+def _asdict_value(value: Any) -> Any:
+    # Structures in a union are proxied
+    while isinstance(value, UnionProxy):
+        value = value.__target__
+
+    if isinstance(value, Structure):
+        return {name: _asdict_value(getattr(value, name)) for name in value.__class__.__members__}
+
+    if isinstance(value, (list, tuple)):
+        # The entries of an array of other types are returned as they are, copying them is much faster
+        if isinstance(value, BaseArray) and not issubclass(value.__type__, (Structure, BaseArray)):
+            return list(value)
+        return [_asdict_value(item) for item in value]
+
+    return value
+
+
+class JSONEncoder(json.JSONEncoder):
+    """JSON encoder for structures and unions, and the values of their fields.
+
+    Structures and unions are encoded as objects with the fields of :func:`asdict`. Bytes, such as the values of
+    ``char`` arrays, are encoded as base64 strings and ``void`` values as ``null``. Enum and flag members and pointers
+    are integers, which :mod:`json` encodes as numbers.
+
+    Example:
+        >>> json.dumps({"header": header}, cls=JSONEncoder)
+    """
+
+    def default(self, o: Any) -> Any:
+        if isinstance(o, (Structure, UnionProxy)):
+            return asdict(o)
+
+        if isinstance(o, _BUFFER_TYPES):
+            return base64.b64encode(o).decode()
+
+        if isinstance(o, Void):
+            return None
+
+        return super().default(o)
+
+
+def asjson(obj: Structure | UnionProxy, **kwargs) -> str:
+    """Return the field values of a structure or union as a JSON string, encoded with :class:`JSONEncoder`.
+
+    Note that this is different from :func:`dumpstruct` called with ``output="json"``: this function returns a
+    JSON string with pairs of field names and values, rather than a JSON string that describes the layout of the
+    structure (hex bytes, offsets, display strings).
+
+    Args:
+        obj: The structure or union to convert.
+        **kwargs: Keyword arguments for :func:`json.dumps`, e.g. ``indent``.
+
+    Raises:
+        TypeError: If ``obj`` is not a structure or union instance.
+    """
+    return json.dumps(asdict(obj), cls=JSONEncoder, **kwargs)
 
 
 def attrsetter(path: str) -> Callable[[Any], Any]:
