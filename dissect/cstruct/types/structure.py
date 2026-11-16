@@ -342,7 +342,8 @@ class StructureMetaType(MetaType):
                     bit_buffer = BitBuffer(stream, endian=endian)
 
                 if isinstance(field_type, EnumMetaType):
-                    bit_buffer.write(field_type.__type__, value.value, field.bits)
+                    # Enum members and plain integers are shifted into the buffer the same way
+                    bit_buffer.write(field_type.__type__, value, field.bits)
                 else:
                     bit_buffer.write(field_type, value, field.bits)
             else:

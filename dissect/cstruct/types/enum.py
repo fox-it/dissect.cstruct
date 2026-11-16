@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sys
-from enum import Enum as _Enum
 from enum import EnumMeta, IntEnum, IntFlag
 from typing import TYPE_CHECKING, Any, BinaryIO, TypeVar, overload
 
@@ -100,16 +99,15 @@ class EnumMetaType(EnumMeta, MetaType):
     def _read_0(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> list[Self]:
         return list(map(cls, cls.__type__._read_0(stream, context=context, endian=endian)))
 
-    def _write(cls, stream: BinaryIO, data: Enum, *, endian: Endianness) -> int:
-        return cls.__type__._write(stream, data.value, endian=endian)
+    def _write(cls, stream: BinaryIO, data: Enum | int, *, endian: Endianness) -> int:
+        # Enum members are integers, so the integer type writes them like plain integers
+        return cls.__type__._write(stream, data, endian=endian)
 
-    def _write_array(cls, stream: BinaryIO, array: list[BaseType | int], *, endian: Endianness) -> int:
-        data = [entry.value if isinstance(entry, _Enum) else entry for entry in array]
-        return cls.__type__._write_array(stream, data, endian=endian)
+    def _write_array(cls, stream: BinaryIO, array: list[Enum | int], *, endian: Endianness) -> int:
+        return cls.__type__._write_array(stream, array, endian=endian)
 
-    def _write_0(cls, stream: BinaryIO, array: list[BaseType | int], *, endian: Endianness) -> int:
-        data = [entry.value if isinstance(entry, _Enum) else entry for entry in array]
-        return cls._write_array(stream, [*data, cls.__type__.__default__()], endian=endian)
+    def _write_0(cls, stream: BinaryIO, array: list[Enum | int], *, endian: Endianness) -> int:
+        return cls.__type__._write_0(stream, array, endian=endian)
 
     def cdef(cls) -> str:
         """Render this enum (or flag) back to its C-style definition.

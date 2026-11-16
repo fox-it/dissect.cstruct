@@ -59,6 +59,7 @@ def test_enum_read(TestEnum: type[Enum]) -> None:
 def test_enum_write(TestEnum: type[Enum]) -> None:
     assert TestEnum.B.dumps() == b"\x02"
     assert TestEnum(b"\x02").dumps() == b"\x02"
+    assert TestEnum.dumps(2) == b"\x02"
 
 
 def test_enum_array_read(TestEnum: type[Enum]) -> None:
@@ -69,6 +70,8 @@ def test_enum_array_read(TestEnum: type[Enum]) -> None:
 def test_enum_array_write(TestEnum: type[Enum]) -> None:
     assert TestEnum[2]([TestEnum.B, TestEnum.C]).dumps() == b"\x02\x03"
     assert TestEnum[None]([TestEnum.B, TestEnum.C]).dumps() == b"\x02\x03\x00"
+    assert TestEnum[2]([2, 3]).dumps() == b"\x02\x03"
+    assert TestEnum[None]([2, 3]).dumps() == b"\x02\x03\x00"
 
 
 def test_enum_alias(cs: cstruct) -> None:
@@ -366,7 +369,12 @@ def test_enum_struct_write(cs: cstruct, compiled: bool) -> None:
     obj.b32 = cs.Test32.B
     obj.list = [cs.Test16.A, cs.Test16.B]
 
-    assert obj.dumps() == b"\x01\x00\x02\x00\x01\x00\x00\x02\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x01\x00\x02\x00"
+    buf = b"\x01\x00\x02\x00\x01\x00\x00\x02\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x01\x00\x02\x00"
+    assert obj.dumps() == buf
+
+    # Plain integers are written like enum members
+    obj = cs.test(a16=1, b16=2, a24=1, b24=2, a32=1, b32=2, list=[1, 2])
+    assert obj.dumps() == buf
 
 
 def test_enum_anonymous(cs: cstruct, compiled: bool) -> None:

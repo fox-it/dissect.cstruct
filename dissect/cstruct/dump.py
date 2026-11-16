@@ -318,7 +318,7 @@ def _describe_value(
     Structures and unions, and arrays of them, get their fields or elements as child nodes. Other values, including
     arrays of other types, are formatted as a human-readable ``display``.
     """
-    if isinstance(value, UnionProxy):
+    while isinstance(value, UnionProxy):
         # Nested Structure members inside a Union are proxied; unwrap to the real Structure
         value = value.__target__
 
