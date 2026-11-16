@@ -532,10 +532,6 @@ class Structure(BaseType, metaclass=StructureMetaType):
 
         return f"<{self.__class__.__name__} {' '.join(values)}>"
 
-    def _asdict(self) -> dict[str, Any]:
-        """Return the field values of this structure as a dict, see :func:`asdict`."""
-        return asdict(self)
-
     @property
     def __values__(self) -> MutableMapping[str, Any]:
         return StructureValuesProxy(self)
@@ -823,6 +819,10 @@ def asdict(obj: Structure | UnionProxy) -> dict[str, Any]:
     arrays become lists. Other values are returned as they are: enum members stay enum members, and pointers are not
     dereferenced.
 
+    Note that this is different from :func:`dumpstruct` called with ``output="dict"``: this function returns a
+    dictionary with pairs of field names and values, rather than a dictionary that describes the layout of the
+    structure (hex bytes, offsets, display strings).
+
     Args:
         obj: The structure or union to convert.
 
@@ -846,7 +846,7 @@ def _asdict_value(value: Any) -> Any:
     if isinstance(value, Structure):
         return {name: _asdict_value(getattr(value, name)) for name in value.__class__.__members__}
 
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         # The entries of an array of other types are returned as they are, copying them is much faster
         if isinstance(value, BaseArray) and not issubclass(value.__type__, (Structure, BaseArray)):
             return list(value)
@@ -881,6 +881,10 @@ class JSONEncoder(json.JSONEncoder):
 
 def asjson(obj: Structure | UnionProxy, **kwargs) -> str:
     """Return the field values of a structure or union as a JSON string, encoded with :class:`JSONEncoder`.
+
+    Note that this is different from :func:`dumpstruct` called with ``output="json"``: this function returns a
+    JSON string with pairs of field names and values, rather than a JSON string that describes the layout of the
+    structure (hex bytes, offsets, display strings).
 
     Args:
         obj: The structure or union to convert.

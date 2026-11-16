@@ -364,7 +364,6 @@ def test_structure_asdict(cs: cstruct, compiled: bool) -> None:
     }
     assert list(result) == list(cs.test.__members__)
     assert result["color"] is cs.Color.RED
-    assert obj._asdict() == result
 
     # The dicts and lists are new
     result["arr"][0]["x"] = 0
