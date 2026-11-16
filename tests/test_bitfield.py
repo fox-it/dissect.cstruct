@@ -243,6 +243,9 @@ def test_bitfield_with_enum_or_flag(cs: cstruct, compiled: bool) -> None:
 
     assert obj.dumps() == buf
 
+    # Plain integers are written like flag members
+    assert cs.test(a=1, b=1, c=3, d=3).dumps() == buf
+
 
 def test_bitfield_char(cs: cstruct, compiled: bool) -> None:
     cdef = """

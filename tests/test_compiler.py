@@ -749,12 +749,11 @@ def test_generate_packed_write_numbers(cs: cstruct, TestEnum: type[Enum]) -> Non
     code = next(gen._generate_packed_source(fields))
 
     expected = """
-    if (_value0 := data.a) is None: _value0 = _type0.__default__()
-    if (_value1 := data.c) is None: _value1 = _type2.__default__()
+    if (_value0 := data.c) is None: _value0 = _type2.__default__()
     try:
-        buf = _pack0[endian](_value0._value_, data.b, _value1.to_bytes(3, _byteorder[endian], signed=False))
+        buf = _pack0[endian](data.a, data.b, _value0.to_bytes(3, _byteorder[endian], signed=False))
     except _struct_error:
-        buf = _pack0[endian](_value0._value_, _or_default(data.b, _type1), _value1.to_bytes(3, _byteorder[endian], signed=False))
+        buf = _pack0[endian](_or_default(data.a, _type0), _or_default(data.b, _type1), _value0.to_bytes(3, _byteorder[endian], signed=False))
     stream.write(buf)
     """  # noqa: E501
 
@@ -784,8 +783,8 @@ def test_generate_bits_write(cs: cstruct, TestEnum: type[Enum]) -> None:
     expected = """
     if (_value0 := data.a) is None: _value0 = _type0.__default__()
     if (_value1 := data.b) is None: _value1 = _type1.__default__()
-    stream.write(_pack0[endian]((_value0 << 0 | _value1._value_ << 2 if endian == '<' else _value0 << 6 | _value1._value_ << 0)))
-    """  # noqa: E501
+    stream.write(_pack0[endian]((_value0 << 0 | _value1 << 2 if endian == '<' else _value0 << 6 | _value1 << 0)))
+    """
 
     assert code == dedent(expected)
 

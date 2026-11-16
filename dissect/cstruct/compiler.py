@@ -948,9 +948,8 @@ class _WriteSourceGenerator(_SourceGenerator):
         other = []
         remaining = type_.__size__ * 8
         for field in fields:
+            # Enum members and plain integers are shifted the same way
             value = self._load_value(field, _get_attribute("data", field._name), pack)
-            if issubclass(field.type, (Enum, Flag)):
-                value += "._value_"
 
             remaining -= field.bits
             little.append(f"{value} << {type_.__size__ * 8 - remaining - field.bits}")
@@ -1069,9 +1068,7 @@ class _WriteSourceGenerator(_SourceGenerator):
 
             pack.add(count, "s", var)
 
-        elif issubclass(field_type, (Enum, Flag)):
-            self._pack_number(read_type, f"{self._load_value(field, value, pack)}._value_", pack)
-
+        # Enum members and plain integers are packed the same way, as the integer type of the enum
         elif issubclass(read_type, Packed):
             pack.add(1, read_type.__fmt__, value, f"_or_default({value}, {type_})")
 

@@ -993,7 +993,7 @@ def test_dumpstruct_union_root(cs: cstruct, compiled: bool) -> None:
 
 
 def test_dumpstruct_union_nested_struct(cs: cstruct, compiled: bool) -> None:
-    """Nested Structure members inside a Union are proxied via UnionProxy; verify unwrap."""
+    """Nested Structure members inside a Union are proxied via UnionProxy, twice in nested unions; verify unwrap."""
     cdef = """
     struct inner {
         uint32 a;
@@ -1001,6 +1001,11 @@ def test_dumpstruct_union_nested_struct(cs: cstruct, compiled: bool) -> None:
     };
     union outer {
         inner  nested;
+        uint8  raw[8];
+    };
+
+    union outer_outer {
+        outer  nested;
         uint8  raw[8];
     };
 
@@ -1022,9 +1027,17 @@ def test_dumpstruct_union_nested_struct(cs: cstruct, compiled: bool) -> None:
     ]
     raw = {"name": "raw[8]", "type": "uint8", "offset": 0, "size": 8, "display": "[1, 0, 0, 0, 2, 0, 0, 0]"}
 
-    result = dumpstruct(cs.outer, buf, output="dict")
-    assert result["fields"] == [
+    outer_fields = [
         {"name": "nested", "type": "inner", "offset": 0, "size": 8, "kind": "struct", "fields": inner_fields},
+        raw,
+    ]
+
+    result = dumpstruct(cs.outer, buf, output="dict")
+    assert result["fields"] == outer_fields
+
+    result = dumpstruct(cs.outer_outer, buf, output="dict")
+    assert result["fields"] == [
+        {"name": "nested", "type": "outer", "offset": 0, "size": 8, "kind": "union", "fields": outer_fields},
         raw,
     ]
 
