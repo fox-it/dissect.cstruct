@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 from io import BytesIO
 from textwrap import dedent
 from types import MethodType
@@ -13,7 +14,7 @@ from dissect.cstruct.exception import ArraySizeError, ResolveError
 from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.pointer import Pointer
-from dissect.cstruct.types.structure import Field, Structure, StructureMetaType
+from dissect.cstruct.types.structure import Field, JSONEncoder, Structure, StructureMetaType, asdict, asjson
 from tests.util import verify_compiled
 
 
@@ -306,6 +307,150 @@ def test_structure_values_dict(cs: cstruct, compiled: bool) -> None:
 
     # Test dictionary methods
     assert values.keys() == {"magic", "wmagic", "a", "b", "c", "string", "wstring"}
+
+
+def test_structure_asdict(cs: cstruct, compiled: bool) -> None:
+    """Test that asdict converts nested structures and arrays, and returns other values as they are."""
+    cdef = """
+    enum Color : uint8 {
+        RED = 1
+    };
+
+    struct inner {
+        uint8   x;
+    };
+
+    struct test {
+        uint32  a;
+        Color   color;
+        char    magic[4];
+        wchar   wmagic[2];
+        inner   nested;
+        inner   arr[2];
+        uint8   matrix[2][2];
+        char    names[2][2];
+        struct {
+            uint8   anon;
+        };
+        uint8   class;
+        uint8   _;
+        uint8   _;
+        uint8   bits : 4;
+        Color   color_bits : 4;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    buf = b"\x01\x00\x00\x00\x01testh\x00i\x00\x07\x08\x09\x01\x02\x03\x04abcd\x05\x06\xaa\xbb\x12"
+    obj = cs.test(buf)
+
+    result = asdict(obj)
+    assert result == {
+        "a": 1,
+        "color": cs.Color.RED,
+        "magic": b"test",
+        "wmagic": "hi",
+        "nested": {"x": 7},
+        "arr": [{"x": 8}, {"x": 9}],
+        "matrix": [[1, 2], [3, 4]],
+        "names": [b"ab", b"cd"],
+        "anon": 5,
+        "class": 6,
+        "_": 0xBB,
+        "bits": 2,
+        "color_bits": cs.Color.RED,
+    }
+    assert list(result) == list(cs.test.__members__)
+    assert result["color"] is cs.Color.RED
+    assert obj._asdict() == result
+
+    # The dicts and lists are new
+    result["arr"][0]["x"] = 0
+    result["matrix"][0][0] = 0
+    assert obj.arr[0].x == 8
+    assert obj.matrix[0][0] == 1
+
+
+def test_structure_asdict_pointer(cs: cstruct, compiled: bool) -> None:
+    """Test that asdict doesn't dereference pointers, which may be null."""
+    cdef = """
+    struct node {
+        uint32  value;
+        struct node *next;
+    };
+    """
+    cs.pointer = cs.uint32
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.node, compiled)
+
+    obj = cs.node(b"\x01\x00\x00\x00\x08\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00")
+
+    result = asdict(obj)
+    assert result == {"value": 1, "next": 8}
+    assert result["next"] is obj.next
+
+    assert asdict(obj.next.dereference()) == {"value": 2, "next": 0}
+
+
+def test_structure_asdict_invalid(cs: cstruct) -> None:
+    """Test that asdict and asjson only accept structure instances."""
+    cs.load("struct test { uint8 a; };")
+
+    with pytest.raises(TypeError, match=r"^asdict\(\) should be called on Structure instances$"):
+        asdict(cs.test)
+
+    with pytest.raises(TypeError, match=r"^asdict\(\) should be called on Structure instances$"):
+        asjson(1)
+
+
+def test_structure_asjson(cs: cstruct, compiled: bool) -> None:
+    """Test that bytes are encoded as base64, void as null, and enums, flags and pointers as integers."""
+    cdef = """
+    enum Color : uint8 {
+        RED = 1
+    };
+
+    flag Perm : uint8 {
+        R = 1,
+        W = 2
+    };
+
+    struct inner {
+        uint8   x;
+    };
+
+    struct test {
+        Color   color;
+        Perm    perm;
+        char    magic[4];
+        wchar   wmagic[2];
+        float   f;
+        void    nothing;
+        inner   nested;
+        char    *name;
+    };
+    """
+    cs.pointer = cs.uint32
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    obj = cs.test(b"\x01\x03\x00\xffabh\x00i\x00\x00\x00\xc0\x3f\x07\x10\x00\x00\x00")
+
+    expected = (
+        '{"color": 1, "perm": 3, "magic": "AP9hYg==", "wmagic": "hi", "f": 1.5, "nothing": null, '
+        '"nested": {"x": 7}, "name": 16}'
+    )
+    assert asjson(obj) == expected
+    assert json.dumps({"header": obj, "nested": [obj.nested]}, cls=JSONEncoder) == (
+        f'{{"header": {expected}, "nested": [{{"x": 7}}]}}'
+    )
+
+    assert asjson(obj.nested, indent=1) == '{\n "x": 7\n}'
+    assert json.dumps(bytearray(b"\x00\xff"), cls=JSONEncoder) == '"AP8="'
 
 
 def test_structure_definition_simple_be(cs: cstruct, compiled: bool) -> None:

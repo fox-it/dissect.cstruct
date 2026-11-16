@@ -22,7 +22,7 @@ from dissect.cstruct.declarative import (
     uint64,
 )
 from dissect.cstruct.types.pointer import Pointer
-from dissect.cstruct.types.structure import Structure, StructureMetaType, UnionMetaType
+from dissect.cstruct.types.structure import Structure, StructureMetaType, UnionMetaType, asdict
 from dissect.cstruct.types.structure import Union as CUnion
 
 # Module level cstruct instance to exercise bound-type inference through stringified annotations
@@ -416,6 +416,22 @@ def test_char_and_bytes(cs: cstruct) -> None:
     obj = Named(b"hello\x00\x00\x00" + (1).to_bytes(4, "little"))
     assert obj.name == b"hello\x00\x00\x00"
     assert obj.value == 1
+
+
+def test_asdict(cs: cstruct) -> None:
+    """Test that asdict has the fields of a structure, not its other attributes."""
+
+    class Header(Struct, cs=cs):
+        magic: char[4]
+        size: uint32
+
+        @property
+        def total_size(self) -> int:
+            return self.size + 8
+
+    obj = Header(b"test\x01\x00\x00\x00")
+    assert obj.total_size == 9
+    assert asdict(obj) == {"magic": b"test", "size": 1}
 
 
 def test_endian(cs: cstruct) -> None:

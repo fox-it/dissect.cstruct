@@ -29,6 +29,7 @@ from dissect.cstruct.types import (
     Wchar,
     WcharArray,
 )
+from dissect.cstruct.types.structure import JSONEncoder, asdict, asjson
 from dissect.cstruct.util import (
     f16,
     f32,
@@ -65,6 +66,7 @@ __all__ = [
     "Field",
     "Flag",
     "Int",
+    "JSONEncoder",
     "MetaType",
     "NullPointerDereference",
     "Packed",
@@ -76,6 +78,8 @@ __all__ = [
     "Void",
     "Wchar",
     "WcharArray",
+    "asdict",
+    "asjson",
     "cstruct",
     "ctypes",
     "ctypes_type",

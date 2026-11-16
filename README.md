@@ -284,6 +284,38 @@ assert example.magic == 1337
 assert example.data == b"arbitrary length data"
 ```
 
+### Converting to dicts and JSON
+`asdict()` returns the field values of a structure or union as a dict, like `dataclasses.asdict()`. The method `_asdict()` does the same, like `namedtuple`. Nested structures and unions become dicts and arrays become lists. Other values are returned as they are, so enum members stay enum members and pointers are not dereferenced.
+
+`asjson()` returns the same values as a JSON string. Bytes are encoded as base64 strings, and enum and flag members and pointers as numbers. To encode structures as part of other data, use `JSONEncoder` with `json.dumps()`.
+
+```python
+import json
+
+from dissect.cstruct import JSONEncoder, asdict, asjson, cstruct
+
+c_def = """
+enum Type : uint8 {
+    FILE = 1,
+    DIRECTORY = 2
+};
+
+struct entry {
+    Type   type;
+    char   name[4];
+    uint32 sizes[2];
+};
+"""
+
+c = cstruct().load(c_def)
+
+entry = c.entry(b"\x01test\x01\x00\x00\x00\x02\x00\x00\x00")
+assert asdict(entry) == {"type": c.Type.FILE, "name": b"test", "sizes": [1, 2]}
+assert entry._asdict() == asdict(entry)
+assert asjson(entry) == '{"type": 1, "name": "dGVzdA==", "sizes": [1, 2]}'
+assert json.dumps({"entries": [entry]}, cls=JSONEncoder) == f'{{"entries": [{asjson(entry)}]}}'
+```
+
 ### Custom definition parsers
 Don't like the C-like definition syntax? Write your own syntax parser!
 
