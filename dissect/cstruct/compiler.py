@@ -722,7 +722,7 @@ class _ReadSourceGenerator(_SourceGenerator):
             if issubclass(read_type, Int):
                 # Everything that's read as an integer type is sliced directly out of the buffer
                 elem_size = read_type.__size__
-                signed = bool(read_type.signed)
+                signed = bool(read_type.__signed__)
                 lines.append(f"_array_buf = {getter}")
                 raw = f"_int_from_bytes(_array_buf[i:i + {elem_size}], _byteorder[endian], signed={signed})"
                 getter = f"[{raw} for i in range(0, {count}, {elem_size})]"
@@ -753,7 +753,7 @@ class _ReadSourceGenerator(_SourceGenerator):
         elif issubclass(field_type, (Enum, Flag)):
             # Fast path the member lookup, the slow path takes care of unknown values
             if issubclass(read_type, Int):
-                raw = f"_int_from_bytes({getter}, _byteorder[endian], signed={bool(read_type.signed)})"
+                raw = f"_int_from_bytes({getter}, _byteorder[endian], signed={bool(read_type.__signed__)})"
             else:
                 raw = getter
 
@@ -762,7 +762,7 @@ class _ReadSourceGenerator(_SourceGenerator):
             lines.extend(target(field, "_member"))
 
         elif issubclass(read_type, Int):
-            signed = bool(read_type.signed)
+            signed = bool(read_type.__signed__)
             value = f"_int_from_bytes({getter}, _byteorder[endian], signed={signed})"
             lines.extend(target(field, f"_type_call({self._type_symbol(field.type)}, {value})"))
 
@@ -1208,7 +1208,7 @@ def _has_default_write(type_: type[BaseType], base: type[BaseType]) -> bool:
 
 def _int_to_bytes(type_: type[Int], value: str) -> str:
     """Return the code to convert a value of an integer type to bytes."""
-    return f"{value}.to_bytes({type_.__size__}, _byteorder[endian], signed={bool(type_.signed)})"
+    return f"{value}.to_bytes({type_.__size__}, _byteorder[endian], signed={bool(type_.__signed__)})"
 
 
 def _get_attribute(var: str, name: str) -> str:

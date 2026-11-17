@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Optimize storage of field sizes.
 - Rename `_sizes` property of `Structure` to `__sizes__`.
 - Rename `_values` property of `Structure` to `__values__`.
+- Rename the `signed` attribute of integer and LEB128 types to `__signed__`, like the other attributes of types. The `signed` property is deprecated.
 - Added `load` argument to `cstruct` class, allowing direct initialization with a definition (i.e. `cstruct(cdef)` instead of `cstruct().load(cdef)`. Other arguments to `cstruct` are now keyword only.
 - Replace `compiler.compile` and the `Compiler` class with `compiler.compile_structure`.
 - Improve parsing performance:

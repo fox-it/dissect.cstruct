@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.types.base import EOF, BaseType, MetaType
-from dissect.cstruct.util import ENDIANNESS_TO_BYTEORDER_MAP
+from dissect.cstruct.util import ENDIANNESS_TO_BYTEORDER_MAP, classproperty
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
 class Int(int, BaseType):
     """Integer type that can span an arbitrary amount of bytes."""
 
-    signed: bool
+    __signed__: bool
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
@@ -23,7 +24,7 @@ class Int(int, BaseType):
         if len(data) != cls.__size__:
             raise EOFError(f"Read {len(data)} bytes, but expected {cls.__size__}")
 
-        return type.__call__(cls, int.from_bytes(data, ENDIANNESS_TO_BYTEORDER_MAP[endian], signed=cls.signed))
+        return type.__call__(cls, int.from_bytes(data, ENDIANNESS_TO_BYTEORDER_MAP[endian], signed=cls.__signed__))
 
     @classmethod
     def _read_array(
@@ -40,7 +41,7 @@ class Int(int, BaseType):
 
         byteorder = ENDIANNESS_TO_BYTEORDER_MAP[endian]
         return [
-            type.__call__(cls, int.from_bytes(data[i : i + size], byteorder, signed=cls.signed))
+            type.__call__(cls, int.from_bytes(data[i : i + size], byteorder, signed=cls.__signed__))
             for i in range(0, length, size)
         ]
 
@@ -58,4 +59,14 @@ class Int(int, BaseType):
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: int, *, endian: Endianness) -> int:
-        return stream.write(data.to_bytes(cls.__size__, ENDIANNESS_TO_BYTEORDER_MAP[endian], signed=cls.signed))
+        return stream.write(data.to_bytes(cls.__size__, ENDIANNESS_TO_BYTEORDER_MAP[endian], signed=cls.__signed__))
+
+    @classproperty
+    def signed(cls) -> bool:
+        """Access whether this integer type is signed."""
+        warnings.warn(
+            "The 'signed' property is deprecated, use '__signed__' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cls.__signed__
