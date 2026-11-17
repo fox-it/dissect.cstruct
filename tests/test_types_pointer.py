@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import struct
 from unittest.mock import patch
 
 import pytest
 
 from dissect.cstruct.cstruct import cstruct
-from dissect.cstruct.exception import NullPointerDereference
+from dissect.cstruct.exception import NullPointerDereference, WriteError
 from dissect.cstruct.types.pointer import Pointer
 from tests.util import verify_compiled
 
@@ -103,6 +102,14 @@ def test_pointer_eof(cs: cstruct) -> None:
     obj = ptr(b"\x01")
 
     with pytest.raises(EOFError):
+        obj.dereference()
+
+    # An offset beyond any stream, e.g. from corrupt data
+    cs.pointer = cs.uint64
+    ptr = cs._make_pointer(cs.uint8)
+    obj = ptr(b"\xff" * 8)
+
+    with pytest.raises(EOFError, match=r"^Offset 0xffffffffffffffff is beyond the end of the stream$"):
         obj.dereference()
 
 
@@ -307,5 +314,5 @@ def test_pointer_struct_write(cs: cstruct, compiled: bool) -> None:
 
     assert cs.test(a=1, b=2, c=[3, 4]).dumps() == b"\x01\x02\x00\x03\x00\x04\x00"
 
-    with pytest.raises(struct.error):
+    with pytest.raises(WriteError, match=r"^Cannot write test: "):
         cs.test(a=1, b=2, c=[3, 2**16]).dumps()

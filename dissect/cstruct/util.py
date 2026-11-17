@@ -279,9 +279,26 @@ def sizeof(type_: type[BaseType] | BaseType) -> int:
 
 
 def offsetof(type_: type[Structure], name: str) -> int:
-    """Get the offset of a field in a structure."""
-    if (field := type_.__members__.get(name)) is None:
+    """Get the offset of a field in a structure or union, like ``offsetof`` in C.
+
+    Like in C, the fields of an anonymous nested structure or union are fields of the type that contains it.
+    """
+    from dissect.cstruct.types.structure import Structure, Union
+
+    if not issubclass(type_, Structure):
+        raise TypeError(f"Type '{type_.__name__}' is not a structure")
+    if (member := type_.__members__.get(name)) is None:
         raise ValueError(f"Structure '{type_.__name__}' does not have a field named '{name}'")
-    if (offset := field.offset) is None:
-        raise ValueError(f"Field '{field._name}' of structure '{type_.__name__}' does not have a known offset")
-    return offset
+
+    field = next(
+        field
+        for field in type_.__fields__
+        if field is member or (field.name is None and field.type.__members__.get(name) is member)
+    )
+
+    # The fields of a union start at the start of the union, unless they have an offset of their own
+    offset = 0 if field.offset is None and issubclass(type_, Union) else field.offset
+    if offset is None:
+        raise ValueError(f"Field '{name}' of structure '{type_.__name__}' does not have a known offset")
+
+    return offset if field is member else offset + offsetof(field.type, name)

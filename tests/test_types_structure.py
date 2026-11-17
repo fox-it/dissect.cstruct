@@ -10,7 +10,7 @@ from unittest.mock import call, patch
 import pytest
 
 from dissect.cstruct.cstruct import cstruct
-from dissect.cstruct.exception import ArraySizeError, ResolveError
+from dissect.cstruct.exception import DefinitionError, ResolveError, WriteError
 from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.pointer import Pointer
@@ -715,7 +715,7 @@ def test_structure_field_duplicate(cs: cstruct) -> None:
         uint8 a;
     };
     """
-    with pytest.raises(ValueError, match="Duplicate field name: a"):
+    with pytest.raises(DefinitionError, match=r"(?m)^line 5: Duplicate field name: a$"):
         cs.load(cdef)
 
 
@@ -1389,17 +1389,17 @@ def test_structure_write_missing_attribute(cs: cstruct, compiled: bool) -> None:
     assert obj.dumps() == b"\x01\x02\x01\x03"
 
     del obj.b
-    with pytest.raises(AttributeError, match="'test' object has no attribute 'b'"):
+    with pytest.raises(WriteError, match=r"^Cannot write test: 'test' object has no attribute 'b'$"):
         obj.dumps()
 
     obj = cs.test(b=1, c=cs.nested(a=2), n=1, d=[3])
     del obj.d
-    with pytest.raises(AttributeError, match="'test' object has no attribute 'd'"):
+    with pytest.raises(WriteError, match=r"^Cannot write test: 'test' object has no attribute 'd'$"):
         obj.dumps()
 
     obj = cs.test(b=1, c=cs.nested(a=2), n=1, d=[3])
     del obj.c.a
-    with pytest.raises(AttributeError, match="'nested' object has no attribute 'a'"):
+    with pytest.raises(WriteError, match=r"^Cannot write test: 'nested' object has no attribute 'a'$"):
         obj.dumps()
 
 
@@ -1459,12 +1459,12 @@ def test_structure_write_nested(cs: cstruct, compiled: bool) -> None:
     assert obj.dumps(endian=">") == b"\x01\x00\x02\x03ab\x04"
 
     # Any other value that isn't a structure doesn't have the attributes to write
-    with pytest.raises(AttributeError, match="'int' object has no attribute"):
+    with pytest.raises(WriteError, match=r"^Cannot write test: 'int' object has no attribute "):
         cs.test(e=1, f=5, g=4).dumps()
-    with pytest.raises(AttributeError, match="'int' object has no attribute"):
+    with pytest.raises(WriteError, match=r"^Cannot write test: 'int' object has no attribute "):
         cs.test(e=1, f=cs.nested(c=2, d=5), g=4).dumps()
 
-    with pytest.raises(ArraySizeError, match="Expected static array size 2, got 3 instead"):
+    with pytest.raises(WriteError, match="Expected static array size 2, got 3 instead"):
         cs.test(e=1, f=cs.nested(c=2, d=cs.inner(a=3, b=b"abc")), g=4).dumps()
 
 

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from dissect.cstruct.exception import WriteError
 from tests.util import verify_compiled
 
 if TYPE_CHECKING:
@@ -131,13 +132,17 @@ def test_packed_eof(cs: cstruct) -> None:
     with pytest.raises(EOFError):
         cs.uint32[None](b"\x00\x00\x00\x01")
 
+    # More bytes than any stream can hold, e.g. a count from corrupt data
+    with pytest.raises(EOFError, match=r"^Read 0 bytes, but expected 18446744073709551616$"):
+        cs.uint32[2**62](b"")
+
 
 def test_packed_range(cs: cstruct) -> None:
     cs.float16(-65519.999999999996).dumps()
     cs.float16(65519.999999999996).dumps()
-    with pytest.raises(OverflowError):
+    with pytest.raises(WriteError, match=r"^Cannot write float16: "):
         cs.float16(-65519.999999999997).dumps()
-    with pytest.raises(OverflowError):
+    with pytest.raises(WriteError, match=r"^Cannot write float16: "):
         cs.float16(65519.999999999997).dumps()
 
 
@@ -249,10 +254,10 @@ def test_packed_struct_write_range(cs: cstruct, compiled: bool) -> None:
 
     assert cs.test(a=1, b=-2, c=3, d=1.0).dumps() == b"\x01\xfe\xff\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f"
 
-    with pytest.raises(struct.error):
+    with pytest.raises(WriteError, match=r"^Cannot write test: "):
         cs.test(a=1, b=2, c=2**32, d=4.0).dumps()
 
-    with pytest.raises(struct.error):
+    with pytest.raises(WriteError, match=r"^Cannot write test: "):
         cs.test(a=256, b=2, c=3, d=4.0).dumps()
 
 

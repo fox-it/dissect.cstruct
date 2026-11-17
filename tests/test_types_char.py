@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from dissect.cstruct.exception import ArraySizeError
+from dissect.cstruct.exception import WriteError
 from tests.util import NonSeekableStream, verify_compiled
 
 if TYPE_CHECKING:
@@ -67,7 +67,7 @@ def test_char_array_write_padding(cs: cstruct) -> None:
 
 def test_char_array_write_size_error(cs: cstruct) -> None:
     buf = io.BytesIO()
-    with pytest.raises(ArraySizeError):
+    with pytest.raises(WriteError):
         cs.char[4]._write(buf, b"toolong", endian=cs.endian)
 
 
@@ -80,6 +80,10 @@ def test_char_eof(cs: cstruct) -> None:
 
     with pytest.raises(EOFError):
         cs.char[None](b"AAAA")
+
+    # More bytes than any stream can hold, e.g. a count from corrupt data
+    with pytest.raises(EOFError, match=r"^Read 0 bytes, but expected 9223372036854775808$"):
+        cs.char[2**63](b"")
 
     assert cs.char[0](b"") == b""
 
@@ -136,16 +140,16 @@ def test_char_write_too_long(cs: cstruct, compiled: bool) -> None:
     assert cs.char.dumps("x") == b"x"
     assert cs.char.dumps(0x78) == b"x"
 
-    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+    with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
         cs.char.dumps(b"xy")
 
-    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+    with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
         cs.char.dumps("xy")
 
-    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+    with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
         cs.test(a=1, b=b"xy", c=2).dumps()
 
-    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+    with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
         cs.test(a=1, b="xy", c=2).dumps()
 
 
@@ -211,8 +215,8 @@ def test_char_array_struct_write(cs: cstruct, compiled: bool) -> None:
     assert cs.test(a=1, b=[97], c=2).dumps() == buf
 
     # Longer values aren't accepted
-    with pytest.raises(ArraySizeError, match="Expected static array size 4, got 5 instead"):
+    with pytest.raises(WriteError, match="Expected static array size 4, got 5 instead"):
         cs.test(a=1, b=b"abcde", c=2).dumps()
 
-    with pytest.raises(ArraySizeError, match="Expected static array size 0, got 1 instead"):
+    with pytest.raises(WriteError, match="Expected static array size 0, got 1 instead"):
         cs.test(a=1, b=b"abcd", c=2, d=b"e").dumps()

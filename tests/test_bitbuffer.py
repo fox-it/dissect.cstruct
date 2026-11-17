@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from dissect.cstruct.bitbuffer import BitBuffer
+from dissect.cstruct.exception import DefinitionError
 
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
@@ -47,7 +48,7 @@ def test_bitbuffer_read(cs: cstruct) -> None:
     bb = BitBuffer(
         BytesIO(b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"), endian="<"
     )
-    with pytest.raises(ValueError, match="Reading straddled bits is unsupported"):
+    with pytest.raises(DefinitionError, match=r"^Reading straddled bits is unsupported$"):
         assert bb.read(cs.uint32, 160)
 
     assert bb.read(cs.uint32, 30) == 0b111111111111111111111111111111

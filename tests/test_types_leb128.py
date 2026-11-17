@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from dissect.cstruct.exception import WriteError
+
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
 
@@ -176,7 +178,7 @@ def test_leb128_signed_write(cs: cstruct) -> None:
 
 
 def test_leb128_write_negatives(cs: cstruct) -> None:
-    with pytest.raises(ValueError, match="Attempt to encode a negative integer using unsigned LEB128 encoding"):
+    with pytest.raises(WriteError, match=r"^Attempt to encode a negative integer using unsigned LEB128 encoding$"):
         cs.uleb128(-2).dumps()
     assert cs.ileb128(-2).dumps() == b"\x7e"
 

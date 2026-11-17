@@ -125,7 +125,7 @@ def test_generate_packed_read(cs: cstruct) -> None:
 
     expected = """
     buf = stream.read(15)
-    if len(buf) != 15: raise EOFError(f"Read {len(buf)} bytes, but expected 15")
+    if len(buf) != 15: raise _EOFError(f"Read {len(buf)} bytes, but expected 15")
     data = _unpack0[endian](buf)
     _value0 = _type_call(_type0, data[0])
     _value1 = _type_call(_type1, data[1])
@@ -147,7 +147,7 @@ def test_generate_packed_read_array(cs: cstruct) -> None:
 
     expected = """
     buf = stream.read(64)
-    if len(buf) != 64: raise EOFError(f"Read {len(buf)} bytes, but expected 64")
+    if len(buf) != 64: raise _EOFError(f"Read {len(buf)} bytes, but expected 64")
     data = _unpack0[endian](buf)
     _value0 = _type_call(_type0, list(map(_type_call, _repeat(_type1), data[0:2])))
     _value1 = _type_call(_type2, list(map(_type_call, _repeat(_type3), data[2:5])))
@@ -171,7 +171,7 @@ def test_generate_packed_read_byte_types(cs: cstruct) -> None:
 
     expected = """
     buf = stream.read(18)
-    if len(buf) != 18: raise EOFError(f"Read {len(buf)} bytes, but expected 18")
+    if len(buf) != 18: raise _EOFError(f"Read {len(buf)} bytes, but expected 18")
     _value0 = _type_call(_type0, buf[0:1])
     _value1 = _type_call(_type1, buf[1:3])
     _value2 = _type_call(_type2, str(buf[3:5], _encoding0[endian], 'surrogatepass'))
@@ -201,7 +201,7 @@ def test_generate_packed_read_composite_types(cs: cstruct, TestEnum: type[Enum])
 
     expected = """
     buf = stream.read(11)
-    if len(buf) != 11: raise EOFError(f"Read {len(buf)} bytes, but expected 11")
+    if len(buf) != 11: raise _EOFError(f"Read {len(buf)} bytes, but expected 11")
     data = _unpack0[endian](buf)
     _enum_value = data[0]
     if (_member := _type0._value2member_map_.get(_enum_value)) is None: _member = _type_call(_type0, _enum_value)
@@ -223,7 +223,7 @@ def test_generate_packed_read_offsets(cs: cstruct) -> None:
 
     expected = """
     buf = stream.read(9)
-    if len(buf) != 9: raise EOFError(f"Read {len(buf)} bytes, but expected 9")
+    if len(buf) != 9: raise _EOFError(f"Read {len(buf)} bytes, but expected 9")
     data = _unpack0[endian](buf)
     _value0 = _type_call(_type0, data[0])
     _value1 = _type_call(_type0, data[1])
@@ -317,7 +317,7 @@ def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, oth
     shift = _type.__size__ * 8 - 4
     expected = f"""
     buf = stream.read(2)
-    if len(buf) != 2: raise EOFError(f"Read {{len(buf)}} bytes, but expected 2")
+    if len(buf) != 2: raise _EOFError(f"Read {{len(buf)}} bytes, but expected 2")
     data = _unpack0[endian](buf)
     _value0 = _type_call(_type0, data[0])
 
@@ -337,7 +337,9 @@ def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, oth
     stream.seek(start + 3)
 
     values = {{'size': _value0, 'a': _value1, 'b': _value2}}
-    _count = max(0, int(_value0))
+    try: _count = max(0, int(_value0))
+    except _Error: raise
+    except (ArithmeticError, ValueError) as e: raise _ReadError("Invalid array size 'size': " + str(e)) from e
     _offset = stream.tell()
     _value3 = values['c'] = _type_call(_type4, _type5._read_array(stream, _count, context=values, endian=endian))
     sizes['c'] = stream.tell() - _offset
@@ -362,7 +364,7 @@ def test_generate_fields_dynamic_before_bitfield(cs: cstruct, TestEnum: Enum, ot
     shift = _type.__size__ * 8 - 4
     expected = f"""
     buf = stream.read(2)
-    if len(buf) != 2: raise EOFError(f"Read {{len(buf)}} bytes, but expected 2")
+    if len(buf) != 2: raise _EOFError(f"Read {{len(buf)}} bytes, but expected 2")
     data = _unpack0[endian](buf)
     _value0 = _type_call(_type0, data[0])
 
@@ -382,7 +384,9 @@ def test_generate_fields_dynamic_before_bitfield(cs: cstruct, TestEnum: Enum, ot
     stream.seek(start + 3)
 
     values = {{'size': _value0, 'a': _value1, 'b': _value2}}
-    _count = max(0, int(_value0))
+    try: _count = max(0, int(_value0))
+    except _Error: raise
+    except (ArithmeticError, ValueError) as e: raise _ReadError("Invalid array size 'size': " + str(e)) from e
     _offset = stream.tell()
     _value3 = values['c'] = _type_call(_type4, _type5._read_array(stream, _count, context=values, endian=endian))
     sizes['c'] = stream.tell() - _offset
@@ -419,16 +423,16 @@ def test_compiled_dynamic_array_sizes() -> None:
     # Integer fields read before are used directly, everything else is resolved like the interpreted version
     # The array with the size EOF is read by its type
     lines = source_lines(compiled.test)
-    assert [line for line in lines if line.startswith("_count = ") or "._read" in line] == [
-        "_count = max(0, int(_value0))",
+    assert [line for line in lines if line.startswith("try: _count = ") or "._read" in line] == [
+        "try: _count = max(0, int(_value0))",
         "_value3 = values['a'] = _type_call(_type3, _type4._read_array(stream, _count, context=values, endian=endian))",
-        "_count = max(0, (int(_value0) - _identifier(cs, values, 'HDR')))",
+        "try: _count = max(0, (int(_value0) - _identifier(cs, values, 'HDR')))",
         "_value4 = values['b'] = _type_call(_type5, _type6._read_array(stream, _count, context=values, endian=endian))",
-        "_count = max(0, (int(_value1) * 2))",
+        "try: _count = max(0, (int(_value1) * 2))",
         "_value5 = values['c'] = _type_call(_type7, _type8._read_array(stream, _count, context=values, endian=endian))",
-        "_count = max(0, _identifier(cs, values, 'hdr.size'))",
+        "try: _count = max(0, _identifier(cs, values, 'hdr.size'))",
         "_value6 = values['d'] = _type_call(_type9, _type0._read_array(stream, _count, context=values, endian=endian))",
-        "_count = max(0, (int(_value0) + _sizeof(cs, 'inner')))",
+        "try: _count = max(0, (int(_value0) + _sizeof(cs.resolve('inner'))))",
         "_value7 = values['e'] = _type_call(_type10, _type2._read_array("
         "stream, _count, context=values, endian=endian))",
         "_value8 = values['f'] = _type11._read(stream, context=values, endian=endian)",
@@ -672,7 +676,7 @@ def test_lazy_compile(cs: cstruct) -> None:
     def _read(cls, stream, *, context=None, endian):
 
         buf = stream.read(4)
-        if len(buf) != 4: raise EOFError(f"Read {len(buf)} bytes, but expected 4")
+        if len(buf) != 4: raise _EOFError(f"Read {len(buf)} bytes, but expected 4")
         data = _unpack0[endian](buf)
         _value0 = _type_call(_type0, data[0])
 
@@ -1038,10 +1042,6 @@ def test_write_not_compiled(cs: cstruct) -> None:
         char a[0];
     };
 
-    struct wchar_bits {
-        wchar a : 4;
-    };
-
     struct backwards {
         uint32 a;
     };
@@ -1057,12 +1057,11 @@ def test_write_not_compiled(cs: cstruct) -> None:
     assert not hasattr(cs.unsupported._write, "__source__")
     assert not hasattr(cs.dynamic._write, "__source__")
     assert not hasattr(cs.empty_field._write, "__source__")
-    assert not hasattr(cs.wchar_bits._write, "__source__")
     assert not hasattr(cs.backwards._write, "__source__")
     assert not hasattr(cs.bits_offset._write, "__source__")
 
     # Reading them is still compiled
-    for type_ in (cs.wchar_bits, cs.backwards, cs.bits_offset):
+    for type_ in (cs.backwards, cs.bits_offset):
         assert type_.__compiled__
         assert hasattr(type_._read, "__source__")
 

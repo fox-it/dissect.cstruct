@@ -60,6 +60,7 @@ from typing import TYPE_CHECKING, Annotated, Any, BinaryIO, ForwardRef, get_args
 
 from dissect.cstruct import compiler
 from dissect.cstruct.cstruct import cstruct
+from dissect.cstruct.exception import DefinitionError
 from dissect.cstruct.types.base import BaseArray, MetaType
 from dissect.cstruct.types.structure import Field
 from dissect.cstruct.types.structure import Structure as _Structure
@@ -370,7 +371,7 @@ def _resolve_type(type_: Any, cs: cstruct) -> type:
     if isinstance(type_, str):
         return _resolve_string(type_, cs)
 
-    raise TypeError(f"Unsupported field annotation: {type_!r}")
+    raise DefinitionError(f"Unsupported field annotation: {type_!r}")
 
 
 def _resolve_field(cls: type, name: str, spec: FieldSpec) -> Field:
@@ -380,7 +381,7 @@ def _resolve_field(cls: type, name: str, spec: FieldSpec) -> Field:
     while issubclass(embedded, BaseArray):
         embedded = embedded.__type__
     if embedded is cls:
-        raise TypeError(f"Field {name!r} embeds {cls.__name__!r} in itself, use a pointer instead")
+        raise DefinitionError(f"Field {name!r} embeds {cls.__name__!r} in itself, use a pointer instead")
 
     return Field(name, type_, spec.bits, spec.offset)
 

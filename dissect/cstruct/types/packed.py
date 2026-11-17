@@ -4,6 +4,7 @@ import warnings
 from itertools import repeat
 from typing import TYPE_CHECKING, Any, BinaryIO, Generic, TypeVar
 
+from dissect.cstruct.exception import EOFError
 from dissect.cstruct.types.base import EOF, BaseType, MetaType, _is_buffer_type
 from dissect.cstruct.util import _struct, classproperty
 
@@ -65,17 +66,21 @@ class Packed(BaseType, Generic[T], metaclass=PackedMetaType):
     ) -> list[Self]:
         if count == EOF:
             data = stream.read()
-            length = len(data)
-            count = length // cls.__size__
+            count, remainder = divmod(len(data), cls.__size__)
+            if remainder:
+                raise EOFError(f"Read {remainder} bytes, but expected {cls.__size__}")
         else:
             length = cls.__size__ * count
-            data = stream.read(length)
+            try:
+                data = stream.read(length)
+            except OverflowError:
+                # No stream holds more bytes than fit in a C ssize_t
+                raise EOFError(f"Read 0 bytes, but expected {length}") from None
+
+            if len(data) != length:
+                raise EOFError(f"Read {len(data)} bytes, but expected {length}")
 
         fmt = _struct(endian, f"{count}{cls.__fmt__}")
-
-        if len(data) != length:
-            raise EOFError(f"Read {len(data)} bytes, but expected {length}")
-
         return list(map(cls.__new__, repeat(cls), fmt.unpack(data)))
 
     @classmethod

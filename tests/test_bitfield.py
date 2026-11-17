@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import io
+import re
 
 import pytest
 
 from dissect.cstruct.cstruct import cstruct
+from dissect.cstruct.exception import DefinitionError
 from tests.util import source_lines, verify_compiled
 
 
@@ -158,7 +160,34 @@ def test_bitfield_straddle(cs: cstruct, compiled: bool) -> None:
     };
     """
 
-    with pytest.raises(ValueError, match="Straddled bit fields are unsupported"):
+    with pytest.raises(DefinitionError, match=r"(?m)^line 10: Straddled bit fields are unsupported$"):
+        cs.load(cdef, compiled=compiled)
+
+
+@pytest.mark.parametrize(
+    ("type_", "name"),
+    [
+        ("float", "float"),
+        ("wchar", "wchar"),
+        ("uleb128", "uleb128"),
+        ("uint32 *", "uint32*"),
+        ("inner", "inner"),
+        ("void", "void"),
+    ],
+)
+def test_bitfield_unsupported_type(cs: cstruct, compiled: bool, type_: str, name: str) -> None:
+    """Test that bit fields of a type that isn't an integer, enum, flag or character are rejected."""
+    cdef = f"""
+    struct inner {{
+        uint8   a;
+    }};
+
+    struct test {{
+        {type_} a : 4;
+    }};
+    """
+
+    with pytest.raises(DefinitionError, match=rf"(?m)^line 8: Bit fields of type {re.escape(name)} are unsupported$"):
         cs.load(cdef, compiled=compiled)
 
 

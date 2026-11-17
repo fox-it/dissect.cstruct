@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import io
-import struct
+import re
 from typing import TYPE_CHECKING, BinaryIO
 
 import pytest
 
-from dissect.cstruct.exception import ArraySizeError
+from dissect.cstruct.exception import ReadError, ResolveError, WriteError
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.types.base import BaseArray, BaseType
 from tests.util import verify_compiled
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 def test_array_size_mismatch(cs: cstruct) -> None:
-    with pytest.raises(ArraySizeError):
+    with pytest.raises(WriteError):
         cs.uint8[2]([1, 2, 3]).dumps()
 
     assert cs.uint8[2]([1, 2]).dumps()
@@ -118,6 +118,13 @@ def test_eof(cs: cstruct, compiled: bool) -> None:
     assert test_int.data == [1, 2]
     assert test_int.dumps() == b"\x01\x00\x00\x02\x00\x00"
 
+    # A partial last element is a short read
+    with pytest.raises(EOFError, match=r"^Read 1 bytes, but expected 2$"):
+        cs.test_packed(b"\x01\x00\x02")
+
+    with pytest.raises(EOFError, match=r"^Read 1 bytes, but expected 3$"):
+        cs.test_int(b"\x01\x00\x00\x02")
+
     test_enum = cs.test_enum(b"\x01\x00")
     assert test_enum.data == [cs.Test.A]
     assert test_enum.dumps() == b"\x01\x00"
@@ -126,6 +133,48 @@ def test_eof(cs: cstruct, compiled: bool) -> None:
     assert test_eof_field.data == b"a"
     assert test_eof_field.remainder == 2
     assert test_eof_field.dumps() == b"\x01a\x02"
+
+
+@pytest.mark.parametrize(
+    ("size", "buf", "expression"),
+    [
+        ("n / d", b"\x01\x00", "n / d"),
+        ("n % d", b"\x01\x00", "n % d"),
+        ("1 << (d - n)", b"\x02\x01", "1 << ( d - n )"),
+    ],
+)
+def test_array_size_invalid(cs: cstruct, compiled: bool, size: str, buf: bytes, expression: str) -> None:
+    """Test that an array size that can't be calculated from the data raises a ``ReadError``."""
+    cdef = f"""
+    struct test {{
+        uint8   n;
+        uint8   d;
+        uint8   data[{size}];
+    }};
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    # The rest of the message is the error of Python, which differs per version
+    with pytest.raises(ReadError, match=f"^{re.escape(f'Invalid array size {expression!r}: ')}"):
+        cs.test(buf)
+
+
+def test_array_size_unknown_type(cs: cstruct, compiled: bool) -> None:
+    """Test that an array size with an unknown type raises a ``ResolveError`` when reading, not a ``ReadError``."""
+    cdef = """
+    struct test {
+        uint8   n;
+        uint8   data[n * sizeof(unknown)];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    with pytest.raises(ResolveError, match=r"^Unknown type unknown$"):
+        cs.test(b"\x01")
 
 
 def test_custom_array_type(cs: cstruct, compiled: bool) -> None:
@@ -311,6 +360,16 @@ def test_reads_non_buffer(cs: cstruct) -> None:
         cs.uint32.reads(io.BytesIO(b"\x00" * 4))
 
 
+def test_write_stream_errors(cs: cstruct) -> None:
+    """Test that writing to something that isn't a stream is a ``TypeError``, and errors of the stream pass through."""
+    with pytest.raises(TypeError, match=r"^Invalid object type$"):
+        cs.uint32.write(b"", 1)
+
+    # A read-only stream raises io.UnsupportedOperation, which is a ValueError too
+    with pytest.raises(io.UnsupportedOperation):
+        cs.uint32.write(io.BufferedReader(io.BytesIO()), 1)
+
+
 def test_array_struct_write(cs: cstruct, compiled: bool) -> None:
     """Test that arrays in a structure are written from any sequence, and pad values that are too short."""
     cdef = """
@@ -333,13 +392,13 @@ def test_array_struct_write(cs: cstruct, compiled: bool) -> None:
     assert cs.test(a=1, b=[1], c=[3, 4]).dumps() == b"\x01\x01\x00\x00\x00\x03\x00\x04\x00"
 
     # The total amount of values is right, but the second array is too long
-    with pytest.raises(ArraySizeError, match="Expected static array size 2, got 3 instead"):
+    with pytest.raises(WriteError, match="Expected static array size 2, got 3 instead"):
         cs.test(a=1, b=[1], c=[2, 3, 4]).dumps()
 
-    with pytest.raises(struct.error):
+    with pytest.raises(WriteError, match=r"^Cannot write test: "):
         cs.test(a=1, b=[1, 2**16], c=[3, 4]).dumps()
 
-    with pytest.raises(ArraySizeError, match="Expected static array size 0, got 1 instead"):
+    with pytest.raises(WriteError, match="Expected static array size 0, got 1 instead"):
         cs.test(a=1, b=[1, 2], c=[3, 4], d=[1]).dumps()
 
 

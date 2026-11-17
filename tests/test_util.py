@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dissect.cstruct import util
+import pytest
+
+from dissect.cstruct import cstruct, util
 
 
 def test_pack_unpack() -> None:
@@ -100,3 +102,56 @@ def test_swap() -> None:
     assert util.swap16(0x0001) == 0x0100
     assert util.swap32(0x00000001) == 0x01000000
     assert util.swap64(0x0000000000000001) == 0x0100000000000000
+
+
+# The offsets of gcc, with and without __attribute__((packed))
+@pytest.mark.parametrize(
+    ("align", "offsets"),
+    [
+        (
+            True,
+            {
+                "u1": {"a": 0, "b": 0, "c": 0},
+                "s2": {"x": 0, "a": 2, "b": 2, "y": 4},
+                "u3": {"a": 0, "b": 4, "c": 0},
+                "s4": {"x": 0, "a": 4, "b": 8, "y": 12},
+                "s5": {"x": 0, "a": 4, "b": 6, "c": 4},
+            },
+        ),
+        (
+            False,
+            {
+                "u1": {"a": 0, "b": 0, "c": 0},
+                "s2": {"x": 0, "a": 1, "b": 1, "y": 3},
+                "u3": {"a": 0, "b": 1, "c": 0},
+                "s4": {"x": 0, "a": 1, "b": 2, "y": 6},
+                "s5": {"x": 0, "a": 1, "b": 2, "c": 1},
+            },
+        ),
+    ],
+)
+def test_offsetof(align: bool, offsets: dict[str, dict[str, int]]) -> None:
+    """Test that offsetof gives the offsets of C, also of union fields and fields of anonymous nested types."""
+    cdef = """
+    union u1 { uint8 a; uint16 b; uint32 c[2]; };
+    struct s2 { uint8 x; union { uint8 a; uint16 b; }; uint8 y; };
+    union u3 { struct { uint8 a; uint32 b; }; uint16 c; };
+    struct s4 { uint8 x; struct { uint8 a; uint32 b; }; uint8 y; };
+    struct s5 { uint8 x; union { struct { uint8 a; uint16 b; }; uint32 c; }; };
+    struct dynamic { uint8 n; char d[n]; uint8 e; };
+    """
+    cs = cstruct().load(cdef, align=align)
+
+    for name, fields in offsets.items():
+        assert {field: util.offsetof(cs.resolve(name), field) for field in fields} == fields
+
+    cs = cstruct().load(cdef)
+
+    with pytest.raises(TypeError, match=r"^Type 'uint8' is not a structure$"):
+        util.offsetof(cs.uint8, "a")
+
+    with pytest.raises(ValueError, match=r"^Structure 's2' does not have a field named 'z'$"):
+        util.offsetof(cs.s2, "z")
+
+    with pytest.raises(ValueError, match=r"^Field 'e' of structure 'dynamic' does not have a known offset$"):
+        util.offsetof(cs.dynamic, "e")

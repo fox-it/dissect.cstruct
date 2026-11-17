@@ -12,7 +12,13 @@ from operator import itemgetter
 from textwrap import indent
 from typing import TYPE_CHECKING, Any
 
-from dissect.cstruct.exception import ArraySizeError, ExpressionParserError
+from dissect.cstruct.exception import (
+    DefinitionError,
+    EOFError,
+    Error,
+    ReadError,
+    WriteError,
+)
 from dissect.cstruct.expression import SOURCE_GLOBALS, Expression
 from dissect.cstruct.types import (
     Array,
@@ -212,7 +218,7 @@ def _field_bytes(type_: type[BaseType], value: Any, endian: str) -> bytes:
     """Return the bytes of a char or wchar field that isn't of the right type yet or doesn't fit."""
     buf = type_.dumps(type_.__default__() if value is None else value, endian=endian)
     if len(buf) > type_.__size__:
-        raise ArraySizeError(f"Expected {type_.__size__} bytes for {type_.__name__}, got {len(buf)} instead.")
+        raise WriteError(f"Expected {type_.__size__} bytes for {type_.__name__}, got {len(buf)} instead.")
     return buf
 
 
@@ -241,6 +247,11 @@ _GLOBALS = {
     "_struct_write": StructureMetaType._write,
     "_union_write": UnionMetaType._write,
     "_struct_error": struct.error,
+    "_Error": Error,
+    "_EOFError": EOFError,
+    "_ReadError": ReadError,
+    "_WriteError": WriteError,
+    "_DefinitionError": DefinitionError,
     "_field_bytes": _field_bytes,
     "_array_values": _array_values,
     "_or_default": _or_default,
@@ -552,13 +563,13 @@ class _ReadSourceGenerator(_SourceGenerator):
         # Integer fields that were read before are used directly
         types = {field._name: field.type for field in self.fields}
         variables = {name: f"int({var})" for name, var in self._assigned if issubclass(types[name], _INTEGER_TYPES)}
-        try:
-            count = num_entries.source(variables, context)
-        except ExpressionParserError:
-            # Invalid expressions raise their error when reading the array
-            return read
+        count = num_entries.source(variables, context)
 
-        lines.append(f"_count = max(0, {count})")
+        # E.g. a division by a field that is zero.
+        message = f"Invalid array size '{num_entries.expression}': "
+        lines.append(f"try: _count = max(0, {count})")
+        lines.append("except _Error: raise")
+        lines.append(f"except (ArithmeticError, ValueError) as e: raise _ReadError({message!r} + str(e)) from e")
         element = self._type_symbol(field.type.__type__)
         return f"_type_call({type_}, {element}._read_array(stream, _count, context={context}, endian=endian))"
 
@@ -573,7 +584,7 @@ class _ReadSourceGenerator(_SourceGenerator):
             lines.append(f"_bit_buffer = {self._type_symbol(read_type)}._read(stream, endian=endian)")
 
         if field.bits > remaining:
-            lines.append('raise ValueError("Reading straddled bits is unsupported")')
+            lines.append('raise _DefinitionError("Reading straddled bits is unsupported")')
             yield _block(lines)
             return
 
@@ -1251,7 +1262,7 @@ def _member_lookup(type_: str, value: str) -> str:
 
 def _check_eof(size: int) -> str:
     """Return the code to raise an ``EOFError`` if fewer than ``size`` bytes were read into ``buf``."""
-    return f'if len(buf) != {size}: raise EOFError(f"Read {{len(buf)}} bytes, but expected {size}")'
+    return f'if len(buf) != {size}: raise _EOFError(f"Read {{len(buf)}} bytes, but expected {size}")'
 
 
 def _block(lines: list[str]) -> str:

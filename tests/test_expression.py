@@ -4,13 +4,13 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from dissect.cstruct.cstruct import cstruct
 from dissect.cstruct.exception import ExpressionParserError, LexerError, ResolveError, UnknownIdentifierError
 from dissect.cstruct.expression import SOURCE_GLOBALS, Expression
+from tests.util import verify_compiled
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-    from dissect.cstruct.cstruct import cstruct
 
 
 @pytest.fixture
@@ -139,7 +139,7 @@ def test_expression(cs_with_consts: cstruct, expression: str, answer: int) -> No
         pytest.param(
             " ",
             ExpressionParserError,
-            "Invalid expression",
+            "^Invalid expression: not enough operands$",
             id="empty-expression",
         ),
         pytest.param(
@@ -151,7 +151,7 @@ def test_expression(cs_with_consts: cstruct, expression: str, answer: int) -> No
         pytest.param(
             "0()",
             ExpressionParserError,
-            "Parser expected sizeof or an arethmethic operator instead got: '0'",
+            "Parser expected sizeof or an arithmethic operator instead got: '0'",
             id="invalid-sizeof-usage",
         ),
         pytest.param(
@@ -163,26 +163,38 @@ def test_expression(cs_with_consts: cstruct, expression: str, answer: int) -> No
         pytest.param(
             "sizeof(",
             ExpressionParserError,
-            "expected \\), got end of input",
+            "expected a type name, got end of input",
             id="unterminated-parenthesis",
         ),
         pytest.param(
             "sizeof(0 +)",
-            ResolveError,
-            "Unknown type 0 \\+",
+            ExpressionParserError,
+            "^expected a type name, got 0$",
             id="invalid-sizeof-expression",
         ),
         pytest.param(
-            "UNKNOWN",
-            UnknownIdentifierError,
-            "Unknown identifier: 'UNKNOWN'",
-            id="unknown-identifier",
+            "sizeof(uint8 +)",
+            ExpressionParserError,
+            "^expected \\), got \\+$",
+            id="sizeof-type-name-and-operator",
         ),
         pytest.param(
-            "UNKNOWN.UNKNOWN",
-            UnknownIdentifierError,
-            "Unknown identifier: 'UNKNOWN.UNKNOWN'",
-            id="unknown-identifier",
+            "sizeof(uint8[])",
+            ExpressionParserError,
+            "^expected an array size$",
+            id="sizeof-array-without-size",
+        ),
+        pytest.param(
+            "offsetof(test, 0)",
+            ExpressionParserError,
+            "^expected a field name, got 0$",
+            id="offsetof-invalid-field-name",
+        ),
+        pytest.param(
+            "UNKNOWN +",
+            ExpressionParserError,
+            "Invalid expression: not enough operands",
+            id="unknown-identifier-before-error",
         ),
         pytest.param(
             "1 2",
@@ -198,12 +210,50 @@ def test_expression(cs_with_consts: cstruct, expression: str, answer: int) -> No
         ),
     ],
 )
-def test_expression_failure(cs_with_consts: cstruct, expression: str, exception: type, message: str) -> None:
+def test_expression_failure(expression: str, exception: type, message: str) -> None:
+    """Test that an invalid expression raises an error when it's created, before it's evaluated."""
     with pytest.raises(exception, match=message):
-        Expression(expression).evaluate(cs_with_consts)
+        Expression(expression)
 
 
-def test_sizeof(cs: cstruct) -> None:
+@pytest.mark.parametrize(
+    ("expression", "exception", "message"),
+    [
+        pytest.param(
+            "sizeof(nope)",
+            ResolveError,
+            "^Unknown type nope$",
+            id="unknown-sizeof-type",
+        ),
+        pytest.param(
+            "offsetof(uint8, a)",
+            ExpressionParserError,
+            "^Type 'uint8' is not a structure$",
+            id="offsetof-not-a-structure",
+        ),
+        pytest.param(
+            "UNKNOWN",
+            UnknownIdentifierError,
+            "Unknown identifier: 'UNKNOWN'",
+            id="unknown-identifier",
+        ),
+        pytest.param(
+            "UNKNOWN.UNKNOWN",
+            UnknownIdentifierError,
+            "Unknown identifier: 'UNKNOWN.UNKNOWN'",
+            id="unknown-identifier",
+        ),
+    ],
+)
+def test_expression_evaluate_failure(cs_with_consts: cstruct, expression: str, exception: type, message: str) -> None:
+    """Test that a valid expression that refers to something unknown or unsuitable raises an error when evaluated."""
+    parser = Expression(expression)
+
+    with pytest.raises(exception, match=message):
+        parser.evaluate(cs_with_consts)
+
+
+def test_sizeof(cs: cstruct, compiled: bool) -> None:
     """Tests that the size of types is correctly calculated."""
     cdef = """
     struct test {
@@ -213,11 +263,41 @@ def test_sizeof(cs: cstruct) -> None:
     struct test2 {
         char    a[sizeof(test) * 2];
     };
+
+    struct test3 {
+        uint8   n;
+        char    a[n * sizeof(struct test2[2])];
+    };
     """
-    cs.load(cdef)
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test3, compiled)
 
     assert len(cs.test) == 4
     assert len(cs.test2) == 8
+    assert cs.test3(b"\x02" + b"a" * 32).a == b"a" * 32
+
+
+# The sizes of gcc on a 64-bit platform, with and without __attribute__((packed))
+@pytest.mark.parametrize(
+    ("type_name", "aligned", "packed"),
+    [
+        ("struct test", 8, 6),
+        ("unsigned long long", 8, 8),
+        ("uint16[3]", 6, 6),
+        ("uint8[2][3]", 6, 6),
+        ("struct test[2]", 16, 12),
+        ("uint32 *", 8, 8),
+        ("uint8 **", 8, 8),
+        ("uint8 *[2]", 16, 16),
+        ("struct test *[3]", 24, 24),
+    ],
+)
+def test_sizeof_type_name(type_name: str, aligned: int, packed: int) -> None:
+    """Test that sizeof accepts a type name like the type of a field, with the size that C gives it."""
+    for align, size in ((True, aligned), (False, packed)):
+        cs = cstruct(pointer="uint64").load("struct test { uint32 a; uint16 b; };", align=align)
+        assert Expression(f"sizeof({type_name})").evaluate(cs) == size
 
 
 def test_offsetof(cs: cstruct) -> None:
@@ -236,6 +316,9 @@ def test_offsetof(cs: cstruct) -> None:
     assert Expression("offsetof(test, b)").evaluate(cs) == 4
     assert Expression("offsetof(test, c)").evaluate(cs) == 12
     assert Expression("offsetof(test, d)").evaluate(cs) == 14
+
+    with pytest.raises(ExpressionParserError, match=r"^Structure 'test' does not have a field named 'e'$"):
+        Expression("offsetof(test, e)").evaluate(cs)
 
 
 def test_dotted_identifier(cs: cstruct) -> None:
@@ -354,8 +437,14 @@ def test_expression_source_invalid(cs: cstruct, source: str) -> None:
         # Numbers in other bases
         ("0x10 + 0b101 - 0o7", "((16 + 5) - 7)"),
         # Functions, and identifiers that are resolved from the context
-        ("sizeof(test) * X - -1", "((_sizeof(cs, 'test') * _identifier(cs, context, 'X')) - (-1))"),
-        ("offsetof(test, b) + a", "(_offsetof(cs, 'test', 'b') + a)"),
+        ("sizeof(test) * X - -1", "((_sizeof(cs.resolve('test')) * _identifier(cs, context, 'X')) - (-1))"),
+        ("offsetof(test, b) + a", "(_offsetof(cs.resolve('test'), 'b') + a)"),
+        # Type names like the type of a field, with sizes that are calculated too
+        ("sizeof(struct test *[a + 1])", "_sizeof(_resolve_type(cs, 'test', 1, [(a + 1)]))"),
+        (
+            "sizeof(unsigned int[X][b])",
+            "_sizeof(_resolve_type(cs, 'unsigned int', 0, [_identifier(cs, context, 'X'), b]))",
+        ),
         ("hdr.size * 4", "(_identifier(cs, context, 'hdr.size') * 4)"),
     ],
 )

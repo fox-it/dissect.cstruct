@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, BinaryIO
 
-from dissect.cstruct.exception import ArraySizeError
+from dissect.cstruct.exception import EOFError, WriteError
 from dissect.cstruct.types.base import EOF, BaseArray, BaseType, _is_seekable, _read_null_terminated
 
 if TYPE_CHECKING:
@@ -35,7 +35,7 @@ class CharArray(bytes, BaseArray):
 
         if not cls.__dynamic__ and (remaining := cls.__num_entries__ - (actual_size := len(data))):
             if remaining < 0:
-                raise ArraySizeError(f"Expected static array size {cls.__num_entries__}, got {actual_size} instead.")
+                raise WriteError(f"Expected static array size {cls.__num_entries__}, got {actual_size} instead.")
             data += b"\x00" * remaining
 
         return stream.write(data)
@@ -61,7 +61,12 @@ class Char(bytes, BaseType):
         if count == 0:
             return type.__call__(cls, b"")
 
-        data = stream.read(-1 if count == EOF else count)
+        try:
+            data = stream.read(-1 if count == EOF else count)
+        except OverflowError:
+            # No stream holds more bytes than fit in a C ssize_t
+            raise EOFError(f"Read 0 bytes, but expected {count}") from None
+
         if count != EOF and len(data) != count:
             raise EOFError(f"Read {len(data)} bytes, but expected {count}")
 
@@ -94,6 +99,6 @@ class Char(bytes, BaseType):
             data = data.encode("latin-1")
 
         if (actual_size := len(data)) > 1:
-            raise ValueError(f"Expected a single character, got {actual_size} instead.")
+            raise WriteError(f"Expected a single character, got {actual_size} instead.")
 
         return stream.write(data or b"\x00")

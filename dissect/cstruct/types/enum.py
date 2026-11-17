@@ -4,6 +4,7 @@ import sys
 from enum import EnumMeta, IntEnum, IntFlag
 from typing import TYPE_CHECKING, Any, BinaryIO, TypeVar, overload
 
+from dissect.cstruct.exception import DefinitionError
 from dissect.cstruct.types.base import BaseType, MetaType
 
 if TYPE_CHECKING:
@@ -54,7 +55,7 @@ class EnumMetaType(EnumMeta, MetaType):
         # cs is the cstruct instance, but we can't isinstance check it due to circular imports
         cs = value
         if not issubclass(type_, int):
-            raise TypeError("Enum can only be created from int type")
+            raise DefinitionError("Enum can only be created from int type")
 
         enum_cls = super().__call__(name, *args, **kwargs)
         enum_cls.__cs__ = cs

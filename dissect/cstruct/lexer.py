@@ -532,10 +532,6 @@ class TokenCursor:
         self._tokens = tokens
         self._pos = 0
 
-    def _reset_cursor(self) -> None:
-        """Reset only the cursor position while keeping the current tokens."""
-        self._pos = 0
-
     def _assert_not_eof(self) -> None:
         """Raise an error if EOF is reached."""
         if self._tokens[self._pos].type == TokenType.EOF:
@@ -561,14 +557,27 @@ class TokenCursor:
             self._pos += 1
         return token
 
+    def _match(self, *types: TokenType) -> Token | None:
+        """Consume and return the current token if it matches any of the given types, otherwise return ``None``."""
+        if self._current().type in types:
+            return self._take()
+        return None
+
+    def _at(self, *types: TokenType) -> bool:
+        """Return whether the current token matches any of the given types."""
+        return self._tokens[self._pos].type in types
+
+    def _describe(self, token: Token) -> str:
+        """Describe a token for an error message."""
+        return "end of input" if token.type == TokenType.EOF else token.value
+
     def _expect(self, *types: TokenType) -> Token:
         """Consume and return the current token if it matches, otherwise raise an error."""
         token = self._current()
         if token.type not in types:
-            actual = "end of input" if token.type == TokenType.EOF else token.value
             expected = " or ".join(t.value for t in types)
             expected = f"one of {expected}" if len(types) > 1 else expected
-            raise self._error(f"expected {expected}, got {actual}")
+            raise self._error(f"expected {expected}, got {self._describe(token)}")
         return self._take()
 
     def _collect_until(self, *terminators: TokenType) -> list[Token]:

@@ -6,9 +6,11 @@ from typing import TYPE_CHECKING
 
 from dissect.cstruct import compiler
 from dissect.cstruct.exception import (
+    DefinitionError,
     ExpressionParserError,
     LexerError,
     ParserError,
+    ResolveError,
     UnknownIdentifierError,
 )
 from dissect.cstruct.expression import Expression
@@ -83,25 +85,25 @@ class CStyleParser(Parser):
         # Keep a reference for error messages
         self._data = data
         self._reset_tokens(tokenize(data))
-        self._parse()
-
-    def _match(self, *types: TokenType) -> Token | None:
-        """Consume and return the current token if it matches any of the given types, otherwise return None."""
-        if self._current().type in types:
-            return self._take()
-        return None
-
-    def _at(self, *types: TokenType) -> bool:
-        """Return whether the current token matches any of the given types."""
-        return self._tokens[self._pos].type in types
+        try:
+            self._parse()
+        except (LexerError, ParserError):
+            raise
+        except DefinitionError as e:
+            # E.g. a duplicate type or an unknown type name, raised without the line it's on
+            raise type(e)(self._error_message(str(e))) from None
 
     def _error(self, msg: str, *, token: Token | None = None) -> ParserError:
+        return ParserError(self._error_message(msg, token=token))
+
+    def _error_message(self, msg: str, *, token: Token | None = None) -> str:
+        """Return the message with the line of the token, the current token by default."""
         lineno = (token if token is not None else self._tokens[self._pos]).line
         if self._data is None:
-            return ParserError(f"line {lineno}: {msg}")
+            return f"line {lineno}: {msg}"
 
         content = format_error_context(self._data, lineno)
-        return ParserError(f"line {lineno}: {msg}\n{content}")
+        return f"line {lineno}: {msg}\n{content}"
 
     def _in_false_branch(self) -> bool:
         """Return whether we're currently in a false conditional branch."""
@@ -218,6 +220,12 @@ class CStyleParser(Parser):
                         except (LexerError, ExpressionParserError):
                             # If evaluation fails, just keep it as a string (e.g. for macro-like constants)
                             pass
+                        except ResolveError:
+                            # E.g. sizeof of an unknown type
+                            raise
+                        except (ArithmeticError, ValueError) as e:
+                            # E.g. a division by zero
+                            raise self._error(str(e), token=token) from None
 
         self.cs.add_const(name_token.value, value)
 
@@ -402,6 +410,9 @@ class CStyleParser(Parser):
                 parts.append(token.value)
             base_type_str = " ".join(parts)
 
+        # Resolved here, so an unknown type is reported at its line
+        base_type = self.cs.resolve(base_type_str)
+
         self._expect(TokenType.LBRACE)
 
         next_value = 1 if is_flag else 0
@@ -428,7 +439,10 @@ class CStyleParser(Parser):
 
                 try:
                     value = Expression(join_tokens(tokens)).evaluate(self.cs, values)
-                except ExpressionParserError as e:
+                except ResolveError:
+                    # E.g. sizeof of an unknown type
+                    raise
+                except (ExpressionParserError, ArithmeticError, ValueError) as e:
                     raise self._error(str(e), token=tokens[0]) from None
             else:
                 value = next_value
@@ -445,7 +459,7 @@ class CStyleParser(Parser):
         self._expect(TokenType.RBRACE)
 
         factory = self.cs._make_flag if is_flag else self.cs._make_enum
-        type_ = factory(name or "", self.cs.resolve(base_type_str), values)
+        type_ = factory(name or "", base_type, values)
 
         if name is not None:
             # Register the enum/flag type if it has a name
@@ -519,13 +533,16 @@ class CStyleParser(Parser):
 
             count = None
             if tokens:
-                count = Expression(join_tokens(tokens))
                 try:
+                    count = Expression(join_tokens(tokens))
                     count = count.evaluate(self.cs)
                 except UnknownIdentifierError:
                     # The size refers to a field, so it's evaluated when reading the structure
                     pass
-                except ExpressionParserError as e:
+                except ResolveError:
+                    # E.g. sizeof of an unknown type
+                    raise
+                except (ExpressionParserError, ArithmeticError, ValueError) as e:
                     raise self._error(str(e), token=tokens[0]) from None
 
             dimensions.append(count)

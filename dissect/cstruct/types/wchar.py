@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar
 
-from dissect.cstruct.exception import ArraySizeError
+from dissect.cstruct.exception import EOFError, WriteError
 from dissect.cstruct.types.base import EOF, BaseArray, BaseType, _is_seekable, _read_null_terminated
 
 if TYPE_CHECKING:
@@ -33,7 +33,7 @@ class WcharArray(str, BaseArray):
         # A surrogate pair is a single character that takes up two entries of the array
         if not cls.__dynamic__ and (remaining := cls.__num_entries__ - (actual_size := len(buf) // 2)):
             if remaining < 0:
-                raise ArraySizeError(f"Expected static array size {cls.__num_entries__}, got {actual_size} instead.")
+                raise WriteError(f"Expected static array size {cls.__num_entries__}, got {actual_size} instead.")
             buf += b"\x00\x00" * remaining
 
         return stream.write(buf)
@@ -69,12 +69,20 @@ class Wchar(str, BaseType):
         if count == 0:
             return type.__call__(cls, "")
 
-        if count != EOF:
-            count *= 2
+        if count == EOF:
+            data = stream.read()
+            if len(data) % 2:
+                raise EOFError("Read 1 bytes, but expected 2")
+        else:
+            length = count * 2
+            try:
+                data = stream.read(length)
+            except OverflowError:
+                # No stream holds more bytes than fit in a C ssize_t
+                raise EOFError(f"Read 0 bytes, but expected {length}") from None
 
-        data = stream.read(-1 if count == EOF else count)
-        if count != EOF and len(data) != count:
-            raise EOFError(f"Read {len(data)} bytes, but expected {count}")
+            if len(data) != length:
+                raise EOFError(f"Read {len(data)} bytes, but expected {length}")
 
         return type.__call__(cls, str(data, cls.__encoding_map__[endian], "surrogatepass"))
 
@@ -103,6 +111,6 @@ class Wchar(str, BaseType):
 
         # A surrogate pair is a single character that doesn't fit in a single wchar
         if (actual_size := len(buf) // 2) > 1:
-            raise ValueError(f"Expected a single character, got {actual_size} instead.")
+            raise WriteError(f"Expected a single character, got {actual_size} instead.")
 
         return stream.write(buf or b"\x00\x00")

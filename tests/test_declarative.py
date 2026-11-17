@@ -21,6 +21,7 @@ from dissect.cstruct.declarative import (
     uint32,
     uint64,
 )
+from dissect.cstruct.exception import DefinitionError
 from dissect.cstruct.types.pointer import Pointer
 from dissect.cstruct.types.structure import Structure, StructureMetaType, UnionMetaType, asdict
 from dissect.cstruct.types.structure import Union as CUnion
@@ -140,7 +141,7 @@ def test_field_inheritance_duplicate(cs: cstruct) -> None:
     class DupBase(Struct, cs=cs):
         a: uint32
 
-    with pytest.raises(ValueError, match="Duplicate field name: a"):
+    with pytest.raises(DefinitionError, match=r"^Duplicate field name: a$"):
 
         class DupChild(DupBase):
             a: uint16
@@ -168,7 +169,7 @@ def test_self_referential_pointer_string(cs: cstruct) -> None:
 
 
 def test_self_referential_embed(cs: cstruct) -> None:
-    with pytest.raises(TypeError, match=r"^Field 'inner' embeds 'Recursive' in itself, use a pointer instead$"):
+    with pytest.raises(DefinitionError, match=r"^Field 'inner' embeds 'Recursive' in itself, use a pointer instead$"):
 
         class Recursive(Struct, cs=cs):
             inner: Recursive
@@ -177,7 +178,9 @@ def test_self_referential_embed(cs: cstruct) -> None:
     assert "Recursive" not in cs.types
     assert not hasattr(cs, "Recursive")
 
-    with pytest.raises(TypeError, match=r"^Field 'inner' embeds 'RecursiveArray' in itself, use a pointer instead$"):
+    with pytest.raises(
+        DefinitionError, match=r"^Field 'inner' embeds 'RecursiveArray' in itself, use a pointer instead$"
+    ):
 
         class RecursiveArray(Struct, cs=cs):
             inner: "RecursiveArray[2]"
@@ -459,7 +462,7 @@ def test_annotations_without_future_import(cs: cstruct) -> None:
 
 
 def test_unsupported_annotation(cs: cstruct) -> None:
-    with pytest.raises(TypeError, match="Unsupported field annotation"):
+    with pytest.raises(DefinitionError, match=r"^Unsupported field annotation: 1234$"):
 
         class Invalid(Struct, cs=cs):
             a: 1234
