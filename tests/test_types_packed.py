@@ -254,3 +254,18 @@ def test_packed_struct_write_range(cs: cstruct, compiled: bool) -> None:
 
     with pytest.raises(struct.error):
         cs.test(a=256, b=2, c=3, d=4.0).dumps()
+
+
+def test_packed_signed(cs: cstruct) -> None:
+    """Test that the signed attribute is set correctly for packed types."""
+    assert cs.int8.__signed__ is True
+    assert cs.uint8.__signed__ is False
+    assert cs.int16.__signed__ is True
+    assert cs.uint16.__signed__ is False
+    assert cs.int32.__signed__ is True
+    assert cs.uint32.__signed__ is False
+    assert cs.int64.__signed__ is True
+    assert cs.uint64.__signed__ is False
+    assert cs.float16.__signed__ is True
+    assert cs.float.__signed__ is True
+    assert cs.double.__signed__ is True

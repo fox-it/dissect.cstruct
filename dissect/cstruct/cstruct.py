@@ -562,7 +562,7 @@ class cstruct:
                 (base, Packed),
                 struct.calcsize(fmt),
                 alignment=alignment,
-                attrs={"__fmt__": fmt},
+                attrs={"__fmt__": fmt, "__signed__": fmt.islower()},
             ),
         )
 
