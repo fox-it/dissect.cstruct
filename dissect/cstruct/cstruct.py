@@ -90,8 +90,8 @@ class cstruct:
             "int128": self._make_int_type("int128", 16, True, alignment=16),
             "uint128": self._make_int_type("uint128", 16, False, alignment=16),
 
-            "uleb128": self._make_type("uleb128", (LEB128,), None, attrs={"signed": False}),
-            "ileb128": self._make_type("ileb128", (LEB128,), None, attrs={"signed": True}),
+            "uleb128": self._make_type("uleb128", (LEB128,), None, attrs={"__signed__": False}),
+            "ileb128": self._make_type("ileb128", (LEB128,), None, attrs={"__signed__": True}),
 
             "void": self._make_type("void", (Void,), 0),
 
@@ -552,7 +552,7 @@ class cstruct:
         return cast("type[Array]", self._make_type(name, bases, size, alignment=type_.__alignment__, attrs=attrs))
 
     def _make_int_type(self, name: str, size: int, signed: bool, *, alignment: int | None = None) -> type[Int]:
-        return cast("type[Int]", self._make_type(name, (Int,), size, alignment=alignment, attrs={"signed": signed}))
+        return cast("type[Int]", self._make_type(name, (Int,), size, alignment=alignment, attrs={"__signed__": signed}))
 
     def _make_packed_type(self, name: str, fmt: str, base: type, *, alignment: int | None = None) -> type[Packed]:
         return cast(
@@ -562,7 +562,7 @@ class cstruct:
                 (base, Packed),
                 struct.calcsize(fmt),
                 alignment=alignment,
-                attrs={"__fmt__": fmt},
+                attrs={"__fmt__": fmt, "__signed__": fmt.islower()},
             ),
         )
 

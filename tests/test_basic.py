@@ -771,5 +771,11 @@ def test_deprecation_warnings(cs: cstruct) -> None:
     ):
         _ = cs.uint8.packchar
 
+    for type_ in (cs.int24, cs.uleb128):
+        with pytest.warns(
+            DeprecationWarning, match=re.escape("The 'signed' property is deprecated, use '__signed__' instead.")
+        ):
+            _ = type_.signed
+
     # No test for the pointer type since it also conflicts with a bug fix
     # (accessing a field named 'type' on a pointer type)

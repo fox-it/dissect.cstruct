@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.types.base import BaseType
+from dissect.cstruct.util import classproperty
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -16,7 +18,7 @@ class LEB128(int, BaseType):
     See https://en.wikipedia.org/wiki/LEB128 for more information and an explanation of the algorithm.
     """
 
-    signed: bool
+    __signed__: bool
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
@@ -33,7 +35,7 @@ class LEB128(int, BaseType):
             if (b & 0x80) == 0:
                 break
 
-        if cls.signed and b & 0x40 != 0:
+        if cls.__signed__ and b & 0x40 != 0:
             result |= ~0 << shift
 
         return cls.__new__(cls, result)
@@ -53,7 +55,7 @@ class LEB128(int, BaseType):
     @classmethod
     def _write(cls, stream: BinaryIO, data: int, *, endian: Endianness) -> int:
         # only write negative numbers when in signed mode
-        if data < 0 and not cls.signed:
+        if data < 0 and not cls.__signed__:
             raise ValueError("Attempt to encode a negative integer using unsigned LEB128 encoding")
 
         result = bytearray()
@@ -64,8 +66,8 @@ class LEB128(int, BaseType):
 
             # function works similar for signed- and unsigned integers, except for the check when to stop
             # the encoding process.
-            if ((cls.signed and (data == 0 and byte & 0x40 == 0)) or (data == -1 and byte & 0x40 != 0)) or (
-                not cls.signed and data == 0
+            if ((cls.__signed__ and (data == 0 and byte & 0x40 == 0)) or (data == -1 and byte & 0x40 != 0)) or (
+                not cls.__signed__ and data == 0
             ):
                 result.append(byte)
                 break
@@ -75,3 +77,13 @@ class LEB128(int, BaseType):
 
         stream.write(result)
         return len(result)
+
+    @classproperty
+    def signed(cls) -> bool:
+        """Access whether this integer type is signed."""
+        warnings.warn(
+            "The 'signed' property is deprecated, use '__signed__' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cls.__signed__

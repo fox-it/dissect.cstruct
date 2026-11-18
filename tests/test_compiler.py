@@ -1158,6 +1158,7 @@ def test_write_custom_types(cs: cstruct) -> None:
 
     class CustomWrite(int, Packed):
         __fmt__ = "B"
+        __signed__ = False
 
         @classmethod
         def _write(cls, stream: BinaryIO, data: int, *, endian: Endianness) -> int:
@@ -1165,6 +1166,7 @@ def test_write_custom_types(cs: cstruct) -> None:
 
     class CustomWriteArray(int, Packed):
         __fmt__ = "B"
+        __signed__ = False
 
         @classmethod
         def _write_array(cls, stream: BinaryIO, data: list, *, endian: Endianness) -> int:

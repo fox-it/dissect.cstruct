@@ -48,6 +48,7 @@ class Packed(BaseType, Generic[T], metaclass=PackedMetaType):
     """Packed type for Python struct (un)packing."""
 
     __fmt__: str
+    __signed__: bool
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
