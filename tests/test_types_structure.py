@@ -715,8 +715,11 @@ def test_structure_field_duplicate(cs: cstruct) -> None:
         uint8 a;
     };
     """
-    with pytest.raises(DefinitionError, match=r"(?m)^line 5: Duplicate field name: a$"):
+    with pytest.raises(DefinitionError, match=r"(?m)^line 2: Duplicate field name: a$") as exc_info:
         cs.load(cdef)
+
+    # The error of the structure, with the traceback of where it was raised
+    assert str(exc_info.value.__cause__) == "Duplicate field name: a"
 
 
 def test_structure_definition_self(cs: cstruct) -> None:

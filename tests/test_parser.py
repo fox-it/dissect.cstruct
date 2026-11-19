@@ -739,10 +739,39 @@ def test_preprocessor_define_from_enum_in_struct(cs: cstruct) -> None:
               6:     A = offsetof(inner, b)
             """,
         ),
+        (
+            """
+            struct dynamic {
+                uint8 n;
+                char  a[n];
+            };
+            #define SIZE sizeof(dynamic)
+            """,
+            """\
+            line 6: Type 'dynamic' has a dynamic size
+              4:     char  a[n];
+              5: };
+              6: #define SIZE sizeof(dynamic)
+            """,
+        ),
+        (
+            """
+            struct inner {
+                uint8 a;
+            };
+            #define OFFSET offsetof(inner, b)
+            """,
+            """\
+            line 5: Structure 'inner' does not have a field named 'b'
+              3:     uint8 a;
+              4: };
+              5: #define OFFSET offsetof(inner, b)
+            """,
+        ),
     ],
 )
 def test_expression_invalid(cs: cstruct, cdef: str, message: str) -> None:
-    """Test that an array size or enum value that is missing or can't be evaluated is an error at its line."""
+    """Test that a constant, array size or enum value that is missing or can't be evaluated is an error at its line."""
     cs.load("#define N LENGTH")
 
     with pytest.raises(ParserError) as exc_info:
@@ -768,9 +797,9 @@ def test_expression_arithmetic_error(cs: cstruct, cdef: str, line: int) -> None:
 @pytest.mark.parametrize(
     ("cdef", "line"),
     [
-        ("#define A 1\n#define B sizeof(unknown)", 2),
+        ("#define A 1\n#define B sizeof(unknown)\n#define C 1", 2),
         ("struct test {\n    char a[offsetof(unknown, b)];\n};", 2),
-        ("enum test : uint8 {\n    A = 1,\n    B = sizeof(unknown),\n};", 3),
+        ("enum test : uint8 {\n    A = 1,\n    B = sizeof(unknown)\n};", 3),
     ],
 )
 def test_expression_unknown_type(cs: cstruct, cdef: str, line: int) -> None:

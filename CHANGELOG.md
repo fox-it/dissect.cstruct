@@ -35,11 +35,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `dumpstruct` shows the fields of every element of an array of structures or unions.
 - Errors are subclasses of `dissect.cstruct.Error`: `DefinitionError` for invalid definitions, `ReadError` for data that can't be parsed and `WriteError` for values that can't be written. All three are also subclasses of `ValueError`.
   - A short read raises `dissect.cstruct.exception.EOFError`, which is a subclass of `Error` and of the built-in `EOFError`. This has also been made more consistent in many places, such as `wchar`, which previously raised a `UnicodeDecodeError`.
-  - Arithmatic errors in expressions, such as division by zero, now raise a `ReadError`.
+  - Arithmetic errors in expressions, such as division by zero, now raise a `ReadError`.
   - A value that can't be written raises a `WriteError` with the original error as its cause
   - Invalid definitions raise a `DefinitionError`.
   - A constant expression that can't be calculated during `load`, e.g. a division by zero, raises a `ParserError`.
-  - `offsetof` raises a `TypeError` for a type that isn't a structure, instead of an `AttributeError` or an error about a missing field.
+  - `offsetof` raises a `TypeError` for a type that isn't a structure, instead of an `AttributeError` or an error about a missing field. In an expression, the errors of `sizeof` and `offsetof` raise a `DefinitionError`.
   - Errors that `load` raises include the line of the definition.
   - `ArraySizeError` is removed. A value that is longer than its static array raises a `WriteError`.
   - `write()` raises a `TypeError` for an object that can't be written to, like `read()` does.

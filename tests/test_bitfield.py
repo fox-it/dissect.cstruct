@@ -160,7 +160,7 @@ def test_bitfield_straddle(cs: cstruct, compiled: bool) -> None:
     };
     """
 
-    with pytest.raises(DefinitionError, match=r"(?m)^line 10: Straddled bit fields are unsupported$"):
+    with pytest.raises(DefinitionError, match=r"(?m)^line 2: Straddled bit fields are unsupported$"):
         cs.load(cdef, compiled=compiled)
 
 
@@ -187,7 +187,7 @@ def test_bitfield_unsupported_type(cs: cstruct, compiled: bool, type_: str, name
     }};
     """
 
-    with pytest.raises(DefinitionError, match=rf"(?m)^line 8: Bit fields of type {re.escape(name)} are unsupported$"):
+    with pytest.raises(DefinitionError, match=rf"(?m)^line 6: Bit fields of type {re.escape(name)} are unsupported$"):
         cs.load(cdef, compiled=compiled)
 
 

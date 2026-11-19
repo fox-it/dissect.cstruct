@@ -85,16 +85,14 @@ class CStyleParser(Parser):
         # Keep a reference for error messages
         self._data = data
         self._reset_tokens(tokenize(data))
-        try:
-            self._parse()
-        except (LexerError, ParserError):
-            raise
-        except DefinitionError as e:
-            # E.g. a duplicate type or an unknown type name, raised without the line it's on
-            raise type(e)(self._error_message(str(e))) from None
+        self._parse()
 
     def _error(self, msg: str, *, token: Token | None = None) -> ParserError:
         return ParserError(self._error_message(msg, token=token))
+
+    def _located(self, error: DefinitionError, token: Token) -> DefinitionError:
+        """Return the error with the line of the token, and keep its class."""
+        return type(error)(self._error_message(str(error), token=token))
 
     def _error_message(self, msg: str, *, token: Token | None = None) -> str:
         """Return the message with the line of the token, the current token by default."""
@@ -220,11 +218,11 @@ class CStyleParser(Parser):
                         except (LexerError, ExpressionParserError):
                             # If evaluation fails, just keep it as a string (e.g. for macro-like constants)
                             pass
-                        except ResolveError:
+                        except ResolveError as e:
                             # E.g. sizeof of an unknown type
-                            raise
+                            raise self._located(e, token) from e
                         except (ArithmeticError, ValueError) as e:
-                            # E.g. a division by zero
+                            # E.g. a division by zero or sizeof of a type with a dynamic size
                             raise self._error(str(e), token=token) from None
 
         self.cs.add_const(name_token.value, value)
@@ -325,6 +323,7 @@ class CStyleParser(Parser):
 
         # Parse one or more typedef names with modifiers (pointers, arrays)
         while self._at(TokenType.IDENTIFIER, TokenType.STAR):
+            start_token = self._current()
             type_, name, bits = self._parse_field_name(base_type)
             if bits is not None:
                 raise self._error("typedefs cannot have bitfields")
@@ -335,7 +334,10 @@ class CStyleParser(Parser):
                 base_type.__name__ = name
                 base_type.__qualname__ = name
 
-            self.cs.add_type(name, type_)
+            try:
+                self.cs.add_type(name, type_)
+            except DefinitionError as e:
+                raise self._located(e, start_token) from e
 
             if not self._match(TokenType.COMMA):
                 break
@@ -368,26 +370,37 @@ class CStyleParser(Parser):
                 type = factory(name, [], align=self.align)
                 if self.compiled and "nocompile" not in self._flags:
                     type = compiler.compile_structure(type)
-                self.cs.add_type(name, type)
+
+                try:
+                    self.cs.add_type(name, type)
+                except DefinitionError as e:
+                    raise self._located(e, start_token) from e
             else:
                 # struct typename ... (type reference)
-                return self.cs.resolve(name)
+                try:
+                    return self.cs.resolve(name)
+                except ResolveError as e:
+                    raise self._located(e, start_token) from e
 
         # Parse body
         self._expect(TokenType.LBRACE)
         fields = self._parse_field_list()
         self._expect(TokenType.RBRACE)
 
-        if type is None:
-            is_anonymous = name is None
-            name = name or self.cs._next_anonymous()
+        # The fields are checked when the type is built from all of them, e.g. for a duplicate name
+        try:
+            if type is None:
+                is_anonymous = name is None
+                name = name or self.cs._next_anonymous()
 
-            type = factory(name, fields, align=self.align, anonymous=is_anonymous)
-            if self.compiled and "nocompile" not in self._flags:
-                type = compiler.compile_structure(type)
-        else:
-            type.__fields__.extend(fields)
-            type.commit()
+                type = factory(name, fields, align=self.align, anonymous=is_anonymous)
+                if self.compiled and "nocompile" not in self._flags:
+                    type = compiler.compile_structure(type)
+            else:
+                type.__fields__.extend(fields)
+                type.commit()
+        except DefinitionError as e:
+            raise self._located(e, start_token) from e
 
         self._flags.clear()
         return type
@@ -410,8 +423,10 @@ class CStyleParser(Parser):
                 parts.append(token.value)
             base_type_str = " ".join(parts)
 
-        # Resolved here, so an unknown type is reported at its line
-        base_type = self.cs.resolve(base_type_str)
+        try:
+            base_type = self.cs.resolve(base_type_str)
+        except ResolveError as e:
+            raise self._located(e, start_token) from e
 
         self._expect(TokenType.LBRACE)
 
@@ -439,9 +454,9 @@ class CStyleParser(Parser):
 
                 try:
                     value = Expression(join_tokens(tokens)).evaluate(self.cs, values)
-                except ResolveError:
+                except ResolveError as e:
                     # E.g. sizeof of an unknown type
-                    raise
+                    raise self._located(e, tokens[0]) from e
                 except (ExpressionParserError, ArithmeticError, ValueError) as e:
                     raise self._error(str(e), token=tokens[0]) from None
             else:
@@ -459,12 +474,15 @@ class CStyleParser(Parser):
         self._expect(TokenType.RBRACE)
 
         factory = self.cs._make_flag if is_flag else self.cs._make_enum
-        type_ = factory(name or "", base_type, values)
+        try:
+            type_ = factory(name or "", base_type, values)
 
-        if name is not None:
-            # Register the enum/flag type if it has a name
-            # Anonymous enums/flags are handled in the top level parse loop
-            self.cs.add_type(type_.__name__, type_)
+            if name is not None:
+                # Register the enum/flag type if it has a name
+                # Anonymous enums/flags are handled in the top level parse loop
+                self.cs.add_type(type_.__name__, type_)
+        except DefinitionError as e:
+            raise self._located(e, start_token) from e
 
         return type_
 
@@ -525,6 +543,7 @@ class CStyleParser(Parser):
 
     def _parse_array_dimensions(self, base_type: type[BaseType]) -> type[BaseType]:
         """Parse array dimensions following a field name, e.g., ``field[10][20]``."""
+        start_token = self._current()
         dimensions: list[int | Expression] = []
 
         while self._match(TokenType.LBRACKET):
@@ -539,9 +558,9 @@ class CStyleParser(Parser):
                 except UnknownIdentifierError:
                     # The size refers to a field, so it's evaluated when reading the structure
                     pass
-                except ResolveError:
+                except ResolveError as e:
                     # E.g. sizeof of an unknown type
-                    raise
+                    raise self._located(e, tokens[0]) from e
                 except (ExpressionParserError, ArithmeticError, ValueError) as e:
                     raise self._error(str(e), token=tokens[0]) from None
 
@@ -550,8 +569,12 @@ class CStyleParser(Parser):
         type_ = base_type
         for count in reversed(dimensions):
             if issubclass(type_, BaseArray) and count is None:
-                raise ParserError("Depth required for multi-dimensional array")
-            type_ = self.cs._make_array(type_, count)
+                raise self._error("Depth required for multi-dimensional array", token=start_token)
+
+            try:
+                type_ = self.cs._make_array(type_, count)
+            except DefinitionError as e:
+                raise self._located(e, start_token) from e
 
         return type_
 
@@ -604,4 +627,7 @@ class CStyleParser(Parser):
             else:
                 break
 
-        return self.cs.resolve(" ".join(parts))
+        try:
+            return self.cs.resolve(" ".join(parts))
+        except ResolveError as e:
+            raise self._located(e, first) from e

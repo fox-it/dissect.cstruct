@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from dissect.cstruct.exception import ExpressionParserError, UnknownIdentifierError
+from dissect.cstruct.exception import DefinitionError, ExpressionParserError, UnknownIdentifierError
 from dissect.cstruct.lexer import IDENTIFIER_TYPES, Lexer, TokenCursor, TokenType, join_tokens
 from dissect.cstruct.util import offsetof, sizeof
 
@@ -80,7 +80,7 @@ def _resolve_type(cs: cstruct, name: str, pointers: int, dimensions: list[int]) 
     for _ in range(pointers):
         type_ = cs._make_pointer(type_)
     for count in reversed(dimensions):
-        type_ = cs._make_array(type_, count)
+        type_ = cs._make_array(type_, max(0, count))
     return type_
 
 
@@ -88,14 +88,14 @@ def _sizeof(type_: type[BaseType]) -> int:
     try:
         return sizeof(type_)
     except TypeError:
-        raise ExpressionParserError(f"Type '{type_.__name__}' has a dynamic size") from None
+        raise DefinitionError(f"Type '{type_.__name__}' has a dynamic size") from None
 
 
 def _offsetof(type_: type[BaseType], field: str) -> int:
     try:
         return offsetof(type_, field)
     except (TypeError, ValueError) as e:
-        raise ExpressionParserError(str(e)) from None
+        raise DefinitionError(str(e)) from None
 
 
 FUNCTIONS: dict[TokenType, Callable[..., int]] = {

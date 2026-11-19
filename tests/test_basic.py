@@ -385,7 +385,7 @@ def test_array_of_null_terminated_strings(cs: cstruct, compiled: bool) -> None:
         char   argv[][argc];
     };
     """
-    with pytest.raises(ParserError, match="Depth required for multi-dimensional array"):
+    with pytest.raises(ParserError, match=r"(?m)^line 4: Depth required for multi-dimensional array$"):
         cs.load(cdef)
 
 

@@ -5,7 +5,13 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from dissect.cstruct.cstruct import cstruct
-from dissect.cstruct.exception import ExpressionParserError, LexerError, ResolveError, UnknownIdentifierError
+from dissect.cstruct.exception import (
+    DefinitionError,
+    ExpressionParserError,
+    LexerError,
+    ResolveError,
+    UnknownIdentifierError,
+)
 from dissect.cstruct.expression import SOURCE_GLOBALS, Expression
 from tests.util import verify_compiled
 
@@ -227,7 +233,7 @@ def test_expression_failure(expression: str, exception: type, message: str) -> N
         ),
         pytest.param(
             "offsetof(uint8, a)",
-            ExpressionParserError,
+            DefinitionError,
             "^Type 'uint8' is not a structure$",
             id="offsetof-not-a-structure",
         ),
@@ -268,14 +274,30 @@ def test_sizeof(cs: cstruct, compiled: bool) -> None:
         uint8   n;
         char    a[n * sizeof(struct test2[2])];
     };
+
+    struct test4 {
+        int8    n;
+        uint16  a[n];
+        char    b[4 - sizeof(uint16[n])];
+    };
     """
     cs.load(cdef, compiled=compiled)
 
     assert verify_compiled(cs.test3, compiled)
+    assert verify_compiled(cs.test4, compiled)
 
     assert len(cs.test) == 4
     assert len(cs.test2) == 8
     assert cs.test3(b"\x02" + b"a" * 32).a == b"a" * 32
+
+    test4 = cs.test4(b"\x01abcd")
+    assert test4.a == [0x6261]
+    assert test4.b == b"cd"
+
+    # A negative count from the data is 0, like for the field before it
+    test4 = cs.test4(b"\xffabcd")
+    assert test4.a == []
+    assert test4.b == b"abcd"
 
 
 # The sizes of gcc on a 64-bit platform, with and without __attribute__((packed))
@@ -317,7 +339,7 @@ def test_offsetof(cs: cstruct) -> None:
     assert Expression("offsetof(test, c)").evaluate(cs) == 12
     assert Expression("offsetof(test, d)").evaluate(cs) == 14
 
-    with pytest.raises(ExpressionParserError, match=r"^Structure 'test' does not have a field named 'e'$"):
+    with pytest.raises(DefinitionError, match=r"^Structure 'test' does not have a field named 'e'$"):
         Expression("offsetof(test, e)").evaluate(cs)
 
 
