@@ -21,7 +21,7 @@ def test_cstruct_type_annotation(name: str, monkeypatch: pytest.MonkeyPatch) -> 
         patch("typing.TYPE_CHECKING", True),
         patch("dissect.cstruct.types.base.MetaType.__getitem__", lambda self, item: self),
     ):
-        for module in [module for module in sys.modules if module in ("dissect.cstruct.cstruct")]:
+        for module in ("dissect", "dissect.cstruct", "dissect.cstruct.cstruct"):
             monkeypatch.delitem(sys.modules, module)
 
         from dissect.cstruct import cstruct

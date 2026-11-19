@@ -1,101 +1,98 @@
 from __future__ import annotations
 
+import re
+from functools import partial
+from typing import TYPE_CHECKING
+
 import pytest
 
 from dissect.cstruct import cstruct, util
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
-def test_pack_unpack() -> None:
-    endian = "little"
-    sign = False
-    assert util.p8(1, endian) == b"\x01"
-    assert util.p16(1, endian) == b"\x01\x00"
-    assert util.p32(1, endian) == b"\x01\x00\x00\x00"
-    assert util.p64(1, endian) == b"\x01\x00\x00\x00\x00\x00\x00\x00"
-    assert util.pf16(1.0, endian) == b"\x00\x3c"
-    assert util.pf32(1.0, endian) == b"\x00\x00\x80\x3f"
-    assert util.pf64(1.0, endian) == b"\x00\x00\x00\x00\x00\x00\xf0\x3f"
-    assert util.u8(b"\x01", endian, sign) == 1
-    assert util.u16(b"\x01\x00", endian, sign) == 1
-    assert util.u32(b"\x01\x00\x00\x00", endian, sign) == 1
-    assert util.u64(b"\x01\x00\x00\x00\x00\x00\x00\x00", endian, sign) == 1
-    assert util.f16(b"\x00\x3c", endian) == 1.0
-    assert util.f32(b"\x00\x00\x80\x3f", endian) == 1.0
-    assert util.f64(b"\x00\x00\x00\x00\x00\x00\xf0\x3f", endian) == 1.0
+    from dissect.cstruct.cstruct import cstruct
 
-    endian = "big"
-    sign = False
-    assert util.p8(1, endian) == b"\x01"
-    assert util.p16(1, endian) == b"\x00\x01"
-    assert util.p32(1, endian) == b"\x00\x00\x00\x01"
-    assert util.p64(1, endian) == b"\x00\x00\x00\x00\x00\x00\x00\x01"
-    assert util.pf16(1.0, endian) == b"\x3c\x00"
-    assert util.pf32(1.0, endian) == b"\x3f\x80\x00\x00"
-    assert util.pf64(1.0, endian) == b"\x3f\xf0\x00\x00\x00\x00\x00\x00"
-    assert util.u8(b"\x01", endian, sign) == 1
-    assert util.u16(b"\x00\x01", endian, sign) == 1
-    assert util.u32(b"\x00\x00\x00\x01", endian, sign) == 1
-    assert util.u64(b"\x00\x00\x00\x00\x00\x00\x00\x01", endian, sign) == 1
-    assert util.f16(b"\x3c\x00", endian) == 1.0
-    assert util.f32(b"\x3f\x80\x00\x00", endian) == 1.0
-    assert util.f64(b"\x3f\xf0\x00\x00\x00\x00\x00\x00", endian) == 1.0
 
-    endian = "network"
-    sign = False
-    assert util.p8(1, endian) == b"\x01"
-    assert util.p16(1, endian) == b"\x00\x01"
-    assert util.p32(1, endian) == b"\x00\x00\x00\x01"
-    assert util.p64(1, endian) == b"\x00\x00\x00\x00\x00\x00\x00\x01"
-    assert util.pf16(1.0, endian) == b"\x3c\x00"
-    assert util.pf32(1.0, endian) == b"\x3f\x80\x00\x00"
-    assert util.pf64(1.0, endian) == b"\x3f\xf0\x00\x00\x00\x00\x00\x00"
-    assert util.u8(b"\x01", endian, sign) == 1
-    assert util.u16(b"\x00\x01", endian, sign) == 1
-    assert util.u32(b"\x00\x00\x00\x01", endian, sign) == 1
-    assert util.u64(b"\x00\x00\x00\x00\x00\x00\x00\x01", endian, sign) == 1
-    assert util.f16(b"\x3c\x00", endian) == 1.0
-    assert util.f32(b"\x3f\x80\x00\x00", endian) == 1.0
-    assert util.f64(b"\x3f\xf0\x00\x00\x00\x00\x00\x00", endian) == 1.0
+@pytest.mark.parametrize(
+    ("pack", "unpack", "endian", "value", "buf"),
+    [
+        (util.p8, util.u8, "little", 1, b"\x01"),
+        (util.p16, util.u16, "little", 1, b"\x01\x00"),
+        (util.p32, util.u32, "little", 1, b"\x01\x00\x00\x00"),
+        (util.p64, util.u64, "little", 1, b"\x01\x00\x00\x00\x00\x00\x00\x00"),
+        (util.p8, util.u8, "big", 1, b"\x01"),
+        (util.p16, util.u16, "big", 1, b"\x00\x01"),
+        (util.p32, util.u32, "big", 1, b"\x00\x00\x00\x01"),
+        (util.p64, util.u64, "big", 1, b"\x00\x00\x00\x00\x00\x00\x00\x01"),
+        (util.p8, util.u8, "network", 1, b"\x01"),
+        (util.p16, util.u16, "network", 1, b"\x00\x01"),
+        (util.p32, util.u32, "network", 1, b"\x00\x00\x00\x01"),
+        (util.p64, util.u64, "network", 1, b"\x00\x00\x00\x00\x00\x00\x00\x01"),
+        (util.p8, util.u8, "little", -120, b"\x88"),
+        (util.p16, util.u16, "little", -120, b"\x88\xff"),
+        (util.p32, util.u32, "little", -120, b"\x88\xff\xff\xff"),
+        (util.p64, util.u64, "little", -120, b"\x88\xff\xff\xff\xff\xff\xff\xff"),
+        (util.p8, util.u8, "big", -120, b"\x88"),
+        (util.p16, util.u16, "big", -120, b"\xff\x88"),
+        (util.p32, util.u32, "big", -120, b"\xff\xff\xff\x88"),
+        (util.p64, util.u64, "big", -120, b"\xff\xff\xff\xff\xff\xff\xff\x88"),
+        (partial(util.pack, size=24), partial(util.unpack, size=24), "little", 1, b"\x01\x00\x00"),
+        # Without a size, the size of the value is used
+        (util.pack, util.unpack, "little", 213928798, b"^K\xc0\x0c"),
+    ],
+)
+def test_pack_unpack(pack: Callable, unpack: Callable, endian: str, value: int, buf: bytes) -> None:
+    """Test packing and unpacking integers of different sizes, endianness and signedness."""
+    assert pack(value, endian=endian) == buf
+    assert unpack(buf, endian=endian, sign=value < 0) == value
 
-    endian = "little"
-    sign = True
-    assert util.p8(-120, endian) == b"\x88"
-    assert util.p16(-120, endian) == b"\x88\xff"
-    assert util.p32(-120, endian) == b"\x88\xff\xff\xff"
-    assert util.p64(-120, endian) == b"\x88\xff\xff\xff\xff\xff\xff\xff"
-    assert util.pf16(-120.0, endian) == b"\x80\xd7"
-    assert util.pf32(-120.0, endian) == b"\x00\x00\xf0\xc2"
-    assert util.pf64(-120.0, endian) == b"\x00\x00\x00\x00\x00\x00\x5e\xc0"
-    assert util.u8(b"\x88", endian, sign) == -120
-    assert util.u16(b"\x88\xff", endian, sign) == -120
-    assert util.u32(b"\x88\xff\xff\xff", endian, sign) == -120
-    assert util.u64(b"\x88\xff\xff\xff\xff\xff\xff\xff", endian, sign) == -120
-    assert util.f16(b"\x80\xd7", endian) == -120.0
-    assert util.f32(b"\x00\x00\xf0\xc2", endian) == -120.0
-    assert util.f64(b"\x00\x00\x00\x00\x00\x00\x5e\xc0", endian) == -120.0
 
-    endian = "big"
-    sign = True
-    assert util.p8(-120, endian) == b"\x88"
-    assert util.p16(-120, endian) == b"\xff\x88"
-    assert util.p32(-120, endian) == b"\xff\xff\xff\x88"
-    assert util.p64(-120, endian) == b"\xff\xff\xff\xff\xff\xff\xff\x88"
-    assert util.pf16(-120.0, endian) == b"\xd7\x80"
-    assert util.pf32(-120.0, endian) == b"\xc2\xf0\x00\x00"
-    assert util.pf64(-120.0, endian) == b"\xc0\x5e\x00\x00\x00\x00\x00\x00"
-    assert util.u8(b"\x88", endian, sign) == -120
-    assert util.u16(b"\xff\x88", endian, sign) == -120
-    assert util.u32(b"\xff\xff\xff\x88", endian, sign) == -120
-    assert util.u64(b"\xff\xff\xff\xff\xff\xff\xff\x88", endian, sign) == -120
-    assert util.f16(b"\xd7\x80", endian) == -120.0
-    assert util.f32(b"\xc2\xf0\x00\x00", endian) == -120.0
-    assert util.f64(b"\xc0\x5e\x00\x00\x00\x00\x00\x00", endian) == -120.0
+@pytest.mark.parametrize(
+    ("pack", "unpack", "endian", "value", "buf"),
+    [
+        (util.pf16, util.f16, "little", 1.0, b"\x00\x3c"),
+        (util.pf32, util.f32, "little", 1.0, b"\x00\x00\x80\x3f"),
+        (util.pf64, util.f64, "little", 1.0, b"\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+        (util.pf16, util.f16, "big", 1.0, b"\x3c\x00"),
+        (util.pf32, util.f32, "big", 1.0, b"\x3f\x80\x00\x00"),
+        (util.pf64, util.f64, "big", 1.0, b"\x3f\xf0\x00\x00\x00\x00\x00\x00"),
+        (util.pf16, util.f16, "network", 1.0, b"\x3c\x00"),
+        (util.pf32, util.f32, "network", 1.0, b"\x3f\x80\x00\x00"),
+        (util.pf64, util.f64, "network", 1.0, b"\x3f\xf0\x00\x00\x00\x00\x00\x00"),
+        (util.pf16, util.f16, "little", -120.0, b"\x80\xd7"),
+        (util.pf32, util.f32, "little", -120.0, b"\x00\x00\xf0\xc2"),
+        (util.pf64, util.f64, "little", -120.0, b"\x00\x00\x00\x00\x00\x00\x5e\xc0"),
+        (util.pf16, util.f16, "big", -120.0, b"\xd7\x80"),
+        (util.pf32, util.f32, "big", -120.0, b"\xc2\xf0\x00\x00"),
+        (util.pf64, util.f64, "big", -120.0, b"\xc0\x5e\x00\x00\x00\x00\x00\x00"),
+    ],
+)
+def test_pack_unpack_float(pack: Callable, unpack: Callable, endian: str, value: float, buf: bytes) -> None:
+    """Test packing and unpacking floats of different sizes and endianness."""
+    assert pack(value, endian=endian) == buf
+    assert unpack(buf, endian=endian) == value
 
-    assert util.pack(1, 24) == b"\x01\x00\x00"
-    assert util.unpack(b"\x01\x00\x00", 24) == 1
 
-    assert util.pack(213928798) == b"^K\xc0\x0c"
-    assert util.unpack(b"^K\xc0\x0c") == 213928798
+@pytest.mark.parametrize(
+    ("func", "message"),
+    [
+        (
+            lambda: util.normalize_endianness("x"),
+            "Invalid endianness: 'x', expected one of <, >, !, @, =, network, little, big",
+        ),
+        (lambda: util.pack(1, 8, "x"), "Invalid endianness: 'x' (should be little, big, network, <, >, !, @ or =)"),
+        (
+            lambda: util.unpack(b"\x01", 8, "x"),
+            "Invalid endianness: 'x' (should be little, big, network, <, >, !, @ or =)",
+        ),
+        (lambda: util.unpack(b"\x01", 16), "Invalid byte value, expected 2 bytes, got 1 bytes"),
+    ],
+)
+def test_pack_unpack_invalid(func: Callable, message: str) -> None:
+    """Test that an invalid endianness or a value of the wrong size raises an error."""
+    with pytest.raises(ValueError, match=re.escape(message)):
+        func()
 
 
 def test_swap() -> None:
@@ -155,3 +152,21 @@ def test_offsetof(align: bool, offsets: dict[str, dict[str, int]]) -> None:
 
     with pytest.raises(ValueError, match=r"^Field 'e' of structure 'dynamic' does not have a known offset$"):
         util.offsetof(cs.dynamic, "e")
+
+
+def test_offsetof_invalid(cs: cstruct) -> None:
+    """Test that the offset of a field that doesn't exist or comes after a dynamic field raises an error."""
+    cdef = """
+    struct test {
+        uint8   size;
+        char    data[size];
+        uint8   after;
+    };
+    """
+    cs.load(cdef)
+
+    with pytest.raises(ValueError, match=re.escape("Structure 'test' does not have a field named 'missing'")):
+        util.offsetof(cs.test, "missing")
+
+    with pytest.raises(ValueError, match=re.escape("Field 'after' of structure 'test' does not have a known offset")):
+        util.offsetof(cs.test, "after")

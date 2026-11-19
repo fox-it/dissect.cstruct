@@ -29,7 +29,7 @@ def read_or_write(request: pytest.FixtureRequest, benchmark: BenchmarkFixture) -
             benchmark(parse)
         else:
             obj = parse()
-            benchmark(lambda: obj.dumps())
+            benchmark(lambda: bytes(obj))
 
     return run
 

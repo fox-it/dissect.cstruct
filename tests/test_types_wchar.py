@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import re
 from typing import TYPE_CHECKING
 
 import pytest
@@ -12,33 +13,66 @@ if TYPE_CHECKING:
     from dissect.cstruct.cstruct import cstruct
 
 
-def test_wchar_read(cs: cstruct) -> None:
-    buf = b"A\x00A\x00A\x00A\x00\x00\x00"
+@pytest.mark.parametrize(
+    ("endian", "buf"),
+    [
+        ("<", b"A\x00A\x00A\x00A\x00\x00\x00"),
+        (">", b"\x00A\x00A\x00A\x00A\x00\x00"),
+    ],
+)
+def test_wchar_read(cs: cstruct, endian: str, buf: bytes) -> None:
+    cs.endian = endian
 
     assert cs.wchar("A") == "A"
     assert cs.wchar(buf) == "A"
     assert cs.wchar(io.BytesIO(buf)) == "A"
 
 
-def test_wchar_write(cs: cstruct) -> None:
-    assert cs.wchar("A").dumps() == b"A\x00"
-    assert cs.wchar(b"A\x00").dumps() == b"A\x00"
+@pytest.mark.parametrize(
+    ("endian", "buf"),
+    [
+        ("<", b"A\x00"),
+        (">", b"\x00A"),
+    ],
+)
+def test_wchar_write(cs: cstruct, endian: str, buf: bytes) -> None:
+    cs.endian = endian
+
+    assert bytes(cs.wchar("A")) == buf
+    assert bytes(cs.wchar(buf)) == buf
 
 
-def test_wchar_array(cs: cstruct) -> None:
-    buf = b"A\x00A\x00A\x00A\x00\x00\x00"
+@pytest.mark.parametrize(
+    ("endian", "buf"),
+    [
+        ("<", b"A\x00A\x00A\x00A\x00\x00\x00"),
+        (">", b"\x00A\x00A\x00A\x00A\x00\x00"),
+    ],
+)
+def test_wchar_array(cs: cstruct, endian: str, buf: bytes) -> None:
+    cs.endian = endian
 
     assert cs.wchar[4]("AAAA") == "AAAA"
     assert cs.wchar[4](buf) == "AAAA"
     assert cs.wchar[4](io.BytesIO(buf)) == "AAAA"
+    assert cs.wchar[None](buf) == "AAAA"
     assert cs.wchar[None](io.BytesIO(buf)) == "AAAA"
 
 
-def test_wchar_array_write(cs: cstruct) -> None:
-    buf = b"A\x00A\x00A\x00A\x00\x00\x00"
+@pytest.mark.parametrize(
+    ("endian", "buf"),
+    [
+        ("<", b"A\x00A\x00A\x00A\x00\x00\x00"),
+        (">", b"\x00A\x00A\x00A\x00A\x00\x00"),
+    ],
+)
+def test_wchar_array_write(cs: cstruct, endian: str, buf: bytes) -> None:
+    cs.endian = endian
 
-    assert cs.wchar[4](buf).dumps() == b"A\x00A\x00A\x00A\x00"
-    assert cs.wchar[None](buf).dumps() == b"A\x00A\x00A\x00A\x00\x00\x00"
+    assert bytes(cs.wchar[4](buf)) == buf[:-2]
+    assert bytes(cs.wchar[4]("AAAA")) == buf[:-2]
+    assert bytes(cs.wchar[None](buf)) == buf
+    assert bytes(cs.wchar[None]("AAAA")) == buf
 
 
 def test_wchar_array_write_padding(cs: cstruct) -> None:
@@ -58,54 +92,24 @@ def test_wchar_array_write_padding(cs: cstruct) -> None:
     obj.x = 4
     obj.y = "hi"
     obj.z = "bye"
-    assert len(obj.dumps()) == len(cs.test_struct)
-    assert obj.dumps() == b"\x04\x00\x00\x00h\x00i\x00" + (b"\x00" * 12) + b"b\x00y\x00e\x00" + (b"\x00" * 26)
+    assert len(bytes(obj)) == len(cs.test_struct)
+    assert bytes(obj) == b"\x04\x00\x00\x00h\x00i\x00" + (b"\x00" * 12) + b"b\x00y\x00e\x00" + (b"\x00" * 26)
 
 
 def test_wchar_array_write_size_error(cs: cstruct) -> None:
     buf = io.BytesIO()
-    with pytest.raises(WriteError):
+    with pytest.raises(WriteError, match=re.escape("Expected static array size 4, got 7 instead.")):
         cs.wchar[4]._write(buf, "toolong", endian=cs.endian)
 
 
-def test_wchar_be_read(cs: cstruct) -> None:
-    cs.endian = ">"
-
-    assert cs.wchar(b"\x00A\x00A\x00A\x00A\x00\x00") == "A"
-
-
-def test_wchar_be_write(cs: cstruct) -> None:
-    cs.endian = ">"
-
-    assert cs.wchar("A").dumps() == b"\x00A"
-
-
-def test_wchar_be_array(cs: cstruct) -> None:
-    cs.endian = ">"
-
-    buf = b"\x00A\x00A\x00A\x00A\x00\x00"
-
-    assert cs.wchar[4](buf) == "AAAA"
-    assert cs.wchar[None](buf) == "AAAA"
-
-
-def test_wchar_be_array_write(cs: cstruct) -> None:
-    cs.endian = ">"
-
-    buf = b"\x00A\x00A\x00A\x00A\x00\x00"
-
-    assert cs.wchar[4](buf).dumps() == b"\x00A\x00A\x00A\x00A"
-    assert cs.wchar[None](buf).dumps() == buf
-
-
 def test_wchar_eof(cs: cstruct) -> None:
-    with pytest.raises(EOFError):
+    with pytest.raises(EOFError, match="Read 1 bytes, but expected 2"):
         cs.wchar(b"A")
 
-    with pytest.raises(EOFError):
+    with pytest.raises(EOFError, match="Read 0 bytes, but expected 8"):
         cs.wchar[4](b"")
 
-    with pytest.raises(EOFError):
+    with pytest.raises(EOFError, match="Read 0 bytes, but expected 2"):
         cs.wchar[None](b"A\x00A\x00A\x00A\x00")
 
     # More bytes than any stream can hold, e.g. a count from corrupt data
@@ -172,13 +176,13 @@ def test_wchar_array_surrogate_pair(cs: cstruct, compiled: bool) -> None:
     buf = b"\x3d\xd8\x00\xdex\x00\x00\x00\x01"
     obj = cs.test(buf)
     assert obj.a == "\U0001f600x\x00"
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     with pytest.raises(WriteError, match="Expected static array size 4, got 5 instead"):
-        cs.test(a="abcde", b=1).dumps()
+        bytes(cs.test(a="abcde", b=1))
 
     with pytest.raises(WriteError, match="Expected static array size 4, got 6 instead"):
-        cs.test(a="\U0001f600\U0001f600\U0001f600", b=1).dumps()
+        bytes(cs.test(a="\U0001f600\U0001f600\U0001f600", b=1))
 
 
 def test_wchar_write_too_long(cs: cstruct, compiled: bool) -> None:
@@ -202,10 +206,10 @@ def test_wchar_write_too_long(cs: cstruct, compiled: bool) -> None:
         cs.wchar.dumps("\U0001f600")
 
     with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
-        cs.test(a=1, b="xy", c=2).dumps()
+        bytes(cs.test(a=1, b="xy", c=2))
 
     with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
-        cs.test(a=1, b="\U0001f600", c=2).dumps()
+        bytes(cs.test(a=1, b="\U0001f600", c=2))
 
 
 def test_wchar_write_too_short(cs: cstruct, compiled: bool) -> None:
@@ -219,7 +223,7 @@ def test_wchar_write_too_short(cs: cstruct, compiled: bool) -> None:
     cs.load(cdef, compiled=compiled)
 
     assert cs.wchar.dumps("") == b"\x00\x00"
-    assert cs.test(a=1, b="").dumps() == b"\x01\x00\x00"
+    assert bytes(cs.test(a=1, b="")) == b"\x01\x00\x00"
 
 
 @pytest.mark.parametrize(
@@ -268,26 +272,26 @@ def test_wchar_lone_surrogate(cs: cstruct, compiled: bool, endian: str, buf: byt
     data = b"\x02" + buf
     obj = cs.dynamic_array(data)
     assert obj.text == expected
-    assert obj.dumps() == data
+    assert bytes(obj) == data
 
     data = buf + b"\x01"
     obj = cs.static_array(data)
     assert obj.text == expected
     assert obj.after == 1
-    assert obj.dumps() == data
+    assert bytes(obj) == data
 
     data = buf + b"\x00\x00\x01"
     obj = cs.null_terminated(data)
     assert obj.text == expected
     assert obj.after == 1
-    assert obj.dumps() == data
+    assert bytes(obj) == data
 
     for stream_type in (io.BytesIO, NonSeekableStream):
         assert cs.wchar[None](stream_type(data)) == expected
 
     obj = cs.until_eof(buf)
     assert obj.text == expected
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_wchar_lone_surrogate_single(cs: cstruct, compiled: bool) -> None:
@@ -309,7 +313,7 @@ def test_wchar_lone_surrogate_single(cs: cstruct, compiled: bool) -> None:
     obj = cs.test(buf)
     assert obj.a == "\ud83d"
     assert obj.b == "\ude00"
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     # Two lone surrogates take up the same space as the surrogate pair they make up
     with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):

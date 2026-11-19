@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import struct
+import sys
 import warnings
 from io import SEEK_CUR, BytesIO
 from types import MethodType
@@ -334,10 +335,20 @@ class _overload:
 
 
 def _instance_dumps(self: BaseType, *, endian: AllowedEndianness | None = None) -> bytes:
+    warnings.warn(
+        "The 'dumps' method on instances is deprecated, use 'bytes(obj)' or 'cls.dumps(obj)' instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return MetaType.dumps(self.__class__, self, endian=endian)
 
 
 def _instance_write(self: BaseType, stream: BinaryIO, *, endian: AllowedEndianness | None = None) -> int:
+    warnings.warn(
+        "The 'write' method on instances is deprecated, use 'cls.write(stream, obj)' instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return MetaType.write(self.__class__, stream, self, endian=endian)
 
 
@@ -353,6 +364,15 @@ class BaseType(metaclass=MetaType):
             raise TypeError("Dynamic size")
 
         return self.__class__.__size__
+
+    def __bytes__(self) -> bytes:
+        return MetaType.dumps(self.__class__, self)
+
+    if sys.version_info >= (3, 12):
+        # The buffer protocol of Python classes, so that e.g. ``fh.write(obj)`` works, needs Python 3.12 or newer.
+        # It gives the same bytes as ``bytes(obj)``.
+        def __buffer__(self, flags: int) -> memoryview:
+            return memoryview(MetaType.dumps(self.__class__, self))
 
 
 T = TypeVar("T", bound=BaseType)

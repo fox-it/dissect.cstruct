@@ -43,6 +43,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Errors that `load` raises include the line of the definition.
   - `ArraySizeError` is removed. A value that is longer than its static array raises a `WriteError`.
   - `write()` raises a `TypeError` for an object that can't be written to, like `read()` does.
+- `bytes(obj)` works on instances of all types.
+- On Python 3.12 and newer, instances of all types support the buffer protocol, so that e.g. `fh.write(obj)` works.
+
+### Deprecated
+
+- `obj.dumps()` and `obj.write(fh)` on instances. Use `bytes(obj)` or `cls.dumps(obj)`, and `cls.write(fh, obj)` instead.
 
 ### Fixed
 

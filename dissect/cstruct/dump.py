@@ -465,7 +465,7 @@ def dumpstruct(
         raise ValueError(f"Invalid output argument: {output!r} (should be 'print', 'string', 'dict' or 'json').")
 
     if isinstance(obj, Structure):
-        data = obj.dumps() if data is None else data
+        data = bytes(obj) if data is None else data
     elif isinstance(obj, type) and issubclass(obj, Structure) and data is not None:
         obj = obj(data)
     else:

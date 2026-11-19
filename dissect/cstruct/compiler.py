@@ -37,7 +37,7 @@ from dissect.cstruct.types import (
     WcharArray,
 )
 from dissect.cstruct.types.enum import EnumMetaType
-from dissect.cstruct.types.structure import StructureMetaType, UnionMetaType, UnionProxy
+from dissect.cstruct.types.structure import StructureMetaType, UnionMetaType, UnionProxy, _uses_generated_init
 from dissect.cstruct.util import ENDIANNESS_TO_BYTEORDER_MAP, _struct
 
 if TYPE_CHECKING:
@@ -1176,11 +1176,6 @@ def _can_inline_fields(fields: list[Field], size: int, is_union: bool, in_union:
             return False
 
     return True
-
-
-def _uses_generated_init(type_: type[Structure]) -> bool:
-    """Return whether a structure type uses a generated ``__init__``, so we can bypass it by setting attributes."""
-    return "__init__" in type_.__dict__ and type_.__new__ is object.__new__
 
 
 def _can_pack(type_: type[BaseType]) -> bool:

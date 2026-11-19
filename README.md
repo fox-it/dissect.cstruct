@@ -90,14 +90,14 @@ assert c_parser.Example.A == 0
 assert c_parser.Example.C == 6
 assert c_parser.Example(5) == c_parser.Example.B
 
-assert result.dumps() == data
+assert bytes(result) == data
 
 # You can also instantiate structures from Python by using kwargs
 # Note that array sizes are not enforced
 instance = c_parser.some_struct(
     field_1=5, field_2="lorem", field_3="ipsum", field_4=[c_parser.Example.B, c_parser.Example.A]
 )
-assert instance.dumps() == b"\x05loremipsum\x05\x00\x00\x00"
+assert bytes(instance) == b"\x05loremipsum\x05\x00\x00\x00"
 
 ```
 
@@ -132,7 +132,7 @@ header = Header(data)
 assert header.data == b"KUSJESVANSRT"
 assert header.flags == 5
 assert header.trailer == b"<3"
-assert header.dumps() == data
+assert bytes(header) == data
 
 cs = cstruct(endian=">")
 
@@ -220,7 +220,7 @@ assert a.c.a.a == 0x64616564
 assert a.c.a.b == 0x66656562
 assert a.c.b.b == b"deadbeef"
 
-assert a.dumps() == b"ohaideadbeef"
+assert bytes(a) == b"ohaideadbeef"
 
 b = c.test_anonymous(b"ohai\x39\x05\x00\x00\x28\x23\x00\x00deadbeef")
 assert b.magic == b"ohai"
@@ -255,7 +255,7 @@ assert a.b == 0b1
 assert a.c == 0xFF
 assert a.d == 0b11
 assert a.e == 0b111
-assert a.dumps() == d
+assert bytes(a) == d
 ```
 
 ### Enums and Flags
