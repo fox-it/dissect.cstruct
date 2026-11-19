@@ -62,11 +62,11 @@ def test_instances(kwargs: dict, data: bytes) -> None:
     obj = Instances()
     assert obj.magic == [0, 0, 0, 0]
     assert obj.version == 0
-    assert obj.dumps() == b"\x00" * 8
+    assert bytes(obj) == b"\x00" * 8
     assert repr(obj) == "<Instances magic=[0, 0, 0, 0] version=0x0>"
 
     obj = Instances(magic=list(b"ABCD"), version=2)
-    assert obj.dumps() == data
+    assert bytes(obj) == data
     assert Instances(data) == obj
     assert bytes(Instances(data)) == data
 
@@ -419,7 +419,7 @@ def test_dynamic_array(cs: cstruct) -> None:
     assert obj.string == [0x63, 0x64]
     assert obj.text == b"hi"
     assert obj.rest == b"KUSJESVANSRT <3"
-    assert obj.dumps() == data
+    assert bytes(obj) == data
 
 
 def test_float_types(cs: cstruct) -> None:

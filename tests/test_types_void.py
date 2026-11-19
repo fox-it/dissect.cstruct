@@ -21,7 +21,7 @@ def test_void_read(cs: cstruct) -> None:
 
 
 def test_void_write(cs: cstruct) -> None:
-    assert cs.void().dumps() == b""
+    assert bytes(cs.void()) == b""
 
 
 def test_void_array_read(cs: cstruct) -> None:
@@ -34,8 +34,8 @@ def test_void_array_read(cs: cstruct) -> None:
 
 
 def test_void_array_write(cs: cstruct) -> None:
-    assert cs.void[4](b"AAAA").dumps() == b""
-    assert cs.void[None](b"AAAA").dumps() == b""
+    assert bytes(cs.void[4](b"AAAA")) == b""
+    assert bytes(cs.void[None](b"AAAA")) == b""
 
 
 def test_void_default(cs: cstruct) -> None:
@@ -76,11 +76,11 @@ def test_void_struct(cs: cstruct, compiled: bool) -> None:
 
     assert stream.tell() == 0
 
-    assert obj.dumps() == b""
+    assert bytes(obj) == b""
 
     # Void fields between other fields don't write anything either
     buf = b"\x01\x02"
-    assert cs.test_fields(buf).dumps() == buf
+    assert bytes(cs.test_fields(buf)) == buf
 
     # The value of a void field doesn't matter
-    assert cs.test_fields(a=1, b=5, c=2, d=5).dumps() == buf
+    assert bytes(cs.test_fields(a=1, b=5, c=2, d=5)) == buf

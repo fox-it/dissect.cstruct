@@ -42,8 +42,9 @@ def test_flag_read(TestFlag: type[Flag]) -> None:
 
 
 def test_flag_write(TestFlag: type[Flag]) -> None:
-    assert TestFlag.A.dumps() == b"\x01"
-    assert TestFlag(b"\x02").dumps() == b"\x02"
+    assert bytes(TestFlag.A) == b"\x01"
+    assert bytes(TestFlag(b"\x02")) == b"\x02"
+    assert TestFlag.dumps(2) == b"\x02"
 
 
 def test_flag_array_read(TestFlag: type[Flag]) -> None:
@@ -52,8 +53,8 @@ def test_flag_array_read(TestFlag: type[Flag]) -> None:
 
 
 def test_flag_array_write(TestFlag: type[Flag]) -> None:
-    assert TestFlag[2]([TestFlag.B, TestFlag.A]).dumps() == b"\x02\x01"
-    assert TestFlag[None]([TestFlag.B, TestFlag.A]).dumps() == b"\x02\x01\x00"
+    assert bytes(TestFlag[2]([TestFlag.B, TestFlag.A])) == b"\x02\x01"
+    assert bytes(TestFlag[None]([TestFlag.B, TestFlag.A])) == b"\x02\x01\x00"
 
 
 def test_flag_operator(TestFlag: type[Flag]) -> None:
@@ -64,8 +65,8 @@ def test_flag_operator(TestFlag: type[Flag]) -> None:
     assert TestFlag(b"\x03") == TestFlag.A | TestFlag.B
     assert TestFlag[2](b"\x02\x03") == [TestFlag.B, (TestFlag.A | TestFlag.B)]
 
-    assert (TestFlag.A | TestFlag.B).dumps() == b"\x03"
-    assert TestFlag[2]([TestFlag.B, (TestFlag.A | TestFlag.B)]).dumps() == b"\x02\x03"
+    assert bytes(TestFlag.A | TestFlag.B) == b"\x03"
+    assert bytes(TestFlag[2]([TestFlag.B, (TestFlag.A | TestFlag.B)])) == b"\x02\x03"
 
 
 def test_flag_str_repr(TestFlag: type[Flag]) -> None:
@@ -219,7 +220,7 @@ def test_flag_struct_read(cs: cstruct, compiled: bool) -> None:
     else:
         assert repr(obj.c16) == "<Test16.B|A: 3>"
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_flag_anonymous(cs: cstruct, compiled: bool) -> None:

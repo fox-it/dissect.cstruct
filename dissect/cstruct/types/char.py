@@ -14,6 +14,13 @@ if TYPE_CHECKING:
 class CharArray(bytes, BaseArray):
     """Character array type for reading and writing byte strings."""
 
+    def __bytes__(self) -> bytes:
+        # TODO: determine if we want to return the raw bytes content or the null-terminated content?
+        # This is awkward because CharArray is a subclass of bytes, so normally you'd expect `bytes(value) == value`.
+        # But if the array is null-terminated (`cs.char[None]`), and we'd copy `dumps` behaviour, then
+        # `bytes(value) != value` (it'd be `value + b"\x00"`).
+        return bytes(memoryview(self))
+
     @classmethod
     def __default__(cls) -> Self:
         return type.__call__(cls, b"\x00" * (0 if cls.__dynamic__ or cls.__null_terminated__ else cls.__num_entries__))
@@ -45,6 +52,9 @@ class Char(bytes, BaseType):
     """Character type for reading and writing bytes."""
 
     __ArrayType__ = CharArray
+
+    def __bytes__(self) -> bytes:
+        return bytes(memoryview(self))
 
     @classmethod
     def __default__(cls) -> Self:
