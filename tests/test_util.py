@@ -6,12 +6,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from dissect.cstruct import cstruct, util
+from dissect.cstruct import util
+from dissect.cstruct.cstruct import cstruct
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-    from dissect.cstruct.cstruct import cstruct
 
 
 @pytest.mark.parametrize(
