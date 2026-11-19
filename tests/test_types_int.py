@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from dissect.cstruct.exception import WriteError
 from tests.util import verify_compiled
 
 if TYPE_CHECKING:
@@ -241,6 +242,10 @@ def test_int_eof(cs: cstruct) -> None:
     with pytest.raises(EOFError, match="Read 0 bytes, but expected 3"):
         cs.int24[None](b"\x01\x00\x00")
 
+    # More bytes than any stream can hold, e.g. a count from corrupt data
+    with pytest.raises(EOFError, match=r"^Read 0 bytes, but expected 13835058055282163712$"):
+        cs.int24[2**62](b"")
+
 
 def test_int_range(cs: cstruct) -> None:
     int8 = cs._make_int_type("int8", 1, True)
@@ -259,25 +264,25 @@ def test_int_range(cs: cstruct) -> None:
     int24(8388607).dumps()
     int128(-(2**127) + 1).dumps()
     int128(2**127 - 1).dumps()
-    with pytest.raises(OverflowError):
+    with pytest.raises(WriteError, match=r"^Cannot write int8: "):
         int8(-129).dumps()
-    with pytest.raises(OverflowError):
+    with pytest.raises(WriteError, match=r"^Cannot write int8: "):
         int8(128).dumps()
-    with pytest.raises(OverflowError):
+    with pytest.raises(WriteError, match=r"^Cannot write uint9: "):
         uint8(-1).dumps()
-    with pytest.raises(OverflowError):
+    with pytest.raises(WriteError, match=r"^Cannot write uint9: "):
         uint8(256).dumps()
-    with pytest.raises(OverflowError):
+    with pytest.raises(WriteError, match=r"^Cannot write int16: "):
         int16(-32769).dumps()
-    with pytest.raises(OverflowError):
+    with pytest.raises(WriteError, match=r"^Cannot write int16: "):
         int16(32768).dumps()
-    with pytest.raises(OverflowError):
+    with pytest.raises(WriteError, match=r"^Cannot write int24: "):
         int24(-8388609).dumps()
-    with pytest.raises(OverflowError):
+    with pytest.raises(WriteError, match=r"^Cannot write int24: "):
         int24(8388608).dumps()
-    with pytest.raises(OverflowError):
+    with pytest.raises(WriteError, match=r"^Cannot write int128: "):
         int128(-(2**127) - 1).dumps()
-    with pytest.raises(OverflowError):
+    with pytest.raises(WriteError, match=r"^Cannot write int128: "):
         int128(2**127).dumps()
 
 
@@ -436,12 +441,12 @@ def test_int_struct_write_range(cs: cstruct, compiled: bool) -> None:
 
     assert cs.test(a=1, b=-2, c=[3, 4]).dumps() == b"\x01\x00\x00\xfe\xff\xff\x03\x00\x00\x04\x00\x00"
 
-    with pytest.raises(OverflowError):
+    with pytest.raises(WriteError, match=r"^Cannot write test: "):
         cs.test(a=1, b=2**23, c=[3, 4]).dumps()
 
     # A negative value only fits a signed type
-    with pytest.raises(OverflowError):
+    with pytest.raises(WriteError, match=r"^Cannot write test: "):
         cs.test(a=-1, b=2, c=[3, 4]).dumps()
 
-    with pytest.raises(OverflowError):
+    with pytest.raises(WriteError, match=r"^Cannot write test: "):
         cs.test(a=1, b=2, c=[3, 2**24]).dumps()

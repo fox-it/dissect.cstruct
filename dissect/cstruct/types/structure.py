@@ -16,6 +16,7 @@ from types import FunctionType
 from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.bitbuffer import BitBuffer
+from dissect.cstruct.exception import DefinitionError
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.lexer import IDENTIFIER_TYPES
 from dissect.cstruct.types.base import (
@@ -26,7 +27,10 @@ from dissect.cstruct.types.base import (
     MetaType,
     _is_buffer_type,
 )
+from dissect.cstruct.types.char import Char
 from dissect.cstruct.types.enum import EnumMetaType
+from dissect.cstruct.types.int import Int
+from dissect.cstruct.types.packed import Packed
 from dissect.cstruct.types.pointer import Pointer
 from dissect.cstruct.types.void import Void
 
@@ -106,7 +110,7 @@ class StructureMetaType(MetaType):
         static_sizes = {}
         for field in fields:
             if field._name in lookup and field._name != "_":
-                raise ValueError(f"Duplicate field name: {field._name}")
+                raise DefinitionError(f"Duplicate field name: {field._name}")
 
             if not field.type.__dynamic__:
                 static_sizes[field._name] = field.type.__size__
@@ -189,6 +193,11 @@ class StructureMetaType(MetaType):
                 if isinstance(field_type, EnumMetaType):
                     field_type = field_type.__type__
 
+                if not issubclass(field_type, (Int, Char)) and not (
+                    issubclass(field_type, Packed) and issubclass(field_type, int)
+                ):
+                    raise DefinitionError(f"Bit fields of type {field.type.__name__} are unsupported")
+
                 # Bit fields have special logic
                 if (
                     # Exhausted a bit field
@@ -213,7 +222,7 @@ class StructureMetaType(MetaType):
                 bits_remaining -= field.bits
 
                 if bits_remaining < 0:
-                    raise ValueError("Straddled bit fields are unsupported")
+                    raise DefinitionError("Straddled bit fields are unsupported")
             else:
                 # Reset bits stuff
                 bits_type = None

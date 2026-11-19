@@ -662,6 +662,21 @@ def test_preprocessor_define_from_enum_in_struct(cs: cstruct) -> None:
             """,
         ),
         (
+            # The size refers to a field, so it can't be evaluated until the structure is read
+            """
+            struct test {
+                uint8 n;
+                char  a[n +];
+            };
+            """,
+            """\
+            line 4: Invalid expression: not enough operands
+              2: struct test {
+              3:     uint8 n;
+              4:     char  a[n +];
+            """,
+        ),
+        (
             """
             enum test : uint8 {
                 A = 1,
@@ -691,15 +706,106 @@ def test_preprocessor_define_from_enum_in_struct(cs: cstruct) -> None:
               4:     B = ,
             """,
         ),
+        (
+            """
+            struct dynamic {
+                uint8 n;
+                char  a[n];
+            };
+            struct test {
+                char  b[sizeof(dynamic)];
+            };
+            """,
+            """\
+            line 7: Type 'dynamic' has a dynamic size
+              5: };
+              6: struct test {
+              7:     char  b[sizeof(dynamic)];
+            """,
+        ),
+        (
+            """
+            struct inner {
+                uint8 a;
+            };
+            enum test : uint8 {
+                A = offsetof(inner, b)
+            };
+            """,
+            """\
+            line 6: Structure 'inner' does not have a field named 'b'
+              4: };
+              5: enum test : uint8 {
+              6:     A = offsetof(inner, b)
+            """,
+        ),
+        (
+            """
+            struct dynamic {
+                uint8 n;
+                char  a[n];
+            };
+            #define SIZE sizeof(dynamic)
+            """,
+            """\
+            line 6: Type 'dynamic' has a dynamic size
+              4:     char  a[n];
+              5: };
+              6: #define SIZE sizeof(dynamic)
+            """,
+        ),
+        (
+            """
+            struct inner {
+                uint8 a;
+            };
+            #define OFFSET offsetof(inner, b)
+            """,
+            """\
+            line 5: Structure 'inner' does not have a field named 'b'
+              3:     uint8 a;
+              4: };
+              5: #define OFFSET offsetof(inner, b)
+            """,
+        ),
     ],
 )
 def test_expression_invalid(cs: cstruct, cdef: str, message: str) -> None:
-    """Test that an array size or enum value that is missing or can't be evaluated is an error at its line."""
+    """Test that a constant, array size or enum value that is missing or can't be evaluated is an error at its line."""
     cs.load("#define N LENGTH")
 
     with pytest.raises(ParserError) as exc_info:
         cs.load(textwrap.dedent(cdef))
     assert str(exc_info.value) == textwrap.dedent(message.rstrip())
+
+
+@pytest.mark.parametrize(
+    ("cdef", "line"),
+    [
+        ("#define A 1\n#define B (A / 0)", 2),
+        ("struct test {\n    char a[1 << -1];\n};", 2),
+        ("enum test : uint8 {\n    A = 1,\n    B = A % 0\n};", 3),
+    ],
+)
+def test_expression_arithmetic_error(cs: cstruct, cdef: str, line: int) -> None:
+    """Test that a constant expression that fails to calculate, e.g. a division by zero, is an error at its line."""
+    # The rest of the message is the error of Python, which differs per version
+    with pytest.raises(ParserError, match=f"^line {line}: "):
+        cs.load(cdef)
+
+
+@pytest.mark.parametrize(
+    ("cdef", "line"),
+    [
+        ("#define A 1\n#define B sizeof(unknown)\n#define C 1", 2),
+        ("struct test {\n    char a[offsetof(unknown, b)];\n};", 2),
+        ("enum test : uint8 {\n    A = 1,\n    B = sizeof(unknown)\n};", 3),
+    ],
+)
+def test_expression_unknown_type(cs: cstruct, cdef: str, line: int) -> None:
+    """Test that a constant expression with an unknown type raises a ``ResolveError`` at its line."""
+    with pytest.raises(ResolveError, match=f"(?m)^line {line}: Unknown type unknown$"):
+        cs.load(cdef)
 
 
 def test_error_context(cs: cstruct) -> None:

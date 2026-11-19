@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from dissect.cstruct.exception import ExpressionParserError, UnknownIdentifierError
+from dissect.cstruct.exception import DefinitionError, ExpressionParserError, UnknownIdentifierError
 from dissect.cstruct.lexer import IDENTIFIER_TYPES, Lexer, TokenCursor, TokenType, join_tokens
 from dissect.cstruct.util import offsetof, sizeof
 
@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
     from dissect.cstruct import cstruct
     from dissect.cstruct.lexer import Token
+    from dissect.cstruct.types import BaseType
 
 _MISSING = object()
 
@@ -73,12 +74,28 @@ PRECEDENCE_LEVELS = {
 }
 
 
-def _sizeof(cs: cstruct, name: str) -> int:
-    return sizeof(cs.resolve(name))
+def _resolve_type(cs: cstruct, name: str, pointers: int, dimensions: list[int]) -> type[BaseType]:
+    """Resolve the type of ``sizeof`` or ``offsetof`` like the type of a field, e.g. ``uint8 *[4]``."""
+    type_ = cs.resolve(name)
+    for _ in range(pointers):
+        type_ = cs._make_pointer(type_)
+    for count in reversed(dimensions):
+        type_ = cs._make_array(type_, max(0, count))
+    return type_
 
 
-def _offsetof(cs: cstruct, name: str, field: str) -> int:
-    return offsetof(cs.resolve(name), field)
+def _sizeof(type_: type[BaseType]) -> int:
+    try:
+        return sizeof(type_)
+    except TypeError:
+        raise DefinitionError(f"Type '{type_.__name__}' has a dynamic size") from None
+
+
+def _offsetof(type_: type[BaseType], field: str) -> int:
+    try:
+        return offsetof(type_, field)
+    except (TypeError, ValueError) as e:
+        raise DefinitionError(str(e)) from None
 
 
 FUNCTIONS: dict[TokenType, Callable[..., int]] = {
@@ -112,7 +129,7 @@ def _identifier(cs: cstruct, context: dict[str, Any], ident: str) -> int:
 
 
 # Globals used by the source code of an expression
-SOURCE_GLOBALS = {func.__name__: func for func in (_identifier, *FUNCTIONS.values())}
+SOURCE_GLOBALS = {func.__name__: func for func in (_identifier, _resolve_type, *FUNCTIONS.values())}
 
 
 class _Evaluator:
@@ -134,8 +151,14 @@ class _Evaluator:
     def binary(self, operator: TokenType, left: int, right: int) -> int:
         return BINARY_OPERATORS[operator](left, right)
 
-    def function(self, operator: TokenType, args: list[str]) -> int:
-        return FUNCTIONS[operator](self.cs, *args)
+    def function(self, operator: TokenType, args: tuple[Any, ...]) -> int:
+        (name, pointers, dimensions), *fields = args
+        if pointers or dimensions:
+            counts = [dimension._run(self) for dimension in dimensions]
+            type_ = _resolve_type(self.cs, name, pointers, counts)
+        else:
+            type_ = self.cs.resolve(name)
+        return FUNCTIONS[operator](type_, *fields)
 
 
 class _SourceBuilder:
@@ -159,8 +182,14 @@ class _SourceBuilder:
     def binary(self, operator: TokenType, left: str, right: str) -> str:
         return f"({left} {OPERATOR_SOURCE[operator]} {right})"
 
-    def function(self, operator: TokenType, args: list[str]) -> str:
-        return f"{FUNCTIONS[operator].__name__}(cs, {', '.join(map(repr, args))})"
+    def function(self, operator: TokenType, args: tuple[Any, ...]) -> str:
+        (name, pointers, dimensions), *fields = args
+        if pointers or dimensions:
+            counts = ", ".join(dimension._run(self) for dimension in dimensions)
+            type_ = f"_resolve_type(cs, {name!r}, {pointers}, [{counts}])"
+        else:
+            type_ = f"cs.resolve({name!r})"
+        return f"{FUNCTIONS[operator].__name__}({', '.join([type_, *map(repr, fields)])})"
 
 
 def precedence(o1: TokenType, o2: TokenType) -> bool:
@@ -171,62 +200,36 @@ def precedence(o1: TokenType, o2: TokenType) -> bool:
 
 
 class Expression(TokenCursor):
-    """Expression parser for calculations in definitions."""
+    """Expression parser for calculations in definitions.
+
+    The expression is parsed when it's created, so a syntax error raises right away.
+    Calculating with invalid operands (e.g. division by zero) raises an exception when evaluating.
+
+    Raises:
+        ExpressionParserError: If the expression is invalid.
+    """
 
     def __init__(self, expression: str):
         self.expression = expression
 
         tokens = Lexer(expression).tokenize()
         super().__init__(tokens)
-        self._stack: list[TokenType] = []
-        self._queue: list[int | str] = []
+        self._postfix = self._parse()
 
     def __repr__(self) -> str:
         return self.expression
 
-    def _reset(self) -> None:
-        """Reset the expression state for a new input."""
-        self._reset_cursor()
-        self._stack = []
-        self._queue = []
-
     def _error(self, msg: str, *, token: Token | None = None) -> ExpressionParserError:
         return ExpressionParserError(msg)
 
-    def _evaluate_expression(self, backend: _Evaluator | _SourceBuilder) -> None:
-        operator = self._stack.pop(-1)
-        result = 0
-
-        if operator in UNARY_OPERATORS:
-            if len(self._queue) < 1:
-                raise ExpressionParserError("Invalid expression: not enough operands")
-
-            result = backend.unary(operator, self._queue.pop(-1))
-        elif operator in BINARY_OPERATORS:
-            if len(self._queue) < 2:
-                raise ExpressionParserError("Invalid expression: not enough operands")
-
-            right = self._queue.pop(-1)
-            left = self._queue.pop(-1)
-            result = backend.binary(operator, left, right)
-        elif operator in FUNCTION_TOKENS:
-            num_args = FUNCTION_TOKENS[operator]
-            if len(self._queue) < num_args:
-                raise ExpressionParserError("Invalid expression: not enough operands")
-
-            args = [self._queue.pop(-1) for _ in range(num_args)][::-1]
-            result = backend.function(operator, args)
-
-        self._queue.append(result)
-
     def evaluate(self, cs: cstruct, context: dict[str, int] | None = None) -> int:
-        """Evaluates an expression using a Shunting-Yard implementation.
+        """Evaluates an expression.
 
         Args:
             cs: The cstruct instance to evaluate against.
             context: The context to evaluate against.
         """
-        return self._evaluate(_Evaluator(cs, context or {}))
+        return self._run(_Evaluator(cs, context or {}))
 
     def source(self, variables: dict[str, str] | None = None, context: str = "context") -> str:
         """Return the Python source code of this expression.
@@ -235,54 +238,111 @@ class Expression(TokenCursor):
             variables: The source code map for accessing local variables.
             context: The symbol name of the context.
         """
-        return self._evaluate(_SourceBuilder(variables or {}, context))
+        return self._run(_SourceBuilder(variables or {}, context))
 
-    def _evaluate(self, backend: _Evaluator | _SourceBuilder) -> int | str:
-        self._reset()
+    def _run(self, backend: _Evaluator | _SourceBuilder) -> int | str:
+        """Calculate the expression from its postfix notation."""
+        stack = []
+
+        for type_, value in self._postfix:
+            if type_ in BINARY_OPERATORS:
+                right = stack.pop()
+                stack[-1] = backend.binary(type_, stack[-1], right)
+            elif type_ in UNARY_OPERATORS:
+                stack[-1] = backend.unary(type_, stack[-1])
+            elif type_ in FUNCTION_TOKENS:
+                stack.append(backend.function(type_, value))
+            elif type_ == TokenType.NUMBER:
+                stack.append(backend.number(value))
+            else:
+                stack.append(backend.identifier(value))
+
+        return stack[0]
+
+    def _pop_operator(self, stack: list[TokenType], output: list[tuple[TokenType, Any]], operands: int) -> int:
+        """Move an operator from the stack to the output, and return the amount of values the output calculates."""
+        operator = stack.pop(-1)
+        needed = 2 if operator in BINARY_OPERATORS else 1
+        if operands < needed:
+            raise ExpressionParserError("Invalid expression: not enough operands")
+
+        output.append((operator, None))
+        return operands - needed + 1
+
+    def _parse_type_name(self) -> tuple[str, int, list[Expression]]:
+        """Parse a type name like the type of a field, e.g. ``struct header *[4]``."""
+        # Types share a single namespace, so the kind of a type is optional
+        self._match(TokenType.STRUCT, TokenType.UNION, TokenType.ENUM, TokenType.FLAG)
+
+        if not self._at(TokenType.IDENTIFIER):
+            raise self._error(f"expected a type name, got {self._describe(self._current())}")
+
+        # E.g. unsigned long long
+        parts = []
+        while token := self._match(TokenType.IDENTIFIER):
+            parts.append(token.value)
+
+        pointers = 0
+        while self._match(TokenType.STAR):
+            pointers += 1
+
+        dimensions = []
+        while self._match(TokenType.LBRACKET):
+            if not (tokens := self._collect_until(TokenType.RBRACKET)):
+                raise self._error("expected an array size")
+            self._expect(TokenType.RBRACKET)
+            dimensions.append(Expression(join_tokens(tokens)))
+
+        return " ".join(parts), pointers, dimensions
+
+    def _parse(self) -> list[tuple[TokenType, Any]]:
+        """Convert the expression to postfix notation using a Shunting-Yard implementation."""
+        output: list[tuple[TokenType, Any]] = []
+        stack: list[TokenType] = []
+        # The amount of values the output calculates
+        operands = 0
 
         while (token := self._current()).type != TokenType.EOF:
             if token.type == TokenType.NUMBER:
-                self._queue.append(backend.number(int(self._take().value, 0)))
+                output.append((TokenType.NUMBER, int(self._take().value, 0)))
+                operands += 1
 
             elif token.type in OPERATORS:
-                while (
-                    len(self._stack) != 0
-                    and self._stack[-1] != TokenType.LPAREN
-                    and precedence(self._stack[-1], token.type)
-                ):
-                    self._evaluate_expression(backend)
+                while len(stack) != 0 and stack[-1] != TokenType.LPAREN and precedence(stack[-1], token.type):
+                    operands = self._pop_operator(stack, output, operands)
 
-                self._stack.append(self._take().type)
+                stack.append(self._take().type)
 
             elif token.type in FUNCTION_TOKENS:
                 func = self._take().type
-                self._stack.append(func)
 
                 self._expect(TokenType.LPAREN)
 
-                num_args = FUNCTION_TOKENS[func]
-                while num_args > 1:
-                    self._queue.append(join_tokens(self._collect_until(TokenType.COMMA)))
+                # The type, followed by the names of fields
+                args = [self._parse_type_name()]
+                for _ in range(FUNCTION_TOKENS[func] - 1):
                     self._expect(TokenType.COMMA)
-                    num_args -= 1
+                    if not self._at(*IDENTIFIER_TYPES):
+                        raise self._error(f"expected a field name, got {self._describe(self._current())}")
+                    args.append(self._take().value)
 
-                self._queue.append(join_tokens(self._collect_until(TokenType.RPAREN)))
                 self._expect(TokenType.RPAREN)
 
-                # Evaluate immediately
-                self._evaluate_expression(backend)
+                output.append((func, tuple(args)))
+                operands += 1
 
             elif token.type in IDENTIFIER_TYPES:
-                self._queue.append(backend.identifier(self._take().value))
+                output.append((token.type, self._take().value))
+                operands += 1
 
             elif token.type == TokenType.LPAREN:
                 if self._previous().type == TokenType.NUMBER:
                     raise self._error(
-                        f"Parser expected sizeof or an arethmethic operator instead got: '{self._previous().value}'",
+                        f"Parser expected sizeof or an arithmethic operator instead got: '{self._previous().value}'",
                         token=self._previous(),
                     )
 
-                self._stack.append(self._take().type)
+                stack.append(self._take().type)
 
             elif token.type == TokenType.RPAREN:
                 if self._previous().type == TokenType.LPAREN:
@@ -291,26 +351,29 @@ class Expression(TokenCursor):
                         token=self._previous(),
                     )
 
-                if len(self._stack) == 0:
+                if len(stack) == 0:
                     raise self._error("Mismatched parentheses")
 
-                while self._stack[-1] != TokenType.LPAREN:
-                    self._evaluate_expression(backend)
-                    if len(self._stack) == 0:
+                while stack[-1] != TokenType.LPAREN:
+                    operands = self._pop_operator(stack, output, operands)
+                    if len(stack) == 0:
                         raise self._error("Mismatched parentheses")
 
-                self._stack.pop(-1)  # Pop the '('
+                stack.pop(-1)  # Pop the '('
                 self._take()
 
             else:
                 raise self._error(f"Unmatched token: '{token.value}'", token=token)
 
-        while len(self._stack) != 0:
-            if TokenType.LPAREN in self._stack:
+        while len(stack) != 0:
+            if TokenType.LPAREN in stack:
                 raise self._error("Mismatched parentheses")
-            self._evaluate_expression(backend)
+            operands = self._pop_operator(stack, output, operands)
 
-        if len(self._queue) != 1:
+        if operands == 0:
+            raise self._error("Invalid expression: not enough operands")
+
+        if operands > 1:
             raise self._error("Invalid expression: too many operands")
 
-        return self._queue[0]
+        return output

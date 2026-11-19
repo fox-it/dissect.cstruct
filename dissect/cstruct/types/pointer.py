@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import cache
 from typing import TYPE_CHECKING, Any, BinaryIO, Generic, TypeVar
 
-from dissect.cstruct.exception import NullPointerDereference
+from dissect.cstruct.exception import EOFError, NullPointerDereference
 from dissect.cstruct.types.base import BaseType, normalize_endianness
 from dissect.cstruct.types.char import Char
 from dissect.cstruct.types.void import Void
@@ -109,7 +109,11 @@ class Pointer(int, BaseType, Generic[T]):
             return None
 
         position = self.__stream.tell()
-        self.__stream.seek(self)
+
+        try:
+            self.__stream.seek(self)
+        except OverflowError:
+            raise EOFError(f"Offset {int(self):#x} is beyond the end of the stream") from None
 
         if issubclass(self.__type__, Char):
             # This makes the assumption that a char pointer is a null-terminated string

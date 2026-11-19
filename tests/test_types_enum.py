@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from dissect.cstruct.exception import DefinitionError
 from tests.util import verify_compiled
 
 if TYPE_CHECKING:
@@ -91,7 +92,7 @@ def test_enum_alias(cs: cstruct) -> None:
 
 
 def test_enum_bad_type(cs: cstruct) -> None:
-    with pytest.raises(TypeError):
+    with pytest.raises(DefinitionError, match=r"^Enum can only be created from int type$"):
         cs._make_enum("Test", cs.char, {"A": 1, "B": 2, "C": 3})
 
 

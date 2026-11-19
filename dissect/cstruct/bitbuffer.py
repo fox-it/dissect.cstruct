@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, BinaryIO
 
+from dissect.cstruct.exception import DefinitionError
+
 if TYPE_CHECKING:
     from dissect.cstruct.types import BaseType
 
@@ -20,7 +22,7 @@ class BitBuffer:
     def read(self, field_type: type[BaseType], bits: int) -> int:
         if self._remaining == 0 or self._type != field_type:
             if field_type.__size__ is None:
-                raise ValueError("Reading variable-length fields is unsupported")
+                raise DefinitionError("Reading variable-length fields is unsupported")
 
             self._type = field_type
             self._remaining = field_type.__size__ * 8
@@ -33,7 +35,7 @@ class BitBuffer:
                 self._buffer = int.from_bytes(self._buffer, "big")
 
         if bits > self._remaining:
-            raise ValueError("Reading straddled bits is unsupported")
+            raise DefinitionError("Reading straddled bits is unsupported")
 
         if self.endian == "<":
             v = self._buffer & ((1 << bits) - 1)
@@ -52,7 +54,7 @@ class BitBuffer:
                 self.flush()
 
             if field_type.__size__ is None:
-                raise ValueError("Writing variable-length fields is unsupported")
+                raise DefinitionError("Writing variable-length fields is unsupported")
 
             self._remaining = field_type.__size__ * 8
             self._type = field_type

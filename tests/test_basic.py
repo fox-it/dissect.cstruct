@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, BinaryIO
 import pytest
 
 from dissect.cstruct.cstruct import cstruct
-from dissect.cstruct.exception import ArraySizeError, ParserError, ResolveError
+from dissect.cstruct.exception import DefinitionError, ParserError, ResolveError, WriteError
 from dissect.cstruct.types import BaseType
 from tests.util import verify_compiled
 
@@ -26,7 +26,7 @@ def test_duplicate_type(cs: cstruct, compiled: bool) -> None:
     """
     cs.load(cdef, compiled=compiled)
 
-    with pytest.raises(ValueError, match="Duplicate type"):
+    with pytest.raises(DefinitionError, match=r"(?m)^line 2: Duplicate type: test$"):
         cs.load(cdef)
 
 
@@ -128,7 +128,7 @@ def test_duplicate_types(cs: cstruct) -> None:
     cs.load(cdef)
     assert cs.A
 
-    with pytest.raises(ValueError, match="Duplicate type"):
+    with pytest.raises(DefinitionError, match=r"(?m)^line 2: Duplicate type: A$"):
         cs.load(cdef)
 
     cs.load("""typedef uint32 Test;""")
@@ -137,8 +137,11 @@ def test_duplicate_types(cs: cstruct) -> None:
     cs.load("""typedef uint32 Test;""")
     assert cs.Test is cs.uint32
 
-    with pytest.raises(ValueError, match="Duplicate type"):
+    with pytest.raises(DefinitionError, match=r"(?m)^line 1: Duplicate type: Test$"):
         cs.load("""typedef uint64 Test;""")
+
+    with pytest.raises(DefinitionError, match=r"^Duplicate type: Test$"):
+        cs.add_type("Test", "uint64")
 
 
 def test_type_replace(cs: cstruct) -> None:
@@ -148,7 +151,7 @@ def test_type_replace(cs: cstruct) -> None:
 
     # Adding a conflicting type over an existing alias should raise
     cs.add_type("foo", "uint8")
-    with pytest.raises(ValueError, match="Duplicate type"):
+    with pytest.raises(DefinitionError, match=r"(?m)^line 1: Duplicate type: foo$"):
         cs.load("struct foo { uint32 x; };")
 
 
@@ -329,7 +332,7 @@ def test_multipart_type_name(cs: cstruct) -> None:
         unsigned long long unsigned a;
     };
     """
-    with pytest.raises(ResolveError, match="Unknown type unsigned long long unsigned"):
+    with pytest.raises(ResolveError, match=r"(?m)^line 3: Unknown type unsigned long long unsigned a$"):
         cs.load(cdef)
 
     cdef = """
@@ -338,7 +341,7 @@ def test_multipart_type_name(cs: cstruct) -> None:
         B = 1
     };
     """
-    with pytest.raises(ResolveError, match="Unknown type unsigned int and more"):
+    with pytest.raises(ResolveError, match=r"(?m)^line 2: Unknown type unsigned int and more$"):
         cs.load(cdef)
 
 
@@ -382,7 +385,7 @@ def test_array_of_null_terminated_strings(cs: cstruct, compiled: bool) -> None:
         char   argv[][argc];
     };
     """
-    with pytest.raises(ParserError, match="Depth required for multi-dimensional array"):
+    with pytest.raises(ParserError, match=r"(?m)^line 4: Depth required for multi-dimensional array$"):
         cs.load(cdef)
 
 
@@ -471,7 +474,7 @@ def test_report_array_size_mismatch(cs: cstruct) -> None:
 
     a = cs.test(a=[1, 2, 3])
 
-    with pytest.raises(ArraySizeError):
+    with pytest.raises(WriteError):
         a.dumps()
 
 
@@ -496,6 +499,20 @@ def test_reserved_keyword(cs: cstruct, compiled: bool) -> None:
         assert verify_compiled(cs.resolve(name), compiled)
 
         assert cs.resolve(name)(b"\x01").a == 1
+
+
+def test_array_negative_size(cs: cstruct) -> None:
+    """Test that an array can't have a negative size."""
+    with pytest.raises(DefinitionError, match=r"^Array size must not be negative: -1$"):
+        cs.uint8[-1]
+
+    cdef = """
+    struct test {
+        uint8   a[-1];
+    };
+    """
+    with pytest.raises(DefinitionError, match=r"(?m)^line 3: Array size must not be negative: -1$"):
+        cs.load(cdef)
 
 
 def test_array_class_name(cs: cstruct) -> None:

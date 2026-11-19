@@ -3,6 +3,7 @@ from __future__ import annotations
 import warnings
 from typing import TYPE_CHECKING, Any, BinaryIO
 
+from dissect.cstruct.exception import EOFError
 from dissect.cstruct.types.base import EOF, BaseType, MetaType
 from dissect.cstruct.util import ENDIANNESS_TO_BYTEORDER_MAP, classproperty
 
@@ -35,7 +36,12 @@ class Int(int, BaseType):
 
         size = cls.__size__
         length = size * count
-        data = stream.read(length)
+
+        try:
+            data = stream.read(length)
+        except OverflowError:
+            raise EOFError(f"Read 0 bytes, but expected {length}") from None
+
         if len(data) != length:
             raise EOFError(f"Read {len(data) % size} bytes, but expected {size}")
 

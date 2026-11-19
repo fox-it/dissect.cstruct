@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import struct
 import warnings
 from io import SEEK_CUR, BytesIO
 from types import MethodType
 from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, TypeVar
 
-from dissect.cstruct.exception import ArraySizeError
+from dissect.cstruct.exception import EOFError, Error, ReadError, WriteError
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.util import classproperty, normalize_endianness
 
@@ -22,6 +23,9 @@ if TYPE_CHECKING:
 EOF = -0xE0F  # Negative counts are illegal anyway, so abuse that for our EOF sentinel
 
 _IMMUTABLE_TYPES = (int, float, bytes, str)
+
+# Errors of values that can't be written, e.g. a number out of range or a missing field of a structure
+_WRITE_ERRORS = (struct.error, OverflowError, TypeError, ValueError, AttributeError)
 
 
 class MetaType(type):
@@ -144,8 +148,17 @@ class MetaType(type):
         Returns:
             The amount of bytes written.
         """
+        if not hasattr(stream, "write"):
+            raise TypeError("Invalid object type")
+
         endian = normalize_endianness(endian) if endian is not None else cls.__cs__.endian
-        return cls._write(stream, value, endian=endian)
+
+        try:
+            return cls._write(stream, value, endian=endian)
+        except (OSError, Error):
+            raise
+        except _WRITE_ERRORS as e:
+            raise WriteError(f"Cannot write {cls.__name__}: {e}") from e
 
     def dumps(cls, value: Any, *, endian: AllowedEndianness | None = None) -> bytes:
         """Dump a value to a byte string.
@@ -161,7 +174,12 @@ class MetaType(type):
         endian = normalize_endianness(endian) if endian is not None else cls.__cs__.endian
 
         out = BytesIO()
-        cls._write(out, value, endian=endian)
+        try:
+            cls._write(out, value, endian=endian)
+        except Error:
+            raise
+        except _WRITE_ERRORS as e:
+            raise WriteError(f"Cannot write {cls.__name__}: {e}") from e
         return out.getvalue()
 
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:  # type: ignore
@@ -380,10 +398,14 @@ class BaseArray(BaseType):
 
         try:
             return max(0, cls.__num_entries__.evaluate(cls.__cs__, context))
-        except Exception:
+        except Error:
+            # E.g. an unknown identifier, which is also what EOF evaluates to
             if cls.__num_entries__.expression != "EOF":
                 raise
             return EOF
+        except (ArithmeticError, ValueError) as e:
+            # E.g. a division by a field that is zero
+            raise ReadError(f"Invalid array size '{cls.__num_entries__.expression}': {e}") from e
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: list[Any], *, endian: Endianness) -> int:
@@ -404,7 +426,7 @@ class BaseArray(BaseType):
         """
         if remaining := cls.__num_entries__ - (actual_size := len(data)):
             if remaining < 0:
-                raise ArraySizeError(f"Expected static array size {cls.__num_entries__}, got {actual_size} instead.")
+                raise WriteError(f"Expected static array size {cls.__num_entries__}, got {actual_size} instead.")
             data = data + [cls.__type__.__default__()] * remaining
 
         return data

@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, BinaryIO, Literal, TypeVar, cast
 
-from dissect.cstruct.exception import ResolveError
+from dissect.cstruct.exception import DefinitionError, ResolveError
 from dissect.cstruct.expression import Expression
 from dissect.cstruct.parser import CStyleParser
 from dissect.cstruct.types import (
@@ -285,11 +285,11 @@ class cstruct:
             replace: Whether to replace the type if it already exists.
 
         Raises:
-            ValueError: If the type already exists.
+            DefinitionError: If the type already exists.
         """
         typeobj = self.resolve(type_)
         if not replace and (existing := self.types.get(name)) is not None and existing is not typeobj:
-            raise ValueError(f"Duplicate type: {name}")
+            raise DefinitionError(f"Duplicate type: {name}")
 
         self.types[name] = typeobj
         self._add_attr(name, typeobj)
@@ -532,11 +532,13 @@ class cstruct:
         if num_entries is None:
             null_terminated = True
             size = None
-        elif isinstance(num_entries, Expression) or type_.__dynamic__:
+        elif isinstance(num_entries, Expression):
+            size = None
+        elif num_entries < 0:
+            raise DefinitionError(f"Array size must not be negative: {num_entries}")
+        elif type_.__dynamic__:
             size = None
         else:
-            if type_.__size__ is None:
-                raise ValueError(f"Cannot create array of dynamic type: {type_.__name__}")
             size = num_entries * type_.__size__
 
         name = f"{type_.__name__}[]" if null_terminated else f"{type_.__name__}[{num_entries}]"

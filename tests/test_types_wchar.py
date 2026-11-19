@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from dissect.cstruct.exception import ArraySizeError
+from dissect.cstruct.exception import WriteError
 from tests.util import NonSeekableStream, verify_compiled
 
 if TYPE_CHECKING:
@@ -64,7 +64,7 @@ def test_wchar_array_write_padding(cs: cstruct) -> None:
 
 def test_wchar_array_write_size_error(cs: cstruct) -> None:
     buf = io.BytesIO()
-    with pytest.raises(ArraySizeError):
+    with pytest.raises(WriteError):
         cs.wchar[4]._write(buf, "toolong", endian=cs.endian)
 
 
@@ -107,6 +107,10 @@ def test_wchar_eof(cs: cstruct) -> None:
 
     with pytest.raises(EOFError):
         cs.wchar[None](b"A\x00A\x00A\x00A\x00")
+
+    # More bytes than any stream can hold, e.g. a count from corrupt data
+    with pytest.raises(EOFError, match=r"^Read 0 bytes, but expected 9223372036854775808$"):
+        cs.wchar[2**62](b"")
 
     assert cs.wchar[0](b"") == ""
 
@@ -162,7 +166,7 @@ def test_wchar_array_surrogate_pair(cs: cstruct, compiled: bool) -> None:
     assert cs.wchar[4].dumps("\U0001f600") == b"\x3d\xd8\x00\xde\x00\x00\x00\x00"
     assert cs.wchar[2].dumps("\U0001f600") == b"\x3d\xd8\x00\xde"
 
-    with pytest.raises(ArraySizeError, match="Expected static array size 1, got 2 instead"):
+    with pytest.raises(WriteError, match="Expected static array size 1, got 2 instead"):
         cs.wchar[1].dumps("\U0001f600")
 
     buf = b"\x3d\xd8\x00\xdex\x00\x00\x00\x01"
@@ -170,10 +174,10 @@ def test_wchar_array_surrogate_pair(cs: cstruct, compiled: bool) -> None:
     assert obj.a == "\U0001f600x\x00"
     assert obj.dumps() == buf
 
-    with pytest.raises(ArraySizeError, match="Expected static array size 4, got 5 instead"):
+    with pytest.raises(WriteError, match="Expected static array size 4, got 5 instead"):
         cs.test(a="abcde", b=1).dumps()
 
-    with pytest.raises(ArraySizeError, match="Expected static array size 4, got 6 instead"):
+    with pytest.raises(WriteError, match="Expected static array size 4, got 6 instead"):
         cs.test(a="\U0001f600\U0001f600\U0001f600", b=1).dumps()
 
 
@@ -190,17 +194,17 @@ def test_wchar_write_too_long(cs: cstruct, compiled: bool) -> None:
 
     assert cs.wchar.dumps("x") == b"x\x00"
 
-    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+    with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
         cs.wchar.dumps("xy")
 
     # A surrogate pair doesn't fit a single wchar
-    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+    with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
         cs.wchar.dumps("\U0001f600")
 
-    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+    with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
         cs.test(a=1, b="xy", c=2).dumps()
 
-    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+    with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
         cs.test(a=1, b="\U0001f600", c=2).dumps()
 
 
@@ -308,7 +312,7 @@ def test_wchar_lone_surrogate_single(cs: cstruct, compiled: bool) -> None:
     assert obj.dumps() == buf
 
     # Two lone surrogates take up the same space as the surrogate pair they make up
-    with pytest.raises(ValueError, match="Expected a single character, got 2 instead"):
+    with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
         cs.wchar.dumps("\ud83d\ude00")
 
 
@@ -325,5 +329,5 @@ def test_wchar_truncated(cs: cstruct, compiled: bool) -> None:
 
     assert cs.test(b"\x00\xd8").text == "\ud800"
 
-    with pytest.raises(UnicodeDecodeError, match="truncated data"):
+    with pytest.raises(EOFError, match=r"^Read 1 bytes, but expected 2$"):
         cs.test(b"\x00\xd8\x00")

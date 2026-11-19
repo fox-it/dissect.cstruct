@@ -687,7 +687,7 @@ def test_compiled_union_source(cs: cstruct) -> None:
     def _read(cls, stream, *, context=None, endian):
         if cls is not _cls0 or _type1.__init__ is not _init0: return _union_read(cls, stream, context=context, endian=endian)
         buf = stream.read(4)
-        if len(buf) != 4: raise EOFError(f"Read {len(buf)} bytes, but expected 4")
+        if len(buf) != 4: raise _EOFError(f"Read {len(buf)} bytes, but expected 4")
         obj = _object_new(cls)
         _data0 = _unpack_from0[endian](buf, 0)
         _object_setattr(obj, 'a', _type_call(_type0, _data0[0]))

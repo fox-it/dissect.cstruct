@@ -3,6 +3,7 @@ from __future__ import annotations
 import warnings
 from typing import TYPE_CHECKING, Any, BinaryIO
 
+from dissect.cstruct.exception import EOFError, WriteError
 from dissect.cstruct.types.base import BaseType
 from dissect.cstruct.util import classproperty
 
@@ -56,7 +57,7 @@ class LEB128(int, BaseType):
     def _write(cls, stream: BinaryIO, data: int, *, endian: Endianness) -> int:
         # only write negative numbers when in signed mode
         if data < 0 and not cls.__signed__:
-            raise ValueError("Attempt to encode a negative integer using unsigned LEB128 encoding")
+            raise WriteError("Attempt to encode a negative integer using unsigned LEB128 encoding")
 
         result = bytearray()
         while True:

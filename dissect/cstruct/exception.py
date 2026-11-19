@@ -1,33 +1,47 @@
 from __future__ import annotations
 
+import builtins
+
 
 class Error(Exception):
-    pass
+    """Base class for all exceptions."""
 
 
-class LexerError(Error):
-    pass
+class DefinitionError(Error, ValueError):
+    """A type definition is invalid."""
 
 
-class ParserError(Error):
-    pass
+class LexerError(DefinitionError):
+    """The type definition can't be tokenized."""
 
 
-class ResolveError(Error):
-    pass
+class ParserError(DefinitionError):
+    """The type definition can't be parsed."""
 
 
-class NullPointerDereference(Error):
-    pass
+class ResolveError(DefinitionError):
+    """The type definition can't be resolved."""
 
 
-class ArraySizeError(Error):
-    pass
-
-
-class ExpressionParserError(Error):
-    pass
+class ExpressionParserError(DefinitionError):
+    """The expression can't be parsed."""
 
 
 class UnknownIdentifierError(ExpressionParserError):
-    pass
+    """The identifier is not defined."""
+
+
+class ReadError(Error, ValueError):
+    """The data can't be parsed."""
+
+
+class NullPointerDereference(ReadError):
+    """A pointer is null, but it was dereferenced."""
+
+
+class WriteError(Error, ValueError):
+    """The value can't be written."""
+
+
+class EOFError(Error, builtins.EOFError):
+    """The data ends before the value does."""
