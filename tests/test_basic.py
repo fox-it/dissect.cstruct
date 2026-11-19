@@ -794,7 +794,7 @@ def test_deprecation_warnings(cs: cstruct) -> None:
 
     with pytest.warns(
         DeprecationWarning,
-        match=re.escape("The 'dumps' method on instances is deprecated, use 'bytes(obj)' or 'cls.dumps(obj)' instead."),
+        match=re.escape("The 'dumps' method on instances is deprecated, use 'cls.dumps(obj)' instead."),
     ):
         assert cs.uint16(1).dumps(endian=">") == b"\x00\x01"
 

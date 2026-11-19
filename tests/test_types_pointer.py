@@ -29,18 +29,29 @@ def test_pointer(cs: cstruct) -> None:
         ptr(0, None, endian=cs.endian).dereference()
 
 
-def test_pointer_char(cs: cstruct) -> None:
+@pytest.mark.parametrize(
+    ("type_name", "buf", "expected", "expected_str"),
+    [
+        ("char", b"\x02\x00asdf\x00", b"asdf", "b'asdf'"),
+        ("wchar", b"\x02\x00a\x00s\x00d\x00f\x00\x00\x00", "asdf", "asdf"),
+    ],
+)
+def test_pointer_char(cs: cstruct, type_name: str, buf: bytes, expected: bytes | str, expected_str: str) -> None:
+    """Test that a ``char`` and ``wchar`` pointer dereference to a null-terminated string that can be written back."""
     cs.pointer = cs.uint8
 
-    ptr = cs._make_pointer(cs.char)
-    assert ptr.__name__ == "char*"
+    ptr = cs._make_pointer(cs.resolve(type_name))
+    assert ptr.__name__ == f"{type_name}*"
 
-    obj = ptr(b"\x02\x00asdf\x00")
-    assert repr(obj) == "<char* @ 0x2>"
+    obj = ptr(buf)
+    assert repr(obj) == f"<{type_name}* @ 0x2>"
 
     assert obj == 2
-    assert obj.dereference() == b"asdf"
-    assert str(obj) == "b'asdf'"
+    assert obj.dereference() == expected
+    assert str(obj) == expected_str
+
+    value = obj.dereference()
+    assert type(value).dumps(value) == buf[2:]
 
 
 def test_pointer_operator(cs: cstruct) -> None:

@@ -7,6 +7,7 @@ from dissect.cstruct.exception import EOFError, NullPointerDereference
 from dissect.cstruct.types.base import BaseType, normalize_endianness
 from dissect.cstruct.types.char import Char
 from dissect.cstruct.types.void import Void
+from dissect.cstruct.types.wchar import Wchar
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -115,9 +116,9 @@ class Pointer(int, BaseType, Generic[T]):
         except OverflowError:
             raise EOFError(f"Offset {int(self):#x} is beyond the end of the stream") from None
 
-        if issubclass(self.__type__, Char):
-            # This makes the assumption that a char pointer is a null-terminated string
-            value = self.__type__._read_0(self.__stream, context=self.__context, endian=endian)
+        if issubclass(self.__type__, (Char, Wchar)):
+            # This makes the assumption that a char or wchar pointer is a null-terminated string
+            value = self.__type__[None]._read(self.__stream, context=self.__context, endian=endian)
         else:
             value = self.__type__._read(self.__stream, context=self.__context, endian=endian)
 
