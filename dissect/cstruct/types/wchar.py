@@ -1,16 +1,37 @@
 from __future__ import annotations
 
 import sys
+from io import BytesIO
 from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar
 
 from dissect.cstruct.exception import EOFError, WriteError
-from dissect.cstruct.types.base import EOF, BaseArray, BaseType, _is_seekable, _read_null_terminated
+from dissect.cstruct.types.base import EOF, BaseArray, BaseType, MetaType, _is_seekable, _read_null_terminated
 
 if TYPE_CHECKING:
     from dissect.cstruct.cstruct import Endianness
 
 
-class WcharArray(str, BaseArray):
+class WcharMetaType(MetaType):
+    """Metaclass for wide-character and wide-character array types."""
+
+    def __call__(cls, *args, **kwargs) -> Wchar | WcharArray:
+        if len(args) == 1 and not kwargs:
+            # Handle a few fast path cases
+            obj = args[0]
+            if (tp := type(obj)) is str:
+                return type.__call__(cls, obj)
+
+            if tp is bytes:
+                return cls._read(BytesIO(obj), endian=cls.__cs__.endian)
+
+            # Writing doesn't accept an int either, and str() would give its decimal digits
+            if isinstance(obj, int):
+                raise TypeError(f"Cannot create {cls.__name__} from an int")
+
+        return MetaType.__call__(cls, *args, **kwargs)
+
+
+class WcharArray(str, BaseArray, metaclass=WcharMetaType):
     """Wide-character array type for reading and writing UTF-16 strings."""
 
     __slots__ = ()
@@ -39,7 +60,7 @@ class WcharArray(str, BaseArray):
         return stream.write(buf)
 
 
-class Wchar(str, BaseType):
+class Wchar(str, BaseType, metaclass=WcharMetaType):
     """Wide-character type for reading and writing UTF-16 characters."""
 
     __ArrayType__ = WcharArray
@@ -60,14 +81,14 @@ class Wchar(str, BaseType):
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Wchar:
-        return cls._read_array(stream, 1, context=context, endian=endian)
+        return type.__call__(cls, cls._read_array(stream, 1, context=context, endian=endian))
 
     @classmethod
     def _read_array(
         cls, stream: BinaryIO, count: int, *, context: dict[str, Any] | None = None, endian: Endianness
-    ) -> Wchar:
+    ) -> str:
         if count == 0:
-            return type.__call__(cls, "")
+            return ""
 
         if count == EOF:
             data = stream.read()
@@ -84,13 +105,13 @@ class Wchar(str, BaseType):
             if len(data) != length:
                 raise EOFError(f"Read {len(data)} bytes, but expected {length}")
 
-        return type.__call__(cls, str(data, cls.__encoding_map__[endian], "surrogatepass"))
+        return str(data, cls.__encoding_map__[endian], "surrogatepass")
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Wchar:
+    def _read_0(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> str:
         if _is_seekable(stream):
             data = _read_null_terminated(stream, 2)
-            return type.__call__(cls, data.decode(cls.__encoding_map__[endian], "surrogatepass"))
+            return data.decode(cls.__encoding_map__[endian], "surrogatepass")
 
         buf = []
         while True:
@@ -103,7 +124,7 @@ class Wchar(str, BaseType):
 
             buf.append(point)
 
-        return type.__call__(cls, b"".join(buf).decode(cls.__encoding_map__[endian], "surrogatepass"))
+        return b"".join(buf).decode(cls.__encoding_map__[endian], "surrogatepass")
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: str, *, endian: Endianness) -> int:

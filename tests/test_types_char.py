@@ -23,6 +23,20 @@ def test_char_write(cs: cstruct) -> None:
     assert bytes(cs.char(b"A")) == b"A"
 
 
+def test_char_value(cs: cstruct) -> None:
+    """Test that a ``char`` and ``char`` array are created from the same values that writing accepts."""
+    assert cs.char(0x78) == b"x"
+    assert cs.char("x") == b"x"
+    assert cs.char[4]("ab") == b"ab"
+    assert cs.char[None]("ab") == b"ab"
+
+    with pytest.raises(TypeError, match=r"^Cannot create char\[4\] from an int$"):
+        cs.char[4](3)
+
+    with pytest.raises(TypeError, match=r"^Cannot create char\[\] from an int$"):
+        cs.char[None](3)
+
+
 def test_char_array(cs: cstruct) -> None:
     buf = b"AAAA\x00"
 
@@ -214,6 +228,7 @@ def test_char_array_struct_write(cs: cstruct, compiled: bool) -> None:
     # Shorter values are padded
     buf = b"\x01a\x00\x00\x00\x02"
     assert bytes(cs.test(a=1, b=b"a", c=2)) == buf
+    assert bytes(cs.test(a=1, b=memoryview(b"a"), c=2)) == buf
     assert bytes(cs.test(a=1, b=[97], c=2)) == buf
 
     # Longer values aren't accepted

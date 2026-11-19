@@ -336,7 +336,7 @@ class _overload:
 
 def _instance_dumps(self: BaseType, *, endian: AllowedEndianness | None = None) -> bytes:
     warnings.warn(
-        "The 'dumps' method on instances is deprecated, use 'bytes(obj)' or 'cls.dumps(obj)' instead.",
+        "The 'dumps' method on instances is deprecated, use 'cls.dumps(obj)' instead.",
         DeprecationWarning,
         stacklevel=2,
     )

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, BinaryIO
 
 from dissect.cstruct.exception import EOFError, WriteError
-from dissect.cstruct.types.base import EOF, BaseArray, BaseType, _is_seekable, _read_null_terminated
+from dissect.cstruct.types.base import EOF, BaseArray, BaseType, MetaType, _is_seekable, _read_null_terminated
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -11,14 +11,33 @@ if TYPE_CHECKING:
     from dissect.cstruct.cstruct import Endianness
 
 
-class CharArray(bytes, BaseArray):
+class CharArrayMetaType(MetaType):
+    """Metaclass for character array types."""
+
+    def __call__(cls, *args, **kwargs) -> CharArray:
+        if len(args) == 1 and not kwargs:
+            # Handle a few fast path cases
+            obj = args[0]
+            if type(obj) is bytes and len(obj) == cls.__size__:
+                return type.__call__(cls, obj)
+
+            # Convert a string like writing does, instead of raising a TypeError
+            if isinstance(obj, str):
+                return type.__call__(cls, obj.encode("latin-1"))
+
+            # Writing doesn't accept an int either, and bytes() would give that many null bytes
+            if isinstance(obj, int):
+                raise TypeError(f"Cannot create {cls.__name__} from an int")
+
+        return MetaType.__call__(cls, *args, **kwargs)
+
+
+class CharArray(bytes, BaseArray, metaclass=CharArrayMetaType):
     """Character array type for reading and writing byte strings."""
 
     def __bytes__(self) -> bytes:
-        # TODO: determine if we want to return the raw bytes content or the null-terminated content?
-        # This is awkward because CharArray is a subclass of bytes, so normally you'd expect `bytes(value) == value`.
-        # But if the array is null-terminated (`cs.char[None]`), and we'd copy `dumps` behaviour, then
-        # `bytes(value) != value` (it'd be `value + b"\x00"`).
+        # A char array is a bytes object, so give its content without the null terminator, like bytes does.
+        # Python 3.11 and newer use bytes.__bytes__ without this, but 3.10 would use BaseType.__bytes__.
         return bytes(memoryview(self))
 
     @classmethod
@@ -31,8 +50,8 @@ class CharArray(bytes, BaseArray):
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: bytes | bytearray | str | list[int], *, endian: Endianness) -> int:
-        # Copy mutable data types to bytes so we don't modify them in place
-        if isinstance(data, (list, bytearray)):
+        # Convert other bytes-like data to bytes, so adding the null terminator and padding doesn't modify it in place
+        if isinstance(data, (list, bytearray, memoryview)):
             data = bytes(data)
         elif isinstance(data, str):
             data = data.encode("latin-1")
@@ -48,7 +67,28 @@ class CharArray(bytes, BaseArray):
         return stream.write(data)
 
 
-class Char(bytes, BaseType):
+class CharMetaType(MetaType):
+    """Metaclass for character types."""
+
+    def __call__(cls, *args, **kwargs) -> Char:
+        if len(args) == 1 and not kwargs:
+            # Handle a few fast path cases
+            obj = args[0]
+            if type(obj) is bytes and len(obj) == cls.__size__:
+                return type.__call__(cls, obj)
+
+            # Convert an int or string like writing does. Otherwise, bytes() gives that many null bytes for an int,
+            # and raises a TypeError for a string.
+            if isinstance(obj, int):
+                obj = chr(obj)
+
+            if isinstance(obj, str):
+                return type.__call__(cls, obj.encode("latin-1"))
+
+        return MetaType.__call__(cls, *args, **kwargs)
+
+
+class Char(bytes, BaseType, metaclass=CharMetaType):
     """Character type for reading and writing bytes."""
 
     __ArrayType__ = CharArray
@@ -62,14 +102,14 @@ class Char(bytes, BaseType):
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
-        return cls._read_array(stream, 1, context=context, endian=endian)
+        return type.__call__(cls, cls._read_array(stream, 1, context=context, endian=endian))
 
     @classmethod
     def _read_array(
         cls, stream: BinaryIO, count: int, *, context: dict[str, Any] | None = None, endian: Endianness
-    ) -> Self:
+    ) -> bytes:
         if count == 0:
-            return type.__call__(cls, b"")
+            return b""
 
         try:
             data = stream.read(-1 if count == EOF else count)
@@ -79,12 +119,12 @@ class Char(bytes, BaseType):
         if count != EOF and len(data) != count:
             raise EOFError(f"Read {len(data)} bytes, but expected {count}")
 
-        return type.__call__(cls, data)
+        return data
 
     @classmethod
-    def _read_0(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
+    def _read_0(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> bytes:
         if _is_seekable(stream):
-            return type.__call__(cls, _read_null_terminated(stream, 1))
+            return _read_null_terminated(stream, 1)
 
         buf = []
         while True:
@@ -97,7 +137,7 @@ class Char(bytes, BaseType):
 
             buf.append(byte)
 
-        return type.__call__(cls, b"".join(buf))
+        return b"".join(buf)
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: bytes | int | str, *, endian: Endianness) -> int:

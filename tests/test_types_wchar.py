@@ -119,6 +119,15 @@ def test_wchar_eof(cs: cstruct) -> None:
     assert cs.wchar[0](b"") == ""
 
 
+def test_wchar_int(cs: cstruct) -> None:
+    """Test that a ``wchar`` and ``wchar`` array can't be created from an int, like they can't be written from one."""
+    with pytest.raises(TypeError, match=r"^Cannot create wchar from an int$"):
+        cs.wchar(65)
+
+    with pytest.raises(TypeError, match=r"^Cannot create wchar\[4\] from an int$"):
+        cs.wchar[4](65)
+
+
 def test_wchar_default(cs: cstruct) -> None:
     assert cs.wchar.__default__() == "\x00"
     assert cs.wchar[4].__default__() == "\x00\x00\x00\x00"
