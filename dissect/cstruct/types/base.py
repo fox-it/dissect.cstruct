@@ -152,6 +152,7 @@ class MetaType(type):
             raise TypeError("Invalid object type")
 
         endian = normalize_endianness(endian) if endian is not None else cls.__cs__.endian
+
         try:
             return cls._write(stream, value, endian=endian)
         except (OSError, Error):

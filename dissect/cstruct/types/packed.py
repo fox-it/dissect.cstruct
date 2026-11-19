@@ -71,10 +71,10 @@ class Packed(BaseType, Generic[T], metaclass=PackedMetaType):
                 raise EOFError(f"Read {remainder} bytes, but expected {cls.__size__}")
         else:
             length = cls.__size__ * count
+
             try:
                 data = stream.read(length)
             except OverflowError:
-                # No stream holds more bytes than fit in a C ssize_t
                 raise EOFError(f"Read 0 bytes, but expected {length}") from None
 
             if len(data) != length:

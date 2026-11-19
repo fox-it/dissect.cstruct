@@ -36,10 +36,10 @@ class Int(int, BaseType):
 
         size = cls.__size__
         length = size * count
+
         try:
             data = stream.read(length)
         except OverflowError:
-            # No stream holds more bytes than fit in a C ssize_t
             raise EOFError(f"Read 0 bytes, but expected {length}") from None
 
         if len(data) != length:

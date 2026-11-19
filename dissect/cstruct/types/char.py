@@ -64,7 +64,6 @@ class Char(bytes, BaseType):
         try:
             data = stream.read(-1 if count == EOF else count)
         except OverflowError:
-            # No stream holds more bytes than fit in a C ssize_t
             raise EOFError(f"Read 0 bytes, but expected {count}") from None
 
         if count != EOF and len(data) != count:

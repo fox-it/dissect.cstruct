@@ -109,10 +109,10 @@ class Pointer(int, BaseType, Generic[T]):
             return None
 
         position = self.__stream.tell()
+
         try:
             self.__stream.seek(self)
         except OverflowError:
-            # No stream holds more bytes than fit in a C ssize_t
             raise EOFError(f"Offset {int(self):#x} is beyond the end of the stream") from None
 
         if issubclass(self.__type__, Char):
