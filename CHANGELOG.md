@@ -44,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `ArraySizeError` is removed. A value that is longer than its static array raises a `WriteError`.
   - `write()` raises a `TypeError` for an object that can't be written to, like `read()` does.
 - `bytes(obj)` works on instances of all types. For a null terminated `char` array it gives the content of the array without the null terminator, because the array is itself a `bytes` object. Use `cls.dumps(obj)` to include the null terminator.
+  - For integer types, `bytearray(obj)` gives as many zero bytes as its value, e.g. `bytearray(cs.uint32(5))` gives 5 zero bytes. Use `bytearray(bytes(obj))` instead.
 - On Python 3.12 and newer, instances of all types support the buffer protocol, so that e.g. `fh.write(obj)` works.
 
 ### Deprecated
