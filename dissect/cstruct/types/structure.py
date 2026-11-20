@@ -522,10 +522,9 @@ class Structure(BaseType, metaclass=StructureMetaType):
     __dynamic_sizes__: dict[str, int]
 
     def __len__(self) -> int:
-        return len(self.dumps())
-
-    def __bytes__(self) -> bytes:
-        return self.dumps()
+        if self.__class__.__size__ is not None:
+            return self.__class__.__size__
+        return MetaType.write(self.__class__, io.BytesIO(), self)
 
     def __getitem__(self, item: str) -> Any:
         return getattr(self, item)
@@ -675,7 +674,7 @@ class UnionMetaType(StructureMetaType):
             size = stream.tell() - start
             stream.seek(start)
             buf = stream.read(size)
-        elif "__init__" in cls.__dict__ and cls.__new__ is object.__new__:
+        elif _uses_generated_init(cls):
             # Fast path for static unions
             buf = stream.read(cls.__size__)
             result, sizes = cls._read_fields(io.BytesIO(buf), endian=endian)
@@ -802,10 +801,10 @@ class UnionProxy:
         object.__setattr__(self, "__target__", target)
 
     def __len__(self) -> int:
-        return len(self.__target__.dumps())
+        return len(self.__target__)
 
     def __bytes__(self) -> bytes:
-        return self.__target__.dumps()
+        return bytes(self.__target__)
 
     def __getitem__(self, item: str) -> Any:
         return getattr(self.__target__, item)
@@ -916,6 +915,15 @@ def attrsetter(path: str) -> Callable[[Any], Any]:
         setattr(obj, attr, value)
 
     return _func
+
+
+def _uses_generated_init(type_: type[Structure]) -> bool:
+    """Return whether a structure type uses a generated ``__init__``, so we can bypass it by setting attributes.
+
+    The generated ``__init__`` is set together with ``__fields__``, so a subclass with only its own ``__init__``
+    doesn't count.
+    """
+    return "__fields__" in type_.__dict__ and type_.__new__ is object.__new__
 
 
 def _codegen(func: FunctionType) -> FunctionType:

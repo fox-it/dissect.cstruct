@@ -39,7 +39,7 @@ def test_bitfield(cs: cstruct, compiled: bool) -> None:
     assert obj.f == 0b11
     assert obj.g == 0b111
     assert obj.h == 1
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_bitfield_consecutive(cs: cstruct, compiled: bool) -> None:
@@ -73,7 +73,7 @@ def test_bitfield_consecutive(cs: cstruct, compiled: bool) -> None:
     assert obj.f == 0b11
     assert obj.g == 0b111
     assert obj.h == 0b1000
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_struct_after_bitfield(cs: cstruct, compiled: bool) -> None:
@@ -109,7 +109,7 @@ def test_struct_after_bitfield(cs: cstruct, compiled: bool) -> None:
     assert obj.f == 0b01
     assert obj.nested2.g == 0x02
     assert obj.h == 0xFE
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_bitfield_be(cs: cstruct, compiled: bool) -> None:
@@ -144,7 +144,7 @@ def test_bitfield_be(cs: cstruct, compiled: bool) -> None:
     assert obj.g == 0b11
     assert obj.h == 0b1110
     assert obj.i == 1
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_bitfield_straddle(cs: cstruct, compiled: bool) -> None:
@@ -191,7 +191,14 @@ def test_bitfield_unsupported_type(cs: cstruct, compiled: bool, type_: str, name
         cs.load(cdef, compiled=compiled)
 
 
-def test_bitfield_write(cs: cstruct, compiled: bool) -> None:
+@pytest.mark.parametrize(
+    ("endian", "expected"),
+    [
+        ("<", b"\x03\x00\xff\x00\x00\x00\x1f\x00"),
+        (">", b"\xc0\x00\x00\x00\x00\xff\xf8\x00"),
+    ],
+)
+def test_bitfield_write(cs: cstruct, compiled: bool, endian: str, expected: bytes) -> None:
     cdef = """
     struct test {
         uint16  a:1;
@@ -201,29 +208,7 @@ def test_bitfield_write(cs: cstruct, compiled: bool) -> None:
         uint16  e:3;
     };
     """
-    cs.load(cdef, compiled=compiled)
-
-    obj = cs.test()
-    obj.a = 0b1
-    obj.b = 0b1
-    obj.c = 0xFF
-    obj.d = 0b11
-    obj.e = 0b111
-
-    assert obj.dumps() == b"\x03\x00\xff\x00\x00\x00\x1f\x00"
-
-
-def test_bitfield_write_be(cs: cstruct, compiled: bool) -> None:
-    cdef = """
-    struct test {
-        uint16  a:1;
-        uint16  b:1;
-        uint32  c;
-        uint16  d:2;
-        uint16  e:3;
-    };
-    """
-    cs.endian = ">"
+    cs.endian = endian
     cs.load(cdef, compiled=compiled)
 
     assert verify_compiled(cs.test, compiled)
@@ -235,7 +220,7 @@ def test_bitfield_write_be(cs: cstruct, compiled: bool) -> None:
     obj.d = 0b11
     obj.e = 0b111
 
-    assert obj.dumps() == b"\xc0\x00\x00\x00\x00\xff\xf8\x00"
+    assert bytes(obj) == expected
 
 
 def test_bitfield_with_enum_or_flag(cs: cstruct, compiled: bool) -> None:
@@ -270,10 +255,10 @@ def test_bitfield_with_enum_or_flag(cs: cstruct, compiled: bool) -> None:
     assert obj.c == cs.Flag16.A | cs.Flag16.B
     assert obj.d == cs.Flag8.A | cs.Flag8.B
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     # Plain integers are written like flag members
-    assert cs.test(a=1, b=1, c=3, d=3).dumps() == buf
+    assert bytes(cs.test(a=1, b=1, c=3, d=3)) == buf
 
 
 def test_bitfield_char(cs: cstruct, compiled: bool) -> None:
@@ -297,7 +282,7 @@ def test_bitfield_char(cs: cstruct, compiled: bool) -> None:
     assert obj.c == 0b11111111
     assert obj.d == b"i420"
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_bitfield_dynamic(cs: cstruct, compiled: bool) -> None:
@@ -325,7 +310,7 @@ def test_bitfield_dynamic(cs: cstruct, compiled: bool) -> None:
     assert obj.d == b"help"
 
     buf.seek(2)
-    assert obj.dumps() == buf.read()
+    assert bytes(obj) == buf.read()
 
 
 @pytest.mark.parametrize("endian", ["<", ">", "!", "@", "="])
@@ -419,10 +404,10 @@ def test_bitfield_after_dynamic_field(cs: cstruct, compiled: bool) -> None:
     assert obj.b == 4
     assert obj.c == 0x123
     assert obj.d == 3
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     # Different types don't share a value of the bit buffer
-    assert cs.test_types(n=1, a=[2], b=3, c=4, d=5, e=6).dumps() == b"\x01\x02\x03\x54\x00\x06"
+    assert bytes(cs.test_types(n=1, a=[2], b=3, c=4, d=5, e=6)) == b"\x01\x02\x03\x54\x00\x06"
 
 
 def test_bitfield_char_and_uint8(cs: cstruct, compiled: bool) -> None:
@@ -466,5 +451,5 @@ def test_bitfield_in_nested_struct_write(cs: cstruct, compiled: bool) -> None:
     assert verify_compiled(cs.test, compiled)
 
     fh = io.BytesIO()
-    assert cs.test(d=1, e=cs.nested(a=1, b=2, c=b"x"), f=3).write(fh) == 5
+    assert cs.test.write(fh, cs.test(d=1, e=cs.nested(a=1, b=2, c=b"x"), f=3)) == 5
     assert fh.getvalue() == b"\x01\x21x\x03\x00"

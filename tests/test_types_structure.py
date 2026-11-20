@@ -67,21 +67,21 @@ def test_structure_write(TestStruct: type[Structure]) -> None:
     buf = b"\x01\x00\x00\x00\x02\x00\x00\x00"
     obj = TestStruct(buf)
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     obj = TestStruct(a=1, b=2)
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
     assert bytes(obj) == buf
 
     obj = TestStruct(a=1)
-    assert obj.dumps() == b"\x01\x00\x00\x00\x00\x00\x00\x00"
+    assert bytes(obj) == b"\x01\x00\x00\x00\x00\x00\x00\x00"
 
     obj = TestStruct()
     assert obj.a == 0
-    assert obj.dumps() == b"\x00\x00\x00\x00\x00\x00\x00\x00"
+    assert bytes(obj) == b"\x00\x00\x00\x00\x00\x00\x00\x00"
 
     obj.a = None
-    assert obj.dumps() == b"\x00\x00\x00\x00\x00\x00\x00\x00"
+    assert bytes(obj) == b"\x00\x00\x00\x00\x00\x00\x00\x00"
 
 
 def test_structure_array_read(TestStruct: type[Structure]) -> None:
@@ -101,7 +101,7 @@ def test_structure_array_read(TestStruct: type[Structure]) -> None:
     assert obj[1].a == 3
     assert obj[1].b == 4
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
     assert obj == [TestStruct(1, 2), TestStruct(3, 4)]
 
     obj = TestStruct[None](b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
@@ -114,10 +114,10 @@ def test_structure_array_write(TestStruct: type[Structure]) -> None:
     obj = TestStructArray([TestStruct(1, 2), TestStruct(3, 4)])
 
     assert len(obj) == 2
-    assert obj.dumps() == b"\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x04\x00\x00\x00"
+    assert bytes(obj) == b"\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x04\x00\x00\x00"
 
     obj = TestStruct[None]([TestStruct(1, 2)])
-    assert obj.dumps() == b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    assert bytes(obj) == b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 
 
 def test_structure_modify(cs: cstruct) -> None:
@@ -266,12 +266,12 @@ def test_structure_definition_simple(cs: cstruct, compiled: bool) -> None:
     assert obj.__dynamic_sizes__ == {"string": 7, "wstring": 10}
     assert obj.__sizes__ == {"magic": 4, "wmagic": 8, "a": 1, "b": 2, "c": 4, "string": 7, "wstring": 10}
     assert len(obj) == len(buf)
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     assert repr(obj)
 
     fh = BytesIO()
-    obj.write(fh)
+    cs.test.write(fh, obj)
     assert fh.getvalue() == buf
 
 
@@ -479,7 +479,7 @@ def test_structure_definition_simple_be(cs: cstruct, compiled: bool) -> None:
     assert obj.c == 0x04050607
     assert obj.string == b"lalala"
     assert obj.wstring == "test"
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
@@ -580,14 +580,14 @@ def test_structure_definition_nested(cs: cstruct, compiled: bool) -> None:
     assert obj.a.a == 1337
     assert obj.a.b == 9000
     assert obj.b.c == b"deadbeef"
-    assert obj.dumps() == data
+    assert bytes(obj) == data
 
     obj = cs.test_anonymous(data)
     assert obj.magic == b"zomg"
     assert obj.a == 1337
     assert obj.b == 9000
     assert obj.c == b"deadbeef"
-    assert obj.dumps() == data
+    assert bytes(obj) == data
 
 
 def test_structure_definition_write(cs: cstruct, compiled: bool) -> None:
@@ -620,7 +620,7 @@ def test_structure_definition_write(cs: cstruct, compiled: bool) -> None:
     with pytest.raises(AttributeError):
         obj.nope  # noqa: B018
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     inst = cs.test(
         magic=b"test",
@@ -631,7 +631,7 @@ def test_structure_definition_write(cs: cstruct, compiled: bool) -> None:
         string=b"lalala",
         wstring="test",
     )
-    assert inst.dumps() == buf
+    assert bytes(inst) == buf
 
 
 def test_structure_definition_write_be(cs: cstruct, compiled: bool) -> None:
@@ -662,7 +662,7 @@ def test_structure_definition_write_be(cs: cstruct, compiled: bool) -> None:
     obj.string = b"lalala"
     obj.wstring = "test"
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_structure_definition_write_anonymous(cs: cstruct) -> None:
@@ -682,7 +682,7 @@ def test_structure_definition_write_anonymous(cs: cstruct) -> None:
     cs.load(cdef)
 
     obj = cs.test(a=1, c=3)
-    assert obj.dumps() == b"\x01\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00"
+    assert bytes(obj) == b"\x01\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00"
 
 
 def test_structure_field_discard(cs: cstruct, compiled: bool) -> None:
@@ -803,7 +803,7 @@ def test_structure_default(cs: cstruct, compiled: bool) -> None:
     assert isinstance(obj.t_pointer_array[0], Pointer)
     assert isinstance(obj.t_pointer_array[1], Pointer)
 
-    assert obj.dumps() == b"\x00" * 57
+    assert bytes(obj) == b"\x00" * 57
 
     for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
@@ -814,7 +814,7 @@ def test_structure_default(cs: cstruct, compiled: bool) -> None:
     assert obj.t_struct == cs.test.__default__()
     assert obj.t_struct_array == [cs.test.__default__(), cs.test.__default__()]
 
-    assert obj.dumps() == b"\x00" * 171
+    assert bytes(obj) == b"\x00" * 171
 
     for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
@@ -872,7 +872,7 @@ def test_structure_default_dynamic(cs: cstruct, compiled: bool) -> None:
     assert obj.t_flag_array_n == obj.t_flag_array_d == []
     assert obj.t_pointer_n == obj.t_pointer_d == []
 
-    assert obj.dumps() == b"\x00" * 20
+    assert bytes(obj) == b"\x00" * 20
 
     for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
@@ -882,7 +882,7 @@ def test_structure_default_dynamic(cs: cstruct, compiled: bool) -> None:
     obj = cs.test_nested.__default__()
     assert obj.t_struct_n == obj.t_struct_array_d == []
 
-    assert obj.dumps() == b"\x00" * 21
+    assert bytes(obj) == b"\x00" * 21
 
     for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
@@ -991,7 +991,7 @@ def test_structure_definition_newline(cs: cstruct, compiled: bool) -> None:
     obj.string = b"lalala"
     obj.wstring = "test"
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_cdef_struct(cs: cstruct) -> None:
@@ -1229,12 +1229,12 @@ def test_structure_changing_endian(cs: cstruct, compiled: bool) -> None:
 
     assert obj.a == 0x04030201
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     obj = cs.test(buf, endian=">")
     assert obj.a == 0x01020304
 
-    assert obj.dumps(endian=">") == buf
+    assert cs.test.dumps(obj, endian=">") == buf
 
 
 def test_structure_endian_name_conflict(cs: cstruct, compiled: bool) -> None:
@@ -1280,7 +1280,7 @@ def test_structure_changing_endian_field_types(cs: cstruct, compiled: bool) -> N
     assert obj.d == 0x0B0A09
     assert obj.e == [0x0E0D0C, 0x11100F]
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     obj = cs.test(buf, endian=">")
 
@@ -1290,7 +1290,7 @@ def test_structure_changing_endian_field_types(cs: cstruct, compiled: bool) -> N
     assert obj.d == 0x090A0B
     assert obj.e == [0x0C0D0E, 0x0F1011]
 
-    assert obj.dumps(endian=">") == buf
+    assert cs.test.dumps(obj, endian=">") == buf
 
 
 def test_structure_subclass_init(cs: cstruct, compiled: bool) -> None:
@@ -1347,7 +1347,7 @@ def test_structure_default_not_shared(cs: cstruct, compiled: bool) -> None:
     assert obj.e[1] == [0, 0]
 
     # Values of different instances are separate values
-    assert cs.test().dumps() == b"\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    assert bytes(cs.test()) == b"\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 
 
 def test_structure_write_return_value(cs: cstruct, compiled: bool) -> None:
@@ -1366,7 +1366,7 @@ def test_structure_write_return_value(cs: cstruct, compiled: bool) -> None:
     assert verify_compiled(cs.test, compiled)
 
     fh = BytesIO()
-    assert cs.test(a=1, b=2, c=3, d=4, e=5).write(fh) == 12
+    assert cs.test.write(fh, cs.test(a=1, b=2, c=3, d=4, e=5)) == 12
     assert fh.getvalue() == b"\x01\x00\x32\x00\x04\x00\x00\x00\x05\x00\x00\x00"
 
 
@@ -1389,21 +1389,21 @@ def test_structure_write_missing_attribute(cs: cstruct, compiled: bool) -> None:
     assert verify_compiled(cs.test, compiled)
 
     obj = cs.test(b=1, c=cs.nested(a=2), n=1, d=[3])
-    assert obj.dumps() == b"\x01\x02\x01\x03"
+    assert bytes(obj) == b"\x01\x02\x01\x03"
 
     del obj.b
     with pytest.raises(WriteError, match=r"^Cannot write test: 'test' object has no attribute 'b'$"):
-        obj.dumps()
+        bytes(obj)
 
     obj = cs.test(b=1, c=cs.nested(a=2), n=1, d=[3])
     del obj.d
     with pytest.raises(WriteError, match=r"^Cannot write test: 'test' object has no attribute 'd'$"):
-        obj.dumps()
+        bytes(obj)
 
     obj = cs.test(b=1, c=cs.nested(a=2), n=1, d=[3])
     del obj.c.a
     with pytest.raises(WriteError, match=r"^Cannot write test: 'nested' object has no attribute 'a'$"):
-        obj.dumps()
+        bytes(obj)
 
 
 def test_structure_write_dynamic(cs: cstruct, compiled: bool) -> None:
@@ -1424,12 +1424,12 @@ def test_structure_write_dynamic(cs: cstruct, compiled: bool) -> None:
 
     buf = b"\x02\x01\x00\x02\x00\x03ab\x78\x00\x00\x00\x04"
     fh = BytesIO()
-    assert cs.test(buf).write(fh) == len(buf)
+    assert cs.test.write(fh, cs.test(buf)) == len(buf)
     assert fh.getvalue() == buf
 
     # The length of a value doesn't have to match the expression
     assert (
-        cs.test(n=1, a=[1, 2, 3], b=4, c=b"xy", d="", e=5).dumps() == b"\x01\x01\x00\x02\x00\x03\x00\x04xy\x00\x00\x05"
+        bytes(cs.test(n=1, a=[1, 2, 3], b=4, c=b"xy", d="", e=5)) == b"\x01\x01\x00\x02\x00\x03\x00\x04xy\x00\x00\x05"
     )
 
 
@@ -1458,17 +1458,17 @@ def test_structure_write_nested(cs: cstruct, compiled: bool) -> None:
 
     buf = b"\x01\x02\x00\x03ab\x04"
     obj = cs.test(buf)
-    assert obj.dumps() == buf
-    assert obj.dumps(endian=">") == b"\x01\x00\x02\x03ab\x04"
+    assert bytes(obj) == buf
+    assert cs.test.dumps(obj, endian=">") == b"\x01\x00\x02\x03ab\x04"
 
     # Any other value that isn't a structure doesn't have the attributes to write
     with pytest.raises(WriteError, match=r"^Cannot write test: 'int' object has no attribute "):
-        cs.test(e=1, f=5, g=4).dumps()
+        bytes(cs.test(e=1, f=5, g=4))
     with pytest.raises(WriteError, match=r"^Cannot write test: 'int' object has no attribute "):
-        cs.test(e=1, f=cs.nested(c=2, d=5), g=4).dumps()
+        bytes(cs.test(e=1, f=cs.nested(c=2, d=5), g=4))
 
     with pytest.raises(WriteError, match="Expected static array size 2, got 3 instead"):
-        cs.test(e=1, f=cs.nested(c=2, d=cs.inner(a=3, b=b"abc")), g=4).dumps()
+        bytes(cs.test(e=1, f=cs.nested(c=2, d=cs.inner(a=3, b=b"abc")), g=4))
 
 
 def test_structure_write_nested_padding(cs: cstruct, compiled: bool) -> None:
@@ -1493,7 +1493,7 @@ def test_structure_write_nested_padding(cs: cstruct, compiled: bool) -> None:
     assert verify_compiled(cs.test, compiled)
 
     fh = BytesIO()
-    assert cs.test(c=1, d=cs.nested(a=2, b=3), e=4).write(fh) == 8
+    assert cs.test.write(fh, cs.test(c=1, d=cs.nested(a=2, b=3), e=4)) == 8
     assert fh.getvalue() == b"\x01\x02\x00\x00\x00\x03\x00\x04"
 
 
@@ -1523,7 +1523,7 @@ def test_structure_write_offset(cs: cstruct, compiled: bool, offset: int, expect
     assert verify_compiled(cs.test, compiled)
 
     fh = BytesIO()
-    assert cs.test(a=1, b=2, c=3, d=4).write(fh) == len(expected)
+    assert cs.test.write(fh, cs.test(a=1, b=2, c=3, d=4)) == len(expected)
     assert fh.getvalue() == expected
 
 
@@ -1541,7 +1541,7 @@ def test_structure_write_offset_not_packed(cs: cstruct, compiled: bool) -> None:
     assert verify_compiled(cs.test, compiled)
 
     fh = BytesIO()
-    assert cs.test(a=1, b=[[2, 3]], c=4).write(fh) == 7
+    assert cs.test.write(fh, cs.test(a=1, b=[[2, 3]], c=4)) == 7
     assert fh.getvalue() == b"\x01\x00\x00\x00\x02\x03\x04"
 
 
@@ -1562,11 +1562,11 @@ def test_structure_write_offset_after_dynamic_field(cs: cstruct, compiled: bool)
 
     # Padding only if the dynamic field is short enough
     fh = BytesIO()
-    assert cs.test(n=1, a=[2], b=3, c=4, d=5).write(fh) == 8
+    assert cs.test.write(fh, cs.test(n=1, a=[2], b=3, c=4, d=5)) == 8
     assert fh.getvalue() == b"\x01\x02\x00\x00\x03\x00\x04\x05"
 
     fh = BytesIO()
-    assert cs.test(n=5, a=[2, 2, 2, 2, 2], b=3, c=4, d=5).write(fh) == 9
+    assert cs.test.write(fh, cs.test(n=5, a=[2, 2, 2, 2, 2], b=3, c=4, d=5)) == 9
     assert fh.getvalue() == b"\x05\x02\x02\x02\x02\x02\x03\x04\x05"
 
 
@@ -1586,7 +1586,7 @@ def test_structure_write_field_names(cs: cstruct, compiled: bool) -> None:
 
     # Duplicate fields use the same attribute
     obj = cs.test(b"\x01\x02\x03\x04")
-    assert obj.dumps() == b"\x01\x02\x04\x04"
+    assert bytes(obj) == b"\x01\x02\x04\x04"
 
 
 def test_structure_write_none(cs: cstruct, compiled: bool) -> None:
@@ -1624,4 +1624,23 @@ def test_structure_write_none(cs: cstruct, compiled: bool) -> None:
     for field in cs.test.__fields__:
         setattr(obj, field._name, None)
 
-    assert obj.dumps() == bytes(24)
+    assert bytes(obj) == bytes(24)
+
+
+@pytest.mark.parametrize("name", ["dumps", "write"])
+def test_structure_method_name_conflict(cs: cstruct, compiled: bool, name: str) -> None:
+    """Test that ``bytes(obj)`` and ``len(obj)`` work when a field is named like the ``dumps`` or ``write`` method."""
+    cdef = f"""
+    struct test {{
+        uint8   {name};
+        char    b[];
+    }};
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    obj = cs.test(**{name: 1}, b=b"x")
+    assert getattr(obj, name) == 1
+    assert bytes(obj) == b"\x01x\x00"
+    assert len(obj) == 3

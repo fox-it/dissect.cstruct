@@ -81,7 +81,7 @@ if __name__ == "__main__":
     assert foo.foo == 1
     assert foo.size == 123456
     assert foo.bar == aaa
-    assert foo.dumps() == buf
+    assert bytes(foo) == buf
 
     assert cs.varint[2](b"\x80\x01\x80\x02") == [128, 256]
     assert cs.varint[2].dumps([128, 256]) == b"\x80\x01\x80\x02"

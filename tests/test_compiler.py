@@ -533,7 +533,7 @@ def test_inline_nested(inline_cs: tuple[cstruct, cstruct]) -> None:
         obj = inlined.header(buf, endian=endian)
         expected = not_inlined.header(buf, endian=endian)
         assert parsed_state(obj) == parsed_state(expected)
-        assert obj.dumps() == expected.dumps()
+        assert bytes(obj) == bytes(expected)
         assert obj.__dynamic_sizes__ == expected.__dynamic_sizes__
         assert obj.form.resident.length == expected.form.resident.length
         assert obj.x == expected.x
@@ -844,7 +844,7 @@ def test_generate_structure_write(cs: cstruct) -> None:
     assert isinstance(cs.test.__dict__["_write"], classmethod)
 
     obj = cs.test(b=1, c=b"ab", d=cs.nested(a=2), n=1, e=[3], f=4, g=5)
-    assert obj.dumps() == b"\x01\x00\x00\x00ab\x02\x01\x03\x54\x00"
+    assert bytes(obj) == b"\x01\x00\x00\x00ab\x02\x01\x03\x54\x00"
 
 
 def test_generate_union_write(cs: cstruct) -> None:
@@ -1083,19 +1083,19 @@ def test_write_after_add_field(cs: cstruct) -> None:
 
     # Before the first write
     cs.nested.add_field("e", cs.uint8)
-    assert cs.test(b=1, c=cs.nested(a=2, e=3), d=4).dumps() == b"\x01\x02\x03\x04"
+    assert bytes(cs.test(b=1, c=cs.nested(a=2, e=3), d=4)) == b"\x01\x02\x03\x04"
 
     # After the first write, in the structure that was compiled
     cs.test.add_field("f", cs.uint8)
-    assert cs.test(b=1, c=cs.nested(a=2, e=3), d=4, f=5).dumps() == b"\x01\x02\x03\x04\x05"
+    assert bytes(cs.test(b=1, c=cs.nested(a=2, e=3), d=4, f=5)) == b"\x01\x02\x03\x04\x05"
 
     # After the first write, in the structure that was inlined
     cs.nested.add_field("g", cs.uint8)
-    assert cs.test(b=1, c=cs.nested(a=2, e=3, g=6), d=4, f=5).dumps() == b"\x01\x02\x03\x06\x04\x05"
+    assert bytes(cs.test(b=1, c=cs.nested(a=2, e=3, g=6), d=4, f=5)) == b"\x01\x02\x03\x06\x04\x05"
 
     # A field that isn't supported by the compiler
     cs.test.add_field("h", cs.uleb128)
-    assert cs.test(b=1, c=cs.nested(a=2, e=3, g=6), d=4, f=5, h=7).dumps() == b"\x01\x02\x03\x06\x04\x05\x07"
+    assert bytes(cs.test(b=1, c=cs.nested(a=2, e=3, g=6), d=4, f=5, h=7)) == b"\x01\x02\x03\x06\x04\x05\x07"
 
     cdef = """
     struct nested_last {
@@ -1110,9 +1110,9 @@ def test_write_after_add_field(cs: cstruct) -> None:
     cs.load(cdef)
 
     # After the first write, in a structure that was inlined without any fields after it
-    assert cs.test_last(b=1, c=cs.nested_last(a=2)).dumps() == b"\x01\x02"
+    assert bytes(cs.test_last(b=1, c=cs.nested_last(a=2))) == b"\x01\x02"
     cs.nested_last.add_field("d", cs.uint8)
-    assert cs.test_last(b=1, c=cs.nested_last(a=2, d=3)).dumps() == b"\x01\x02\x03"
+    assert bytes(cs.test_last(b=1, c=cs.nested_last(a=2, d=3))) == b"\x01\x02\x03"
 
 
 def test_write_generate_failure(cs: cstruct) -> None:
@@ -1124,7 +1124,7 @@ def test_write_generate_failure(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert cs.test(a=1).dumps() == b"\x01"
+    assert bytes(cs.test(a=1)) == b"\x01"
 
     with patch.object(compiler._ReadSourceGenerator, "generate", side_effect=ValueError):
         assert cs.test(b"\x01").a == 1
@@ -1132,7 +1132,7 @@ def test_write_generate_failure(cs: cstruct) -> None:
     # Adding a field no longer recompiles the structure, so _write has to be the interpreted version too
     assert not cs.test.__compiled__
     cs.test.add_field("b", cs.uint8)
-    assert cs.test(a=1, b=2).dumps() == b"\x01\x02"
+    assert bytes(cs.test(a=1, b=2)) == b"\x01\x02"
 
 
 def test_write_generate_failure_keeps_read(cs: cstruct) -> None:
@@ -1145,7 +1145,7 @@ def test_write_generate_failure_keeps_read(cs: cstruct) -> None:
     cs.load(cdef)
 
     with patch.object(compiler._WriteSourceGenerator, "generate", side_effect=ValueError):
-        assert cs.test(a=1).dumps() == b"\x01"
+        assert bytes(cs.test(a=1)) == b"\x01"
 
     assert cs.test.__compiled__
     assert not hasattr(cs.test._write, "__source__")
@@ -1183,7 +1183,7 @@ def test_write_custom_types(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert cs.test(a=1, b=2, c=[3, 4]).dumps() == b"\x01writearray"
+    assert bytes(cs.test(a=1, b=2, c=[3, 4])) == b"\x01writearray"
 
     cdef = """
     struct test_bits {
@@ -1193,7 +1193,7 @@ def test_write_custom_types(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert cs.test_bits(a=1, b=2).dumps() == b"\x01write"
+    assert bytes(cs.test_bits(a=1, b=2)) == b"\x01write"
 
 
 @pytest.mark.parametrize("endian", ["<", ">", "!", "@", "="])
@@ -1214,13 +1214,13 @@ def test_native_alignment(endian: Endianness, compiled: bool) -> None:
     assert len(cs.test) == 15
 
     # Packing or unpacking multiple values at once shouldn't add padding to align them
-    buf = cs.uint8.dumps(1) + cs.uint32.dumps(2) + cs.uint16.dumps(3) + cs.uint64.dumps(4)
+    buf = bytes(cs.uint8(1)) + bytes(cs.uint32(2)) + bytes(cs.uint16(3)) + bytes(cs.uint64(4))
     obj = cs.test(buf)
     assert obj.a == 1
     assert obj.b == 2
     assert obj.c == 3
     assert obj.d == 4
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_read_offset_before_position(cs: cstruct, compiled: bool) -> None:

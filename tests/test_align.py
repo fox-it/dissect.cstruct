@@ -48,7 +48,7 @@ def test_align_struct(cs: cstruct, compiled: bool) -> None:
     for name, value in obj.__values__.items():
         assert cs.test.__members__[name].offset == value
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_align_union(cs: cstruct) -> None:
@@ -75,7 +75,7 @@ def test_align_union(cs: cstruct) -> None:
     assert obj.a == 0x01000000
     assert obj.b == 0x0200000001000000
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_align_union_tail(cs: cstruct) -> None:
@@ -132,7 +132,7 @@ def test_align_array(cs: cstruct, compiled: bool) -> None:
     assert obj.d == [0x2C, 0x30]
     assert obj.e == 0x38
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_align_struct_array(cs: cstruct, compiled: bool) -> None:
@@ -177,7 +177,7 @@ def test_align_struct_array(cs: cstruct, compiled: bool) -> None:
     assert obj.a[3].a == 0x30
     assert obj.a[3].b == 0x38
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_align_dynamic(cs: cstruct, compiled: bool) -> None:
@@ -222,7 +222,7 @@ def test_align_dynamic(cs: cstruct, compiled: bool) -> None:
     assert obj.f == [0x24, 0x28]
     assert obj.g == 0x30
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_align_nested_struct(cs: cstruct, compiled: bool) -> None:
@@ -257,7 +257,7 @@ def test_align_nested_struct(cs: cstruct, compiled: bool) -> None:
     assert obj.nested.c == 0x10
     assert obj.d == 0x18
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_align_bitfield(cs: cstruct, compiled: bool) -> None:
@@ -300,7 +300,7 @@ def test_align_bitfield(cs: cstruct, compiled: bool) -> None:
     assert obj.f == 0b10
     assert obj.g == 0x18
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_align_pointer(cs: cstruct, compiled: bool) -> None:
@@ -338,7 +338,7 @@ def test_align_pointer(cs: cstruct, compiled: bool) -> None:
     assert obj.c == 0x10
     assert obj.d == 0x12
 
-    assert obj.dumps() == buf[:-4]  # Without pointer value
+    assert bytes(obj) == buf[:-4]  # Without pointer value
 
 
 def test_align_field_after_nested_struct(cs: cstruct, compiled: bool) -> None:
@@ -379,7 +379,7 @@ def test_align_field_after_nested_struct(cs: cstruct, compiled: bool) -> None:
     assert obj.c == 0x08
     assert obj.d == 0x0C
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_align_after_dynamic_field(cs: cstruct, compiled: bool) -> None:
@@ -403,7 +403,7 @@ def test_align_after_dynamic_field(cs: cstruct, compiled: bool) -> None:
     assert obj.b == 0xBB
     assert obj.c == 0x04030201
     assert obj.d == 0xCC
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_align_stream_position(cs: cstruct, compiled: bool) -> None:
@@ -442,17 +442,17 @@ def test_align_stream_position(cs: cstruct, compiled: bool) -> None:
     # The padding between static fields depends on the structure, the padding at the end on the stream
     fh = BytesIO(b"\xff")
     fh.seek(1)
-    assert cs.test_static(a=1, b=2, c=3).write(fh) == 11
+    assert cs.test_static.write(fh, cs.test_static(a=1, b=2, c=3)) == 11
     assert fh.getvalue() == b"\xff\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00"
 
     # The padding after a dynamic field depends on the stream
     fh = BytesIO(b"\xff")
     fh.seek(1)
-    assert cs.test_dynamic(n=1, a=[2], b=3, c=4).write(fh) == 11
+    assert cs.test_dynamic.write(fh, cs.test_dynamic(n=1, a=[2], b=3, c=4)) == 11
     assert fh.getvalue() == b"\xff\x01\x02\x00\x03\x00\x00\x00\x04\x00\x00\x00"
 
     # The padding at the end of a nested structure depends on the stream too
     fh = BytesIO(b"\xff")
     fh.seek(1)
-    assert cs.test_nested(c=1, d=cs.nested(a=2, b=3), e=4).write(fh) == 31
+    assert cs.test_nested.write(fh, cs.test_nested(c=1, d=cs.nested(a=2, b=3), e=4)) == 31
     assert fh.getvalue() == (b"\xff\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x04" + bytes(14))
