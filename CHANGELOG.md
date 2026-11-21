@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Optimize storage of field sizes.
+- Setting the `endian` attribute of a `cstruct` instance accepts the same values as the `endian` argument, e.g. `cs.endian = "big"`, and raises a `ValueError` for an invalid value.
 - Rename `_sizes` property of `Structure` to `__sizes__`.
 - Rename `_values` property of `Structure` to `__values__`.
 - Rename the `signed` attribute of integer and LEB128 types to `__signed__`, like the other attributes of types. The `signed` property is deprecated.

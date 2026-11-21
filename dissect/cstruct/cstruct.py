@@ -260,6 +260,11 @@ class cstruct:
 
         return cs
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "endian":
+            value = normalize_endianness(value)
+        super().__setattr__(name, value)
+
     def _next_anonymous(self) -> str:
         name = f"__anonymous_{self._anonymous_count}__"
         self._anonymous_count += 1
