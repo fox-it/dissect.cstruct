@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Declarative syntax for structures and unions in `dissect.cstruct.declarative`, using classes with type annotations.
-- `asdict()` and the `_asdict()` method return the field values of a structure or union as a dict, with nested structures as dicts and arrays as lists. `asjson()` returns them as a JSON string, with bytes as base64 and enum members as numbers. `JSONEncoder` encodes structures as part of other data with `json.dumps()`.
+- `asdict()` method return the field values of a structure or union as a dict, with nested structures as dicts and arrays as lists. `asjson()` returns them as a JSON string, with bytes as base64 and enum members as numbers. `JSONEncoder` encodes structures as part of other data with `json.dumps()`.
 - `sizeof` and `offsetof` in expressions accept a type name like the type of a field, e.g. `sizeof(struct header *[4])`. An argument that isn't a type name raises an `ExpressionParserError` when the expression is created.
 
 ### Changed
