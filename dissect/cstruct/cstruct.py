@@ -59,8 +59,18 @@ class cstruct:
     DEF_CSTYLE = 1
     DEF_LEGACY = 2
 
+    if TYPE_CHECKING:
+        # At runtime ``endian`` is a plain attribute that ``__setattr__`` normalizes, so reading it stays fast.
+        # Type checkers see a property, so that setting accepts every allowed value and reading gives the
+        # normalized one.
+        @property
+        def endian(self) -> Endianness: ...
+
+        @endian.setter
+        def endian(self, value: AllowedEndianness) -> None: ...
+
     def __init__(self, load: str = "", *, endian: AllowedEndianness = "<", pointer: str | None = None):
-        self.endian = normalize_endianness(endian)
+        self.endian = endian
 
         self.consts: dict[str, int | str | bytes] = {}
         self.types: dict[str, type[BaseType]] = {}
@@ -260,13 +270,10 @@ class cstruct:
 
         return cs
 
-    # Normalize ``endian`` when it's set, so ``cs.endian = "big"`` works like the ``endian`` argument.
-    # This is done in __setattr__ because ``cs.endian`` is read on every parse, and this keeps reading it as fast as
-    # a plain attribute:
-    # - A property calls its getter on every read, which made parsing a uint32 ~20% slower.
-    # - A descriptor with only __set__ disables CPython's fast path for instance attributes, ~4% slower.
-    # - __setattr__ only runs when an attribute is set, which happens while loading definitions, not while parsing.
     def __setattr__(self, name: str, value: Any) -> None:
+        # Normalize ``endian`` when it's set, so ``cs.endian = "big"`` works like the ``endian`` argument.
+        # This is done in __setattr__ because ``cs.endian`` is read on every parse, so this keeps reading fast.
+        # All alternatives cause slowdowns when reading (property, descriptor)
         if name == "endian":
             value = normalize_endianness(value)
         super().__setattr__(name, value)
