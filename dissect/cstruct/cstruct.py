@@ -260,6 +260,12 @@ class cstruct:
 
         return cs
 
+    # Normalize ``endian`` when it's set, so ``cs.endian = "big"`` works like the ``endian`` argument.
+    # This is done in __setattr__ because ``cs.endian`` is read on every parse, and this keeps reading it as fast as
+    # a plain attribute:
+    # - A property calls its getter on every read, which made parsing a uint32 ~20% slower.
+    # - A descriptor with only __set__ disables CPython's fast path for instance attributes, ~4% slower.
+    # - __setattr__ only runs when an attribute is set, which happens while loading definitions, not while parsing.
     def __setattr__(self, name: str, value: Any) -> None:
         if name == "endian":
             value = normalize_endianness(value)
