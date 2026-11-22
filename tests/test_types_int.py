@@ -104,7 +104,7 @@ def test_int_array_read_write(
     result = int_type[count](buf)
     assert result == values
     assert [type(value) for value in result] == [int_type] * len(values)
-    assert bytes(int_type[count](values)) == buf
+    assert int_type[count].dumps(values) == buf
 
 
 def test_int_eof(cs: cstruct) -> None:

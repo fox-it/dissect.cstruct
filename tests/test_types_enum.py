@@ -70,9 +70,9 @@ def test_enum_array_read(TestEnum: type[Enum]) -> None:
 
 def test_enum_array_write(TestEnum: type[Enum]) -> None:
     assert bytes(TestEnum[2]([TestEnum.B, TestEnum.C])) == b"\x02\x03"
-    assert bytes(TestEnum[None]([TestEnum.B, TestEnum.C])) == b"\x02\x03\x00"
+    assert TestEnum[None].dumps([TestEnum.B, TestEnum.C]) == b"\x02\x03\x00"
     assert bytes(TestEnum[2]([2, 3])) == b"\x02\x03"
-    assert bytes(TestEnum[None]([2, 3])) == b"\x02\x03\x00"
+    assert TestEnum[None].dumps([2, 3]) == b"\x02\x03\x00"
 
 
 def test_enum_alias(cs: cstruct) -> None:

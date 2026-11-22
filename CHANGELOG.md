@@ -45,7 +45,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Errors that `load` raises include the line of the definition.
   - `ArraySizeError` is removed. A value that is longer than its static array raises a `WriteError`.
   - `write()` raises a `TypeError` for an object that can't be written to, like `read()` does.
-- `bytes(obj)` works on instances of all types. For a null terminated `char` array it gives the content of the array without the null terminator, because the array is itself a `bytes` object. Use `cls.dumps(obj)` to include the null terminator.
+- `bytes(obj)` works on instances of all types. It gives the byte representation of the value.
+  - For null-terminated arrays, it does not include the null terminator. Use `cls.dumps(obj)` to include the null terminator.
+- `char` and `char` arrays no longer accept a string, when they're created or written. Encode the string to bytes first.
+- Creating a `char`, a `wchar` or an array from a value instead of from data:
+  - An int creates a `char` with that byte, e.g. `cs.char(0x41)` is `b"A"`.
+  - Arrays of all types with a fixed number of entries add default entries to a value with fewer entries, e.g. `cs.char[4]([0x41])` is `b"A\x00\x00\x00"`, `cs.wchar[4]("A")` is `"A\x00\x00\x00"` and `cs.uint8[4]([1])` and `cs.uleb128[4]([1])` are `[1, 0, 0, 0]`.
+  - A value with more entries than the array, or more than one character for a `char` or `wchar`, raises a `ValueError`.
+  - Without a value, the result is the default value, e.g. `cs.char()` is `b"\x00"` and `cs.uint8[4]()` is `[0, 0, 0, 0]`.
+  - `TypeError` is raised for unsupported values.
   - For integer types, `bytearray(obj)` gives as many zero bytes as its value, e.g. `bytearray(cs.uint32(5))` gives 5 zero bytes. Use `bytearray(bytes(obj))` instead.
 - On Python 3.12 and newer, instances of all types support the buffer protocol, so that e.g. `fh.write(obj)` works.
 
@@ -71,6 +79,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - An `Expression` is parsed when it's created. An invalid array size that refers to a field, e.g. `char a[n +]`, raises a `ParserError` during `load`, instead of an `ExpressionParserError` on every read.
 - `offsetof` gives the offsets of C for the fields of a union and the fields of an anonymous nested structure or union, instead of an error or the offset in the nested type.
 - An empty expression raises "not enough operands" instead of "too many operands".
+- Writing an array with a fixed number of entries of a dynamic size, e.g. `uleb128 a[4]` or an array of structures with a dynamic size, pads it to its number of entries or raises a `WriteError` if it's too long, instead of writing as many entries as the value has.
 
 ## [4.5] - 20-05-2025
 

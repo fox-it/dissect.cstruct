@@ -71,8 +71,9 @@ def test_wchar_array_write(cs: cstruct, endian: str, buf: bytes) -> None:
 
     assert bytes(cs.wchar[4](buf)) == buf[:-2]
     assert bytes(cs.wchar[4]("AAAA")) == buf[:-2]
-    assert bytes(cs.wchar[None](buf)) == buf
-    assert bytes(cs.wchar[None]("AAAA")) == buf
+    assert bytes(cs.wchar[None](buf)) == buf[:-2]
+    assert bytes(cs.wchar[None]("AAAA")) == buf[:-2]
+    assert cs.wchar[None].dumps(cs.wchar[None](buf)) == buf
 
 
 def test_wchar_array_write_padding(cs: cstruct) -> None:
@@ -119,13 +120,45 @@ def test_wchar_eof(cs: cstruct) -> None:
     assert cs.wchar[0](b"") == ""
 
 
-def test_wchar_int(cs: cstruct) -> None:
-    """Test that a ``wchar`` and ``wchar`` array can't be created from an int, like they can't be written from one."""
-    with pytest.raises(TypeError, match=r"^Cannot create wchar from an int$"):
+def test_wchar_value(cs: cstruct) -> None:
+    """Test that a ``wchar`` and ``wchar`` array behave as expected when given sensible values."""
+    assert cs.wchar() == "\x00"
+    assert cs.wchar("") == "\x00"
+    assert cs.wchar[4]("ab") == "ab\x00\x00"
+    assert cs.wchar[4]("äö") == "äö\x00\x00"
+    assert cs.wchar[4]() == "\x00\x00\x00\x00"
+    assert cs.wchar[None]("ab") == "ab"
+    assert cs.wchar[None]() == ""
+
+    # Values of other cstruct types, which are subclasses of str
+    assert cs.wchar[2](cs.wchar[2]("ab")) == "ab"
+    assert cs.wchar[4](cs.wchar("a")) == "a\x00\x00\x00"
+
+    # A surrogate pair is a single character that takes up two entries
+    assert cs.wchar[4]("a\U0001f600") == "a\U0001f600\x00"
+    assert cs.wchar[2]("\U0001f600") == "\U0001f600"
+
+    with pytest.raises(ValueError, match=r"^Expected a single character, got 2 instead\.$"):
+        cs.wchar("xy")
+
+    with pytest.raises(ValueError, match=r"^Expected a single character, got 2 instead\.$"):
+        cs.wchar("\U0001f600")
+
+    with pytest.raises(ValueError, match=r"^Expected static array size 4, got 5 instead\.$"):
+        cs.wchar[4]("abcde")
+
+    with pytest.raises(ValueError, match=r"^Expected static array size 2, got 3 instead\.$"):
+        cs.wchar[2]("a\U0001f600")
+
+    # Other values aren't converted with str(), which would give e.g. the digits of an int
+    with pytest.raises(TypeError, match=r"^Cannot create wchar from int$"):
         cs.wchar(65)
 
-    with pytest.raises(TypeError, match=r"^Cannot create wchar\[4\] from an int$"):
+    with pytest.raises(TypeError, match=r"^Cannot create wchar\[4\] from int$"):
         cs.wchar[4](65)
+
+    with pytest.raises(TypeError, match=r"^Cannot create wchar\[\] from list$"):
+        cs.wchar[None]([65, 66])
 
 
 def test_wchar_default(cs: cstruct) -> None:

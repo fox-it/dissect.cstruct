@@ -235,6 +235,8 @@ def _or_default(value: Any, type_: type[BaseType]) -> Any:
 # Globals that are available to all generated functions
 _GLOBALS = {
     "_type_call": type.__call__,
+    "_bytes_new": bytes.__new__,
+    "_str_new": str.__new__,
     "_object_new": object.__new__,
     "_setattr": setattr,
     "_repeat": repeat,
@@ -571,7 +573,16 @@ class _ReadSourceGenerator(_SourceGenerator):
         lines.append("except _Error: raise")
         lines.append(f"except (ArithmeticError, ValueError) as e: raise _ReadError({message!r} + str(e)) from e")
         element = self._type_symbol(field.type.__type__)
-        return f"_type_call({type_}, {element}._read_array(stream, _count, context={context}, endian=endian))"
+        entries = f"{element}._read_array(stream, _count, context={context}, endian=endian)"
+
+        # Create char and wchar arrays without the checks of their constructor
+        if issubclass(field.type, CharArray):
+            return f"_bytes_new({type_}, {entries})"
+
+        if issubclass(field.type, WcharArray):
+            return f"_str_new({type_}, {entries})"
+
+        return f"_type_call({type_}, {entries})"
 
     def _generate_bits_source(self, field: Field) -> Iterator[str]:
         """Generate the code for reading a bit field."""
@@ -747,14 +758,14 @@ class _ReadSourceGenerator(_SourceGenerator):
 
             lines.extend(target(field, f"_type_call({array}, {value})"))
 
-        elif issubclass(field_type, CharArray):
-            lines.extend(target(field, f"_type_call({self._type_symbol(field.type)}, {getter})"))
+        elif issubclass(field_type, (Char, CharArray)):
+            lines.extend(target(field, f"_bytes_new({self._type_symbol(field.type)}, {getter})"))
 
         elif issubclass(field_type, WcharArray) or issubclass(read_type, Wchar):
             encoding = self._add_symbol(read_type.__encoding_map__, "encoding")
-            # Using str() instead of .decode() also supports other bytes-like objects returned by the stream
+            # Decoding like str() instead of .decode() also supports other bytes-like objects returned by the stream
             type_ = self._type_symbol(field.type)
-            lines.extend(target(field, f"_type_call({type_}, str({getter}, {encoding}[endian], 'surrogatepass'))"))
+            lines.extend(target(field, f"_str_new({type_}, {getter}, {encoding}[endian], 'surrogatepass')"))
 
         elif issubclass(field_type, Pointer):
             context = self._context(lines)

@@ -54,7 +54,7 @@ def test_flag_array_read(TestFlag: type[Flag]) -> None:
 
 def test_flag_array_write(TestFlag: type[Flag]) -> None:
     assert bytes(TestFlag[2]([TestFlag.B, TestFlag.A])) == b"\x02\x01"
-    assert bytes(TestFlag[None]([TestFlag.B, TestFlag.A])) == b"\x02\x01\x00"
+    assert TestFlag[None].dumps([TestFlag.B, TestFlag.A]) == b"\x02\x01\x00"
 
 
 def test_flag_operator(TestFlag: type[Flag]) -> None:

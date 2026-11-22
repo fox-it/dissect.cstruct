@@ -67,7 +67,7 @@ def test_packed_array_read_write(
     packed_type = cs.resolve(type_name)
 
     assert packed_type[count](buf) == values
-    assert bytes(packed_type[count](values)) == buf
+    assert packed_type[count].dumps(values) == buf
 
 
 def test_packed_eof(cs: cstruct) -> None:

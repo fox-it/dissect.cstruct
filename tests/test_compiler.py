@@ -172,10 +172,10 @@ def test_generate_packed_read_byte_types(cs: cstruct) -> None:
     expected = """
     buf = stream.read(18)
     if len(buf) != 18: raise _EOFError(f"Read {len(buf)} bytes, but expected 18")
-    _value0 = _type_call(_type0, buf[0:1])
-    _value1 = _type_call(_type1, buf[1:3])
-    _value2 = _type_call(_type2, str(buf[3:5], _encoding0[endian], 'surrogatepass'))
-    _value3 = _type_call(_type3, str(buf[5:9], _encoding0[endian], 'surrogatepass'))
+    _value0 = _bytes_new(_type0, buf[0:1])
+    _value1 = _bytes_new(_type1, buf[1:3])
+    _value2 = _str_new(_type2, buf[3:5], _encoding0[endian], 'surrogatepass')
+    _value3 = _str_new(_type3, buf[5:9], _encoding0[endian], 'surrogatepass')
     _value4 = _type_call(_type4, _int_from_bytes(buf[9:12], _byteorder[endian], signed=True))
     _array_buf = buf[12:18]
     """
@@ -341,7 +341,7 @@ def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, oth
     except _Error: raise
     except (ArithmeticError, ValueError) as e: raise _ReadError("Invalid array size 'size': " + str(e)) from e
     _offset = stream.tell()
-    _value3 = values['c'] = _type_call(_type4, _type5._read_array(stream, _count, context=values, endian=endian))
+    _value3 = values['c'] = _bytes_new(_type4, _type5._read_array(stream, _count, context=values, endian=endian))
     sizes['c'] = stream.tell() - _offset
     """
 
@@ -388,7 +388,7 @@ def test_generate_fields_dynamic_before_bitfield(cs: cstruct, TestEnum: Enum, ot
     except _Error: raise
     except (ArithmeticError, ValueError) as e: raise _ReadError("Invalid array size 'size': " + str(e)) from e
     _offset = stream.tell()
-    _value3 = values['c'] = _type_call(_type4, _type5._read_array(stream, _count, context=values, endian=endian))
+    _value3 = values['c'] = _bytes_new(_type4, _type5._read_array(stream, _count, context=values, endian=endian))
     sizes['c'] = stream.tell() - _offset
     """
 
@@ -425,9 +425,9 @@ def test_compiled_dynamic_array_sizes() -> None:
     lines = source_lines(compiled.test)
     assert [line for line in lines if line.startswith("try: _count = ") or "._read" in line] == [
         "try: _count = max(0, int(_value0))",
-        "_value3 = values['a'] = _type_call(_type3, _type4._read_array(stream, _count, context=values, endian=endian))",
+        "_value3 = values['a'] = _bytes_new(_type3, _type4._read_array(stream, _count, context=values, endian=endian))",
         "try: _count = max(0, (int(_value0) - _identifier(cs, values, 'HDR')))",
-        "_value4 = values['b'] = _type_call(_type5, _type6._read_array(stream, _count, context=values, endian=endian))",
+        "_value4 = values['b'] = _str_new(_type5, _type6._read_array(stream, _count, context=values, endian=endian))",
         "try: _count = max(0, (int(_value1) * 2))",
         "_value5 = values['c'] = _type_call(_type7, _type8._read_array(stream, _count, context=values, endian=endian))",
         "try: _count = max(0, _identifier(cs, values, 'hdr.size'))",

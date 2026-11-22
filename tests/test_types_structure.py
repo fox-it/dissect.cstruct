@@ -5,7 +5,7 @@ import json
 from io import BytesIO
 from textwrap import dedent
 from types import MethodType
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -117,7 +117,7 @@ def test_structure_array_write(TestStruct: type[Structure]) -> None:
     assert bytes(obj) == b"\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x04\x00\x00\x00"
 
     obj = TestStruct[None]([TestStruct(1, 2)])
-    assert bytes(obj) == b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    assert TestStruct[None].dumps(obj) == b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 
 
 def test_structure_modify(cs: cstruct) -> None:
@@ -609,7 +609,7 @@ def test_structure_definition_write(cs: cstruct, compiled: bool) -> None:
     buf = b"testt\x00e\x00s\x00t\x00\x01\x02\x03\x04\x05\x06\x07lalala\x00t\x00e\x00s\x00t\x00\x00\x00"
 
     obj = cs.test()
-    obj.magic = "test"
+    obj.magic = b"test"
     obj.wmagic = "test"
     obj.a = 0x01
     obj.b = 0x0302
@@ -654,7 +654,7 @@ def test_structure_definition_write_be(cs: cstruct, compiled: bool) -> None:
     buf = b"test\x00t\x00e\x00s\x00t\x01\x02\x03\x04\x05\x06\x07lalala\x00\x00t\x00e\x00s\x00t\x00\x00"
 
     obj = cs.test()
-    obj.magic = "test"
+    obj.magic = b"test"
     obj.wmagic = "test"
     obj.a = 0x01
     obj.b = 0x0203
@@ -701,11 +701,11 @@ def test_structure_field_discard(cs: cstruct, compiled: bool) -> None:
 
     assert verify_compiled(cs.test, compiled)
 
-    with patch.object(cs.char, "__new__") as mock_char_new:
-        cs.test(b"\x01\x02\x03\x00\x04\x00\x05\x00ab")
-
-        assert len(mock_char_new.mock_calls) == 2
-        mock_char_new.assert_has_calls([call(cs.char, b"a"), call(cs.char, b"b")])
+    # The discarded fields are read too, so that the fields after them are read from the right offset
+    fh = BytesIO(b"\x01\x02\x03\x00\x04\x00\x05\x00abrest")
+    obj = cs.test(fh)
+    assert (obj.a, obj.b, obj.c, obj.d) == (1, 3, 5, b"a")
+    assert fh.tell() == 10
 
 
 def test_structure_field_duplicate(cs: cstruct) -> None:

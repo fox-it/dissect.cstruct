@@ -163,7 +163,7 @@ def test_union_array_write(TestUnion: type[Union]) -> None:
     assert bytes(obj) == b"\x01\x00\x00\x00\x02\x00\x00\x00"
 
     obj = TestUnion[None]([TestUnion(1)])
-    assert bytes(obj) == b"\x01\x00\x00\x00\x00\x00\x00\x00"
+    assert TestUnion[None].dumps(obj) == b"\x01\x00\x00\x00\x00\x00\x00\x00"
 
 
 def test_union_modify(cs: cstruct) -> None:

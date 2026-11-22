@@ -24,16 +24,33 @@ def test_char_write(cs: cstruct) -> None:
 
 
 def test_char_value(cs: cstruct) -> None:
-    """Test that a ``char`` and ``char`` array are created from the same values that writing accepts."""
+    """Test that a ``char`` and ``char`` array behave as expected when given sensible values."""
     assert cs.char(0x78) == b"x"
-    assert cs.char("x") == b"x"
-    assert cs.char[4]("ab") == b"ab"
-    assert cs.char[None]("ab") == b"ab"
+    assert cs.char() == b"\x00"
+    assert cs.char[4]([97, 98]) == b"ab\x00\x00"
+    assert cs.char[4]() == b"\x00\x00\x00\x00"
+    assert cs.char[None]([97, 98]) == b"ab"
 
-    with pytest.raises(TypeError, match=r"^Cannot create char\[4\] from an int$"):
+    # Values of other cstruct types, which are subclasses of int and list
+    assert cs.char(cs.uint8(0x78)) == b"x"
+    assert cs.char[2](cs.uint8[2]([97, 98])) == b"ab"
+    assert cs.char[4](cs.uint8[2]([97, 98])) == b"ab\x00\x00"
+
+    with pytest.raises(ValueError, match=r"^Expected a single character, got 2 instead\.$"):
+        cs.char([120, 121])
+
+    with pytest.raises(ValueError, match=r"^Expected static array size 4, got 5 instead\.$"):
+        cs.char[4]([97, 98, 99, 100, 101])
+
+    # Strings aren't converted, they must be encoded to bytes first
+    for type_ in (cs.char, cs.char[4], cs.char[None]):
+        with pytest.raises(TypeError, match=rf"^Cannot create {re.escape(type_.__name__)} from str$"):
+            type_("ab")
+
+    with pytest.raises(TypeError, match=r"^Cannot create char\[4\] from int$"):
         cs.char[4](3)
 
-    with pytest.raises(TypeError, match=r"^Cannot create char\[\] from an int$"):
+    with pytest.raises(TypeError, match=r"^Cannot create char\[\] from int$"):
         cs.char[None](3)
 
 
@@ -42,9 +59,13 @@ def test_char_array(cs: cstruct) -> None:
 
     assert cs.char[4](buf) == b"AAAA"
     assert cs.char[4](io.BytesIO(buf)) == b"AAAA"
+    assert cs.char[4](buf[:4], endian=">") == b"AAAA"
 
     assert cs.char[None](buf) == b"AAAA"
     assert cs.char[None](io.BytesIO(buf)) == b"AAAA"
+
+    # An instance of the type is copied, not parsed
+    assert cs.char[None](cs.char[None](buf)) == b"AAAA"
 
 
 def test_char_array_write(cs: cstruct) -> None:
@@ -57,7 +78,7 @@ def test_char_array_write(cs: cstruct) -> None:
 
 def test_char_array_write_padding(cs: cstruct) -> None:
     buf = io.BytesIO()
-    cs.char[8]._write(buf, "hi", endian=cs.endian)
+    cs.char[8]._write(buf, b"hi", endian=cs.endian)
     assert buf.getvalue() == b"hi\x00\x00\x00\x00\x00\x00"
 
     cdef = """
@@ -71,8 +92,8 @@ def test_char_array_write_padding(cs: cstruct) -> None:
 
     obj = cs.test_struct()
     obj.x = 4
-    obj.y = "hi"
-    obj.z = "bye"
+    obj.y = b"hi"
+    obj.z = b"bye"
 
     assert len(bytes(obj)) == len(cs.test_struct)
     assert (
@@ -153,20 +174,13 @@ def test_char_write_too_long(cs: cstruct, compiled: bool) -> None:
     cs.load(cdef, compiled=compiled)
 
     assert cs.char.dumps(b"x") == b"x"
-    assert cs.char.dumps("x") == b"x"
     assert cs.char.dumps(0x78) == b"x"
 
     with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
         cs.char.dumps(b"xy")
 
     with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
-        cs.char.dumps("xy")
-
-    with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
         bytes(cs.test(a=1, b=b"xy", c=2))
-
-    with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
-        bytes(cs.test(a=1, b="xy", c=2))
 
 
 def test_char_write_too_short(cs: cstruct, compiled: bool) -> None:
@@ -199,9 +213,12 @@ def test_char_struct_write(cs: cstruct, compiled: bool) -> None:
     assert bytes(cs.test(a=1, b=b"x", c=2)) == b"\x01x\x02"
     assert bytes(cs.test(a=1, b=bytearray(b"x"), c=2)) == b"\x01x\x02"
 
-    # Integers and strings are converted
+    # Integers are converted
     assert bytes(cs.test(a=1, b=0x78, c=2)) == b"\x01x\x02"
-    assert bytes(cs.test(a=1, b="x", c=2)) == b"\x01x\x02"
+
+    # Strings aren't converted, they must be encoded to bytes first
+    with pytest.raises(WriteError):
+        bytes(cs.test(a=1, b="x", c=2))
 
 
 def test_char_array_struct_write(cs: cstruct, compiled: bool) -> None:
@@ -222,7 +239,6 @@ def test_char_array_struct_write(cs: cstruct, compiled: bool) -> None:
     assert bytes(cs.test(a=1, b=b"abcd", c=2)) == buf
     assert bytes(cs.test(a=1, b=bytearray(b"abcd"), c=2)) == buf
     assert bytes(cs.test(a=1, b=memoryview(b"abcd"), c=2)) == buf
-    assert bytes(cs.test(a=1, b="abcd", c=2)) == buf
     assert bytes(cs.test(a=1, b=[97, 98, 99, 100], c=2)) == buf
 
     # Shorter values are padded
@@ -237,3 +253,8 @@ def test_char_array_struct_write(cs: cstruct, compiled: bool) -> None:
 
     with pytest.raises(WriteError, match="Expected static array size 0, got 1 instead"):
         bytes(cs.test(a=1, b=b"abcd", c=2, d=b"e"))
+
+    # Strings aren't converted, they must be encoded to bytes first
+    for value in ("abcd", "a"):
+        with pytest.raises(WriteError):
+            bytes(cs.test(a=1, b=value, c=2))

@@ -18,9 +18,46 @@ if TYPE_CHECKING:
 
 def test_array_size_mismatch(cs: cstruct) -> None:
     with pytest.raises(WriteError):
-        bytes(cs.uint8[2]([1, 2, 3]))
+        cs.uint8[2].dumps([1, 2, 3])
 
     assert bytes(cs.uint8[2]([1, 2])) == b"\x01\x02"
+
+
+def test_array_value(cs: cstruct) -> None:
+    """Test that an array can be created from sensible values."""
+    cdef = """
+    struct point {
+        uint8 x;
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.uint8[4]([1, 2]) == [1, 2, 0, 0]
+    assert cs.uint8[4]((1, 2)) == [1, 2, 0, 0]
+    assert cs.uint8[4](x for x in (1, 2)) == [1, 2, 0, 0]
+    assert cs.uint8[4]() == [0, 0, 0, 0]
+    assert cs.uint8[None]([1, 2]) == [1, 2]
+    assert cs.uint8[None]() == []
+    assert cs.uleb128[4]([1, 2]) == [1, 2, 0, 0]
+
+    # Values of other cstruct types, which are subclasses of list
+    assert cs.uint8[2](cs.uint8[2]([1, 2])) == [1, 2]
+    assert cs.uint8[4](cs.uint8[2]([1, 2])) == [1, 2, 0, 0]
+
+    # Every entry of the padding is a new structure
+    points = cs.point[3]([cs.point(x=1)])
+    assert [point.x for point in points] == [1, 0, 0]
+    assert points[1] is not points[2]
+
+    with pytest.raises(ValueError, match=r"^Expected static array size 4, got 5 instead\.$"):
+        cs.uint8[4]([1, 2, 3, 4, 5])
+
+    # Not converted with list()
+    with pytest.raises(TypeError, match=r"^Cannot create uint8\[4\] from int$"):
+        cs.uint8[4](3)
+
+    with pytest.raises(TypeError, match=r"^Cannot create uint8\[\] from str$"):
+        cs.uint8[None]("ab")
 
 
 def test_array_write_padding(cs: cstruct) -> None:
@@ -39,6 +76,56 @@ def test_array_write_padding(cs: cstruct) -> None:
     buf = io.BytesIO()
     cs.point[4]._write(buf, [cs.point(x=1, y=2)], endian=cs.endian)
     assert buf.getvalue() == b"\x01\x02" + b"\x00\x00" * 3
+
+
+def test_array_write_padding_dynamic_entries(cs: cstruct, compiled: bool) -> None:
+    """Test that an array of entries with a dynamic size is padded to its number of entries."""
+    cdef = """
+    struct entry {
+        uint8   length;
+        char    data[length];
+    };
+
+    struct test {
+        uleb128 a[3];
+        entry   b[2];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert cs.uleb128[3].dumps([1]) == b"\x01\x00\x00"
+
+    with pytest.raises(WriteError, match=r"^Expected static array size 3, got 4 instead\.$"):
+        cs.uleb128[3].dumps([1, 2, 3, 4])
+
+    buf = bytes(cs.test(a=[1], b=[cs.entry(length=1, data=b"x")]))
+    assert buf == b"\x01\x00\x00\x01x\x00"
+
+    obj = cs.test(buf)
+    assert obj.a == [1, 0, 0]
+    assert [entry.data for entry in obj.b] == [b"x", b""]
+
+    with pytest.raises(WriteError, match=r"^Expected static array size 2, got 3 instead\.$"):
+        bytes(cs.test(a=[1], b=[cs.entry(), cs.entry(), cs.entry()]))
+
+
+def test_array_bytes_null_terminated(cs: cstruct) -> None:
+    """Test that ``bytes(obj)`` leaves out the null terminator of an array."""
+    cdef = """
+    struct point {
+        uint8 x;
+        uint8 y;
+    };
+    """
+    cs.load(cdef)
+
+    values = cs.uint16[None]([1, 2])
+    assert bytes(values) == b"\x01\x00\x02\x00"
+    assert cs.uint16[None].dumps(values) == b"\x01\x00\x02\x00\x00\x00"
+
+    points = cs.point[None]([cs.point(x=1, y=2)])
+    assert bytes(points) == b"\x01\x02"
+    assert cs.point[None].dumps(points) == b"\x01\x02\x00\x00"
 
 
 def test_array_large_count(cs: cstruct, compiled: bool) -> None:
@@ -352,6 +439,8 @@ def test_bytes_like_subclasses(cs: cstruct, factory: type) -> None:
         assert method(cs.uint32, factory(data)) == 0x04030201
         assert method(cs.uint24, factory(data)) == 0x030201
         assert method(cs.uint16[2], factory(data)) == [0x0201, 0x0403]
+        assert method(cs.char[4], factory(data)) == b"\x01\x02\x03\x04"
+        assert method(cs.wchar[2], factory(data)) == "\u0201\u0403"
         assert method(cs.test, factory(data)).c == 0x08070605
 
 
@@ -444,6 +533,9 @@ def test_buffer(cs: cstruct) -> None:
     assert memoryview(cs.uint16[2]([1, 2])).tobytes() == b"\x01\x00\x02\x00"
     assert memoryview(cs.Test.A).tobytes() == b"\x01\x00"
     assert memoryview(cs.char[None](b"ab\x00")).tobytes() == b"ab"
+    assert memoryview(cs.char[4]([97, 98])).tobytes() == b"ab\x00\x00"
+    assert memoryview(cs.wchar[None]("ab")).tobytes() == b"a\x00b\x00"
+    assert memoryview(cs.uint16[None]([1, 2])).tobytes() == b"\x01\x00\x02\x00"
 
     fh = io.BytesIO()
     assert fh.write(cs.test(a=1, b=b"ab")) == 4
