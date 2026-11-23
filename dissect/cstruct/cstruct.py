@@ -60,7 +60,7 @@ class cstruct:
     DEF_LEGACY = 2
 
     def __init__(self, load: str = "", *, endian: AllowedEndianness = "<", pointer: str | None = None):
-        self.endian = normalize_endianness(endian)
+        self.endian = endian
 
         self.consts: dict[str, int | str | bytes] = {}
         self.types: dict[str, type[BaseType]] = {}
@@ -259,6 +259,17 @@ class cstruct:
             cs.add_const(name, value)
 
         return cs
+
+    # Hidden from type checkers, which otherwise accept assigning any attribute, e.g. a misspelled one
+    if not TYPE_CHECKING:
+
+        def __setattr__(self, name: str, value: Any) -> None:
+            # Normalize ``endian`` when it's set, so ``cs.endian = "big"`` works like the ``endian`` argument.
+            # This is done in __setattr__ because ``cs.endian`` is read on every parse, so this keeps reading fast.
+            # All alternatives cause slowdowns when reading (property, descriptor)
+            if name == "endian":
+                value = normalize_endianness(value)
+            super().__setattr__(name, value)
 
     def _next_anonymous(self) -> str:
         name = f"__anonymous_{self._anonymous_count}__"
@@ -621,6 +632,15 @@ class cstruct:
         # ruff: noqa: PYI042
         _int = int
         _float = float
+
+        # At runtime ``endian`` is a plain attribute that ``__setattr__`` normalizes, so reading it stays fast.
+        # Type checkers see a property, so that setting accepts every allowed value and reading gives the
+        # normalized one.
+        @property
+        def endian(self) -> Endianness: ...
+
+        @endian.setter
+        def endian(self, value: AllowedEndianness) -> None: ...
 
         class int8(_int, Packed[_int]): ...
 

@@ -721,6 +721,36 @@ def test_endianness(cs: cstruct) -> None:
         assert little_endian_cs.uint32(b"\x01\x00\x00\x00") == 1
 
 
+@pytest.mark.parametrize(
+    ("endian", "expected"),
+    [
+        ("<", "<"),
+        (">", ">"),
+        ("little", "<"),
+        ("big", ">"),
+        ("network", "!"),
+    ],
+)
+def test_endian_attribute(cs: cstruct, endian: str, expected: str) -> None:
+    """Test that setting the endian attribute accepts the same values as the endian argument."""
+    cs.load("struct test { uint16 a; };")
+
+    cs.endian = endian
+    assert cs.endian == expected
+
+    value = 1 if expected in (">", "!") else 0x100
+    assert cs.uint16(b"\x00\x01") == value
+    assert cs.test(b"\x00\x01").a == value
+
+
+def test_endian_attribute_invalid(cs: cstruct) -> None:
+    """Test that setting an invalid endianness raises immediately and keeps the current endianness."""
+    with pytest.raises(ValueError, match="Invalid endianness: 'middle'"):
+        cs.endian = "middle"
+
+    assert cs.endian == "<"
+
+
 def test_deprecation_warnings(cs: cstruct) -> None:
     cdef = """
     struct test {
