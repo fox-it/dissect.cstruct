@@ -13,7 +13,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `sizeof` and `offsetof` in expressions accept a type name like the type of a field, e.g. `sizeof(struct header *[4])`. An argument that isn't a type name raises an `ExpressionParserError` when the expression is created.
 - `copy()` method (and `copy.copy()`) to copy a `cstruct` instance with its types, constants and settings. Changes to the copy, such as new definitions or a different endianness, don't affect the original. Enums and flags of a copy are separate classes, so their members don't compare equal to those of the original. Compare against the copied enum, or with the value instead: `c2.Color.RED == cs.Color.RED.value`.
 
-
 ### Changed
 
 - Optimize storage of field sizes.
