@@ -59,16 +59,6 @@ class cstruct:
     DEF_CSTYLE = 1
     DEF_LEGACY = 2
 
-    if TYPE_CHECKING:
-        # At runtime ``endian`` is a plain attribute that ``__setattr__`` normalizes, so reading it stays fast.
-        # Type checkers see a property, so that setting accepts every allowed value and reading gives the
-        # normalized one.
-        @property
-        def endian(self) -> Endianness: ...
-
-        @endian.setter
-        def endian(self, value: AllowedEndianness) -> None: ...
-
     def __init__(self, load: str = "", *, endian: AllowedEndianness = "<", pointer: str | None = None):
         self.endian = endian
 
@@ -639,6 +629,15 @@ class cstruct:
         # ruff: noqa: PYI042
         _int = int
         _float = float
+
+        # At runtime ``endian`` is a plain attribute that ``__setattr__`` normalizes, so reading it stays fast.
+        # Type checkers see a property, so that setting accepts every allowed value and reading gives the
+        # normalized one.
+        @property
+        def endian(self) -> Endianness: ...
+
+        @endian.setter
+        def endian(self, value: AllowedEndianness) -> None: ...
 
         class int8(_int, Packed[_int]): ...
 
