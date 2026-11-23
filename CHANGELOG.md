@@ -47,6 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `write()` raises a `TypeError` for an object that can't be written to, like `read()` does.
 - `bytes(obj)` works on instances of all types. It gives the byte representation of the value.
   - For null-terminated arrays, it does not include the null terminator. Use `cls.dumps(obj)` to include the null terminator.
+  - For integer types, `bytearray(obj)` gives as many zero bytes as its value, e.g. `bytearray(cs.uint32(5))` gives 5 zero bytes. Use `bytearray(bytes(obj))` instead.
 - `char` and `char` arrays no longer accept a string, when they're created or written. Encode the string to bytes first.
 - Creating a `char`, a `wchar` or an array from a value instead of from data:
   - An int creates a `char` with that byte, e.g. `cs.char(0x41)` is `b"A"`.
