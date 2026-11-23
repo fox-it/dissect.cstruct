@@ -634,6 +634,10 @@ def test_copy(cs: cstruct, compiled: bool) -> None:
     assert cs_copy.Color.__type__ is cs_copy.uint16
     assert cs_copy.pointer is cs_copy.uint16
 
+    # Enum classes are copied and no longer compare against the original
+    assert cs_copy.Color.RED != cs.Color.RED
+    assert cs.Color.RED.value == cs_copy.Color.RED
+
     cs_copy.endian = ">"
     assert cs.uint16(b"\x01\x00") == 1
     assert cs.test(b"\x01\x00\x00\x00").a == 1
@@ -641,7 +645,34 @@ def test_copy(cs: cstruct, compiled: bool) -> None:
 
     obj = cs_copy.node(b"\x00\x01\x00\x02")
     assert obj.color is cs_copy.Color.RED
+    assert obj.color is not cs.Color.RED
     assert obj.next == 2
+
+
+def test_copy_after_use(cs: cstruct) -> None:
+    """Test that copying a cstruct instance works as expected, also after compilation."""
+    cdef = """
+    struct inner {
+        uint16 x;
+    };
+
+    struct outer {
+        inner i;
+    };
+    """
+    cs.load(cdef, compiled=True)
+
+    # Compilation is lazy, so reading once forces a compile
+    cs.outer(b"\x01\x00")
+    assert cs.outer._read.__source__
+
+    cs_copy = cs.copy()
+    cs_copy.endian = ">"
+
+    obj = cs_copy.outer(b"\x00\x01")
+    assert type(obj.i) is cs_copy.inner
+    assert obj.i.x == 1
+    assert cs.outer(b"\x01\x00").i.x == 1
 
 
 def test_cdef(cs: cstruct) -> None:
