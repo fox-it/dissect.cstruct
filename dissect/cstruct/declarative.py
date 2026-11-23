@@ -395,6 +395,10 @@ class _Declarative:
     def __init_subclass__(cls, *, cs: cstruct | None = None, align: bool | None = None, **kwargs):
         super().__init_subclass__(**kwargs)
 
+        if "__fields__" in vars(cls):
+            # Created by cstruct with its fields, e.g. a copy made by cstruct.copy()
+            return
+
         if cs is not None:
             cls.__cs__ = cs
         if align is not None:

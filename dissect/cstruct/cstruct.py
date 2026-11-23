@@ -21,6 +21,7 @@ from dissect.cstruct.types import (
     BaseType,
     Char,
     Enum,
+    Field,
     Flag,
     Int,
     Packed,
@@ -36,10 +37,7 @@ if TYPE_CHECKING:
     from collections.abc import Generator, Iterable
     from typing import TypeAlias
 
-    from dissect.cstruct.types import (
-        Array,
-        Field,
-    )
+    from dissect.cstruct.types import Array
 
 
 T = TypeVar("T", bound=BaseType)
@@ -245,20 +243,61 @@ class cstruct:
         raise AttributeError(f"'{type(self).__name__}' object has no attribute {attr!r}")
 
     def __copy__(self) -> cstruct:
-        cs = cstruct(endian=self.endian, pointer=self.pointer.__name__)
+        cs = cstruct(endian=self.endian)
         cs._anonymous_count = self._anonymous_count
         cs.includes = self.includes.copy()
 
-        # Update types to point to the new cstruct instance
+        # Copy the types as new classes, including the unregistered types they refer to
+        copies = {}
         for name, type_ in self.types.items():
-            new_type = copy.copy(type_)
-            new_type.__cs__ = cs
-            cs.add_type(name, new_type, replace=True)
+            cs.add_type(name, cs._copy_type(type_, copies), replace=True)
+        cs.pointer = cs._copy_type(self.pointer, copies)
 
         for name, value in self.consts.items():
             cs.add_const(name, value)
 
         return cs
+
+    def _copy_type(self, type_: type[BaseType], copies: dict[type[BaseType], type[BaseType]]) -> type[BaseType]:
+        if type_ in copies:
+            return copies[type_]
+
+        if issubclass(type_, (Enum, Flag)):
+            # Enum classes with members can't be created from their namespace
+            factory = self._make_flag if issubclass(type_, Flag) else self._make_enum
+            values = {name: member.value for name, member in type_.__members__.items()}
+            copies[type_] = factory(type_.__name__, self._copy_type(type_.__type__, copies), values)
+            return copies[type_]
+
+        # A type is registered before its subclasses, e.g. a declarative structure, so the copy of its base exists
+        bases = tuple(copies.get(base, base) for base in type_.__bases__)
+
+        # The namespace of a class doesn't hold its qualified name, e.g. of a declarative structure in a function
+        attrs = {**vars(type_), "__qualname__": type_.__qualname__}
+
+        # Register the copy before copying the types it refers to, so that a structure can point to itself
+        if issubclass(type_, Structure):
+            attrs["__members__"] = []
+
+        new_type = copies[type_] = self._make_type(
+            type_.__name__,
+            bases,
+            type_.__size__,
+            alignment=type_.__alignment__,
+            attrs=attrs,
+        )
+
+        if issubclass(type_, (BaseArray, Pointer)):
+            new_type.__type__ = self._copy_type(type_.__type__, copies)
+
+        if issubclass(type_, Structure):
+            new_type.__fields__ = [
+                Field(field.name, self._copy_type(field.type, copies), field.bits, field.offset)
+                for field in type_.__fields__
+            ]
+            new_type.commit()
+
+        return new_type
 
     # Hidden from type checkers, which otherwise accept assigning any attribute, e.g. a misspelled one
     if not TYPE_CHECKING:

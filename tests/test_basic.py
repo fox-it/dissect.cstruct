@@ -588,14 +588,24 @@ def test_linked_list(cs: cstruct) -> None:
     assert obj.next.data == 2
 
 
-def test_copy(cs: cstruct) -> None:
+def test_copy(cs: cstruct, compiled: bool) -> None:
     """Test that copying a cstruct instance works as expected."""
     cdef = """
+    enum Color : uint16 {
+        RED = 1
+    };
+
     struct test {
         uint32  a;
     };
+
+    struct node {
+        Color   color;
+        struct node *next;
+    };
     """
-    cs.load(cdef)
+    cs.pointer = cs.uint16
+    cs.load(cdef, compiled=compiled)
 
     cs_copy = cs.copy()
 
@@ -615,6 +625,54 @@ def test_copy(cs: cstruct) -> None:
     # Verify that types in the copied cstruct reference the copied cstruct
     assert cs_copy.resolve("test").__cs__ is cs_copy
     assert cs_copy.resolve("test2").__cs__ is cs_copy
+
+    # Verify that the types are copied, including the types they refer to, and the original is unchanged
+    assert cs.test.__cs__ is cs
+    assert cs_copy.test is not cs.test
+    assert cs_copy.test.__members__["a"].type is cs_copy.uint32
+    assert cs_copy.node.__members__["next"].type.__type__ is cs_copy.node
+    assert cs_copy.Color.__type__ is cs_copy.uint16
+    assert cs_copy.pointer is cs_copy.uint16
+
+    # Enum classes are copied and no longer compare against the original
+    assert cs_copy.Color.RED != cs.Color.RED
+    assert cs.Color.RED.value == cs_copy.Color.RED
+
+    cs_copy.endian = ">"
+    assert cs.uint16(b"\x01\x00") == 1
+    assert cs.test(b"\x01\x00\x00\x00").a == 1
+    assert cs.node(b"\x01\x00\x02\x00").color is cs.Color.RED
+
+    obj = cs_copy.node(b"\x00\x01\x00\x02")
+    assert obj.color is cs_copy.Color.RED
+    assert obj.color is not cs.Color.RED
+    assert obj.next == 2
+
+
+def test_copy_after_use(cs: cstruct) -> None:
+    """Test that copying a cstruct instance works as expected, also after compilation."""
+    cdef = """
+    struct inner {
+        uint16 x;
+    };
+
+    struct outer {
+        inner i;
+    };
+    """
+    cs.load(cdef, compiled=True)
+
+    # Compilation is lazy, so reading once forces a compile
+    cs.outer(b"\x01\x00")
+    assert cs.outer._read.__source__
+
+    cs_copy = cs.copy()
+    cs_copy.endian = ">"
+
+    obj = cs_copy.outer(b"\x00\x01")
+    assert type(obj.i) is cs_copy.inner
+    assert obj.i.x == 1
+    assert cs.outer(b"\x01\x00").i.x == 1
 
 
 def test_cdef(cs: cstruct) -> None:
