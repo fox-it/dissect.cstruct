@@ -44,7 +44,9 @@ def test_char_value(cs: cstruct) -> None:
 
     # Strings aren't converted, they must be encoded to bytes first
     for type_ in (cs.char, cs.char[4], cs.char[None]):
-        with pytest.raises(TypeError, match=rf"^Cannot create {re.escape(type_.__name__)} from str$"):
+        with pytest.raises(
+            TypeError, match=rf"^Cannot create {re.escape(type_.__name__)} from str, encode to bytes first$"
+        ):
             type_("ab")
 
     with pytest.raises(TypeError, match=r"^Cannot create char\[4\] from int$"):

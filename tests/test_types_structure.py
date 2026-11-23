@@ -120,6 +120,40 @@ def test_structure_array_write(TestStruct: type[Structure]) -> None:
     assert TestStruct[None].dumps(obj) == b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 
 
+def test_structure_array_null_terminated(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    struct key {
+        uint8   id;
+        uint32  magic;
+    };
+
+    struct bag {
+        key     keys[];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.bag, compiled)
+
+    # An empty array is only the terminator, an empty key of 5 null bytes
+    assert cs.bag.dumps(cs.bag(keys=[])) == b"\x00" * 5
+
+    keys = [cs.key(id=1, magic=0x11), cs.key(id=2, magic=0x22)]
+    data = b"\x01\x11\x00\x00\x00" + b"\x02\x22\x00\x00\x00"
+
+    obj = cs.bag(keys=keys)
+    assert cs.bag.dumps(obj) == data + b"\x00" * 5
+
+    obj = cs.bag(data + b"\x00" * 5)
+    assert obj.keys == keys
+
+    # Like other null-terminated arrays, bytes() doesn't include the terminator
+    assert bytes(obj.keys) == data
+
+    # Reading stops at the first empty key
+    assert cs.bag(data[:5] + b"\x00" * 5 + data[5:]).keys == keys[:1]
+
+
 def test_structure_modify(cs: cstruct) -> None:
     TestStruct = cs._make_struct("Test", [Field("a", cs.char)])
 

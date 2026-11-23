@@ -78,8 +78,11 @@ class CharArray(bytes, BaseArray, metaclass=CharMetaType):
     """Character array type for reading and writing byte strings."""
 
     def __new__(cls, value: bytes | bytearray | memoryview | Iterable[int]) -> Self:
-        if isinstance(value, (int, str)):
+        if isinstance(value, int):
             raise TypeError(f"Cannot create {cls.__name__} from {type(value).__name__}")
+
+        if isinstance(value, str):
+            raise TypeError(f"Cannot create {cls.__name__} from {type(value).__name__}, encode to bytes first")
 
         result = bytes.__new__(cls, value)
 
@@ -131,7 +134,7 @@ class Char(bytes, BaseType, metaclass=CharMetaType):
             return bytes.__new__(cls, (value,))
 
         if isinstance(value, str):
-            raise TypeError(f"Cannot create {cls.__name__} from {type(value).__name__}")
+            raise TypeError(f"Cannot create {cls.__name__} from {type(value).__name__}, encode to bytes first")
 
         result = bytes.__new__(cls, value)
 
@@ -188,6 +191,9 @@ class Char(bytes, BaseType, metaclass=CharMetaType):
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: bytes | int, *, endian: Endianness) -> int:
+        if isinstance(data, str):
+            raise TypeError(f"Expected bytes, got {type(data).__name__}, encode to bytes first")
+
         if isinstance(data, int):
             data = bytes((data,))
 
