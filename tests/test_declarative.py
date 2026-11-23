@@ -168,6 +168,32 @@ def test_self_referential_pointer_string(cs: cstruct) -> None:
     assert Node.__members__["next"].type.__type__ is Node
 
 
+def test_copy(cs: cstruct) -> None:
+    """Test that a copy of a cstruct instance has copies of its structures, without evaluating the annotations again."""
+
+    class Node(Struct, cs=cs):
+        data: uint32
+        next: pointer["Node"]
+
+        def double(self) -> int:
+            return self.data * 2
+
+    class Extended(Node):
+        flags: uint16
+
+    cs_copy = cs.copy()
+
+    assert cs_copy.Node is not Node
+    assert cs_copy.Node.__qualname__ == "test_copy.<locals>.Node"
+    assert cs_copy.Node.__cs__ is cs_copy
+    assert cs_copy.Node.__members__["next"].type.__type__ is cs_copy.Node
+    assert cs_copy.Node(b"\x02\x00\x00\x00" + b"\x00" * 8).double() == 4
+
+    # A subclass is a subclass of the copy of its parent
+    assert cs_copy.Extended.__bases__ == (cs_copy.Node,)
+    assert Extended.__bases__ == (Node,)
+
+
 def test_self_referential_embed(cs: cstruct) -> None:
     with pytest.raises(DefinitionError, match=r"^Field 'inner' embeds 'Recursive' in itself, use a pointer instead$"):
 
