@@ -260,13 +260,16 @@ class cstruct:
 
         return cs
 
-    def __setattr__(self, name: str, value: Any) -> None:
-        # Normalize ``endian`` when it's set, so ``cs.endian = "big"`` works like the ``endian`` argument.
-        # This is done in __setattr__ because ``cs.endian`` is read on every parse, so this keeps reading fast.
-        # All alternatives cause slowdowns when reading (property, descriptor)
-        if name == "endian":
-            value = normalize_endianness(value)
-        super().__setattr__(name, value)
+    # Hidden from type checkers, which otherwise accept assigning any attribute, e.g. a misspelled one
+    if not TYPE_CHECKING:
+
+        def __setattr__(self, name: str, value: Any) -> None:
+            # Normalize ``endian`` when it's set, so ``cs.endian = "big"`` works like the ``endian`` argument.
+            # This is done in __setattr__ because ``cs.endian`` is read on every parse, so this keeps reading fast.
+            # All alternatives cause slowdowns when reading (property, descriptor)
+            if name == "endian":
+                value = normalize_endianness(value)
+            super().__setattr__(name, value)
 
     def _next_anonymous(self) -> str:
         name = f"__anonymous_{self._anonymous_count}__"
