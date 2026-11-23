@@ -54,7 +54,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - A value with more entries than the array, or more than one character for a `char` or `wchar`, raises a `ValueError`.
   - Without a value, the result is the default value, e.g. `cs.char()` is `b"\x00"` and `cs.uint8[4]()` is `[0, 0, 0, 0]`.
   - `TypeError` is raised for unsupported values.
-  - For integer types, `bytearray(obj)` gives as many zero bytes as its value, e.g. `bytearray(cs.uint32(5))` gives 5 zero bytes. Use `bytearray(bytes(obj))` instead.
 - On Python 3.12 and newer, instances of all types support the buffer protocol, so that e.g. `fh.write(obj)` works.
 
 ### Deprecated
