@@ -62,6 +62,12 @@ class Packed(BaseType, Generic[T], metaclass=PackedMetaType):
         return type.__call__(cls)
 
     @classmethod
+    def _normalize(cls, value: T) -> Self:
+        if not (isinstance(value, int) or (isinstance(value, float) and issubclass(cls, float))):
+            raise TypeError(f"Cannot create {cls.__name__} from {type(value).__name__}")
+        return cls.__new__(cls, value)
+
+    @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
         data = stream.read(cls.__size__)
 

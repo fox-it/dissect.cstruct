@@ -685,6 +685,10 @@ def test_lazy_compile(cs: cstruct) -> None:
             obj.a = _value0
             obj.__dynamic_sizes__ = {}
             return obj
+        if cls.__construct__ is _construct0:
+            obj = _construct0(cls, _value0)
+            obj.__dynamic_sizes__ = {}
+            return obj
         obj = _type_call(cls, **{'a': _value0})
         obj.__dynamic_sizes__ = {}
         return obj

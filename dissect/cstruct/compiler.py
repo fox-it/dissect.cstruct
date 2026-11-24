@@ -37,7 +37,13 @@ from dissect.cstruct.types import (
     WcharArray,
 )
 from dissect.cstruct.types.enum import EnumMetaType
-from dissect.cstruct.types.structure import StructureMetaType, UnionMetaType, UnionProxy, _uses_generated_init
+from dissect.cstruct.types.structure import (
+    StructureMetaType,
+    UnionMetaType,
+    UnionProxy,
+    _uses_generated_init,
+    _value_type,
+)
 from dissect.cstruct.util import ENDIANNESS_TO_BYTEORDER_MAP, _struct
 
 if TYPE_CHECKING:
@@ -414,6 +420,15 @@ class _ReadSourceGenerator(_SourceGenerator):
             outro.append(f"    obj.__dynamic_sizes__ = {sizes}")
             outro.append("    return obj")
 
+            # Subclasses without their own __init__ or __new__ inherit __construct__, which also bypasses __init__
+            # It has a parameter for each field name, like the keyword arguments below
+            construct = self._add_symbol(self.cls.__construct__, "construct")
+            values = "".join(f", {var}" for var in dict(self._assigned).values())
+            outro.append(f"if cls.__construct__ is {construct}:")
+            outro.append(f"    obj = {construct}(cls{values})")
+            outro.append(f"    obj.__dynamic_sizes__ = {sizes}")
+            outro.append("    return obj")
+
         # Using type.__call__ directly calls the __init__ method of the class
         outro.append(f"obj = _type_call(cls, **{{{kwargs}}})")
         outro.append(f"obj.__dynamic_sizes__ = {sizes}")
@@ -605,7 +620,7 @@ class _ReadSourceGenerator(_SourceGenerator):
         lines.append(f"else: _bit_value = (_bit_buffer >> {remaining - field.bits}) & {mask}")
 
         # Character bit fields are returned as the integer type they're read as
-        type_ = self._type_symbol(read_type if issubclass(field.type, Char) else field.type)
+        type_ = self._type_symbol(_value_type(field))
 
         if issubclass(field.type, (Enum, Flag)):
             lines.append(_member_lookup(type_, "_bit_value"))

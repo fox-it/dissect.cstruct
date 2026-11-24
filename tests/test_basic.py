@@ -470,7 +470,8 @@ def test_report_array_size_mismatch(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    a = cs.test(a=[1, 2, 3])
+    a = cs.test()
+    a.a = [1, 2, 3]
 
     with pytest.raises(WriteError, match=r"^Expected static array size 2, got 3 instead\.$"):
         bytes(a)

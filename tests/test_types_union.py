@@ -539,6 +539,22 @@ def test_union_partial_initialization(cs: cstruct, compiled: bool) -> None:
     assert str(obj) == "<test a=0x2 b=0x2>"
 
 
+def test_union_initialization_field_names(cs: cstruct, compiled: bool) -> None:
+    """Test that fields with the names of the generated parameters can be given as keywords."""
+    cdef = """
+    union test {
+        uint8   self;
+        uint16  cls;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    assert bytes(cs.test(self=1)) == b"\x01\x00"
+    assert bytes(cs.test(cls=0x0102)) == b"\x02\x01"
+
+
 def test_union_partial_initialization_dynamic(cs: cstruct, compiled: bool) -> None:
     """Partial initialization of a dynamic union should fill in the rest with appropriate values."""
     cdef = """

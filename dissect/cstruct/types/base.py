@@ -14,7 +14,7 @@ from dissect.cstruct.expression import Expression
 from dissect.cstruct.util import classproperty, normalize_endianness
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
 
     from typing_extensions import Self
 
@@ -45,7 +45,7 @@ class MetaType(type):
     __ArrayType__: type[BaseArray] = "Array"
     """The array type for this type class."""
 
-    def __call__(cls, *args, **kwargs) -> Self:  # type: ignore
+    def __call__(cls, /, *args, **kwargs) -> Self:  # type: ignore
         """Adds support for ``TypeClass(bytes | file-like object)`` parsing syntax."""
         if len(args) == 1 and not kwargs:
             # Fast path for the most common case without keyword arguments
@@ -95,6 +95,17 @@ class MetaType(type):
     def __default__(cls) -> Self:  # type: ignore
         """Return the default value of this type."""
         return cls()
+
+    def _normalize(cls, value: Any) -> Any:
+        """Internal function for converting a value to this type.
+
+        Types that can be created from a Python value, such as an integer or a list, override this.
+        Other values are returned as they are.
+
+        Args:
+            value: The value to convert, never ``None``.
+        """
+        return value
 
     def reads(cls, data: bytes | memoryview | bytearray, *, endian: AllowedEndianness | None = None) -> Self:  # type: ignore
         """Parse the given data from a bytes-like object.
@@ -537,6 +548,12 @@ class Array(list[T], BaseArray, metaclass=ArrayMetaType):
             return MetaType.dumps(self.__type__[len(self)], self)
 
         return MetaType.dumps(self.__class__, self)
+
+    @classmethod
+    def _normalize(cls, value: Iterable[Any]) -> Self:
+        if isinstance(value, _BUFFER_TYPES):
+            raise TypeError(f"Cannot create {cls.__name__} from {type(value).__name__}")
+        return cls(value)
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> list[T]:

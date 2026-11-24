@@ -82,6 +82,16 @@ class Pointer(int, BaseType, Generic[T]):
         )
 
     @classmethod
+    def _normalize(cls, value: int) -> Self:
+        if isinstance(value, Pointer):
+            # Keep the stream, so that the pointer can still be dereferenced
+            return cls.__new__(cls, value, value.__stream, context=value.__context, endian=value.__endian)
+
+        if not isinstance(value, int):
+            raise TypeError(f"Cannot create {cls.__name__} from {type(value).__name__}")
+        return cls.__new__(cls, value, None, context=None, endian=cls.__cs__.endian)
+
+    @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
         return cls.__new__(
             cls,

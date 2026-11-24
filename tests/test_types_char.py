@@ -181,8 +181,10 @@ def test_char_write_too_long(cs: cstruct, compiled: bool) -> None:
     with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
         cs.char.dumps(b"xy")
 
+    obj = cs.test(a=1, c=2)
+    obj.b = b"xy"
     with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
-        bytes(cs.test(a=1, b=b"xy", c=2))
+        bytes(obj)
 
 
 def test_char_write_too_short(cs: cstruct, compiled: bool) -> None:
@@ -219,8 +221,10 @@ def test_char_struct_write(cs: cstruct, compiled: bool) -> None:
     assert bytes(cs.test(a=1, b=0x78, c=2)) == b"\x01x\x02"
 
     # Strings aren't converted, they must be encoded to bytes first
+    obj = cs.test(a=1, c=2)
+    obj.b = "x"
     with pytest.raises(WriteError):
-        bytes(cs.test(a=1, b="x", c=2))
+        bytes(obj)
 
 
 def test_char_array_struct_write(cs: cstruct, compiled: bool) -> None:
@@ -250,13 +254,19 @@ def test_char_array_struct_write(cs: cstruct, compiled: bool) -> None:
     assert bytes(cs.test(a=1, b=[97], c=2)) == buf
 
     # Longer values aren't accepted
+    obj = cs.test(a=1, c=2)
+    obj.b = b"abcde"
     with pytest.raises(WriteError, match="Expected static array size 4, got 5 instead"):
-        bytes(cs.test(a=1, b=b"abcde", c=2))
+        bytes(obj)
 
+    obj = cs.test(a=1, b=b"abcd", c=2)
+    obj.d = b"e"
     with pytest.raises(WriteError, match="Expected static array size 0, got 1 instead"):
-        bytes(cs.test(a=1, b=b"abcd", c=2, d=b"e"))
+        bytes(obj)
 
     # Strings aren't converted, they must be encoded to bytes first
     for value in ("abcd", "a"):
+        obj = cs.test(a=1, c=2)
+        obj.b = value
         with pytest.raises(WriteError):
-            bytes(cs.test(a=1, b=value, c=2))
+            bytes(obj)

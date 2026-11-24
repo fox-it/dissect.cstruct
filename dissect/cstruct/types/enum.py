@@ -89,6 +89,12 @@ class EnumMetaType(EnumMeta, MetaType):
             return True
         return value in cls._value2member_map_
 
+    def _normalize(cls, value: int) -> Self:
+        if not isinstance(value, int):
+            raise TypeError(f"Cannot create {cls.__name__} from {type(value).__name__}")
+        # Look up a member of another enum by its value
+        return cls(int(value))
+
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
         return cls(cls.__type__._read(stream, context=context, endian=endian))
 

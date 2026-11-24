@@ -88,7 +88,7 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 b: uint8
                 c: uint16
                 @overload
-                def __init__(self, a: uint8 | None = ..., b: uint8 | None = ..., c: uint16 | None = ...): ...
+                def __init__(self, /, a: uint8 | None = ..., b: uint8 | None = ..., c: uint16 | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
@@ -109,7 +109,7 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 b: CharArray
                 c: WcharArray
                 @overload
-                def __init__(self, a: Array[uint8] | None = ..., b: CharArray | None = ..., c: WcharArray | None = ...): ...
+                def __init__(self, /, a: Array[uint8] | None = ..., b: CharArray | None = ..., c: WcharArray | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
@@ -128,7 +128,7 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 a: Pointer[uint8]
                 b: Array[Pointer[uint8]]
                 @overload
-                def __init__(self, a: Pointer[uint8] | None = ..., b: Array[Pointer[uint8]] | None = ...): ...
+                def __init__(self, /, a: Pointer[uint8] | None = ..., b: Array[Pointer[uint8]] | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
@@ -149,7 +149,7 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 a: uint8
                 b: uint8
                 @overload
-                def __init__(self, a: uint8 | None = ..., b: uint8 | None = ...): ...
+                def __init__(self, /, a: uint8 | None = ..., b: uint8 | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
@@ -171,13 +171,13 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                     a: uint8
                     b: uint8
                     @overload
-                    def __init__(self, a: uint8 | None = ..., b: uint8 | None = ...): ...
+                    def __init__(self, /, a: uint8 | None = ..., b: uint8 | None = ...): ...
                     @overload
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
                 x: __anonymous_0__
                 @overload
-                def __init__(self, x: __anonymous_0__ | None = ...): ...
+                def __init__(self, /, x: __anonymous_0__ | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
@@ -199,18 +199,37 @@ def test_generate_enum_stub(cs: cstruct, cdef: str, expected: str) -> None:
                     a: uint8
                     b: uint8
                     @overload
-                    def __init__(self, a: uint8 | None = ..., b: uint8 | None = ...): ...
+                    def __init__(self, /, a: uint8 | None = ..., b: uint8 | None = ...): ...
                     @overload
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
                 x: Array[__anonymous_0__]
                 @overload
-                def __init__(self, x: Array[__anonymous_0__] | None = ...): ...
+                def __init__(self, /, x: Array[__anonymous_0__] | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
             """,
             id="named-nested-array",
+        ),
+        pytest.param(
+            """
+            struct Test {
+                uint8 self;
+                uint8 _self;
+            };
+            """,
+            """
+            class Test(Structure):
+                self: uint8
+                _self: uint8
+                @overload
+                def __init__(__self, /, self: uint8 | None = ..., _self: uint8 | None = ...): ...
+                @overload
+                def __init__(__self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
+
+            """,
+            id="field-named-self",
         ),
     ],
 )
@@ -219,7 +238,9 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
 
     # We don't want to strip all trailing whitespace in case it's part of the intended expected output
     # So just remove one newline from the final """ block
-    assert stubgen.generate_structure_stub(cs.Test) == textwrap.dedent(expected).lstrip()[:-1]
+    stub = stubgen.generate_structure_stub(cs.Test)
+    assert stub == textwrap.dedent(expected).lstrip()[:-1]
+    compile(stub, "<stub>", "exec")
 
 
 @pytest.mark.parametrize(
@@ -248,7 +269,7 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 class TestStruct(Structure):
                     a: cstruct.uint8
                     @overload
-                    def __init__(self, a: cstruct.uint8 | None = ...): ...
+                    def __init__(self, /, a: cstruct.uint8 | None = ...): ...
                     @overload
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
@@ -266,7 +287,7 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 class Test(Structure):
                     a: cstruct.uint8
                     @overload
-                    def __init__(self, a: cstruct.uint8 | None = ...): ...
+                    def __init__(self, /, a: cstruct.uint8 | None = ...): ...
                     @overload
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
@@ -296,7 +317,7 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                     b: cstruct.uint32
                     c: cstruct.uint64
                     @overload
-                    def __init__(self, a: cstruct.uint16 | None = ..., b: cstruct.uint32 | None = ..., c: cstruct.uint64 | None = ...): ...
+                    def __init__(self, /, a: cstruct.uint16 | None = ..., b: cstruct.uint32 | None = ..., c: cstruct.uint64 | None = ...): ...
                     @overload
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
@@ -330,7 +351,7 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 class _Test(Structure):
                     a: cstruct.uint8
                     @overload
-                    def __init__(self, a: cstruct.uint8 | None = ...): ...
+                    def __init__(self, /, a: cstruct.uint8 | None = ...): ...
                     @overload
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
@@ -354,14 +375,14 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 class A(Structure):
                     a: cstruct.uint8
                     @overload
-                    def __init__(self, a: cstruct.uint8 | None = ...): ...
+                    def __init__(self, /, a: cstruct.uint8 | None = ...): ...
                     @overload
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
                 class Test(Structure):
                     x: cstruct.A
                     @overload
-                    def __init__(self, x: cstruct.A | None = ...): ...
+                    def __init__(self, /, x: cstruct.A | None = ...): ...
                     @overload
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
@@ -383,14 +404,14 @@ def test_generate_structure_stub(cs: cstruct, cdef: str, expected: str) -> None:
                 class A(Structure):
                     a: cstruct.uint8
                     @overload
-                    def __init__(self, a: cstruct.uint8 | None = ...): ...
+                    def __init__(self, /, a: cstruct.uint8 | None = ...): ...
                     @overload
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
                 class Test(Structure):
                     x: Array[cstruct.A]
                     @overload
-                    def __init__(self, x: Array[cstruct.A] | None = ...): ...
+                    def __init__(self, /, x: Array[cstruct.A] | None = ...): ...
                     @overload
                     def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 
@@ -443,7 +464,7 @@ def test_generate_file_stub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cap
                 a: _c_structure.uint32
                 b: _c_structure.uint32
                 @overload
-                def __init__(self, a: _c_structure.uint32 | None = ..., b: _c_structure.uint32 | None = ...): ...
+                def __init__(self, /, a: _c_structure.uint32 | None = ..., b: _c_structure.uint32 | None = ...): ...
                 @overload
                 def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...
 

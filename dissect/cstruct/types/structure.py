@@ -79,10 +79,13 @@ class StructureMetaType(MetaType):
     def __new__(metacls, name: str, bases: tuple[type, ...], classdict: dict[str, Any], **kwargs) -> Self:  # type: ignore
         if (fields := classdict.pop("__members__", None)) is not None:
             metacls._update_fields(metacls, fields, align=classdict.get("__align__", False), classdict=classdict)
+        elif "__init__" in classdict or "__new__" in classdict:
+            # Read with type.__call__, so that the __init__ or __new__ of the subclass is called
+            classdict["__construct__"] = None
 
         return super().__new__(metacls, name, bases, classdict, **kwargs)
 
-    def __call__(cls, *args, **kwargs) -> Self:  # type: ignore
+    def __call__(cls, /, *args, **kwargs) -> Self:  # type: ignore
         if len(args) == 1 and not kwargs:
             # Fast paths for the most common cases
             obj = args[0]
@@ -139,6 +142,7 @@ class StructureMetaType(MetaType):
             classdict["__eq__"] = Union.__eq__
         else:
             classdict["__init__"] = _generate_structure__init__(raw_lookup.values())
+            classdict["__construct__"] = _generate_structure__construct__(raw_lookup.values())
             classdict["__eq__"] = _generate__eq__(field_names)
 
         classdict["__hash__"] = _generate__hash__(field_names)
@@ -294,9 +298,13 @@ class StructureMetaType(MetaType):
             # Align the stream
             stream.seek(-stream.tell() & (cls.__alignment__ - 1), io.SEEK_CUR)
 
-        # Using type.__call__ directly calls the __init__ method of the class
-        # This is faster than calling cls() and bypasses the metaclass __call__ method
-        obj = type.__call__(cls, **result)
+        if (construct := cls.__construct__) is not None:
+            # This bypasses the __init__ method
+            obj = construct(cls, *result.values())
+        else:
+            # Using type.__call__ directly calls the __init__ method of the class
+            # This is faster than calling cls() and bypasses the metaclass __call__ method
+            obj = type.__call__(cls, **result)
         obj.__dynamic_sizes__ = sizes
         return obj
 
@@ -516,10 +524,14 @@ class Structure(BaseType, metaclass=StructureMetaType):
     """Base class for cstruct structure type classes.
 
     Note that setting attributes which do not correspond to a field in the structure results in undefined behavior.
-    For performance reasons, the structure does not check if the field exists when writing to an attribute.
+    For performance reasons, the structure does not check if the field exists when writing to an attribute. It also
+    does not convert the value to the type of the field, unlike the values that are given on initialization.
     """
 
     __dynamic_sizes__: dict[str, int]
+
+    __construct__: Callable[..., Self] | None = None
+    """Creates an instance from the values of all fields, without calling ``__init__``."""
 
     def __len__(self) -> int:
         if self.__class__.__size__ is not None:
@@ -587,7 +599,7 @@ class StructureValuesProxy(MutableMapping):
 class UnionMetaType(StructureMetaType):
     """Base metaclass for cstruct union type classes."""
 
-    def __call__(cls, *args, **kwargs) -> Self:  # type: ignore
+    def __call__(cls, /, *args, **kwargs) -> Self:  # type: ignore
         obj: Union = super().__call__(*args, **kwargs)
 
         if not hasattr(obj, "_buf"):
@@ -963,12 +975,29 @@ def _make_structure__init__(fields: list[str]) -> str:
         fields: List of field names.
     """
     field_args = ", ".join(f"{field} = None" for field in fields)
+    # Fast path for values that already have the type of the field
     field_init = "\n".join(
-        f" self.{name} = {name} if {name} is not None else _{i}_default()" for i, name in enumerate(fields)
+        f" self.{name} = _{i}_default() if {name} is None"
+        f" else {name} if type({name}) is _{i}_type else _{i}_normalize({name})"
+        for i, name in enumerate(fields)
     )
 
-    code = f"def __init__(self{', ' + field_args or ''}):\n"
+    code = f"def __init__(self, /{', ' + field_args or ''}):\n"
     return code + (field_init or " pass")
+
+
+@_codegen
+def _make_structure__construct__(fields: list[str]) -> str:
+    """Generates a ``__construct__`` function for a structure with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    field_args = "".join(f", {field}" for field in fields)
+    field_init = "".join(f" self.{name} = {name}\n" for name in fields)
+
+    code = f"def __construct__(cls{field_args}):\n self = object.__new__(cls)\n"
+    return code + field_init + " return self"
 
 
 @_codegen
@@ -984,7 +1013,7 @@ def _make_union__init__(fields: list[str]) -> str:
         for i, name in enumerate(fields)
     )
 
-    code = f"def __init__(self{', ' + field_args or ''}):\n"
+    code = f"def __init__(self, /{', ' + field_args or ''}):\n"
     return code + (field_init or " pass")
 
 
@@ -1069,6 +1098,7 @@ def _generate_structure__init__(fields: list[Field]) -> FunctionType:
         fields: List of field names.
     """
     mapping = _generate_co_mapping(fields)
+    types = {field._name: _value_type(field) for field in fields}
 
     template: FunctionType = _make_structure__init__(len(fields))
     return type(template)(
@@ -1076,8 +1106,29 @@ def _generate_structure__init__(fields: list[Field]) -> FunctionType:
             co_names=_remap_co_values(template.__code__.co_names, mapping),
             co_varnames=_remap_co_values(template.__code__.co_varnames, mapping),
         ),
-        template.__globals__ | {f"__{field._name}_default__": _default_factory(field.type) for field in fields},
+        template.__globals__
+        | {f"__{name}_default__": _default_factory(type_) for name, type_ in types.items()}
+        | {f"__{name}_type__": type_ for name, type_ in types.items()}
+        | {f"__{name}_normalize__": type_._normalize for name, type_ in types.items()},
         argdefs=template.__defaults__,
+    )
+
+
+def _generate_structure__construct__(fields: list[Field]) -> FunctionType:
+    """Generates a ``__construct__`` function for a structure with the specified fields.
+
+    Args:
+        fields: List of field names.
+    """
+    mapping = _generate_co_mapping(fields)
+
+    template: FunctionType = _make_structure__construct__(len(fields))
+    return type(template)(
+        template.__code__.replace(
+            co_names=_remap_co_values(template.__code__.co_names, mapping),
+            co_varnames=_remap_co_values(template.__code__.co_varnames, mapping),
+        ),
+        template.__globals__,
     )
 
 
@@ -1101,6 +1152,13 @@ def _generate_union__init__(fields: list[Field]) -> FunctionType:
     )
 
 
+def _value_type(field: Field) -> type[BaseType]:
+    """Return the type of the values of a field, which is ``uint8`` for character bit fields."""
+    if field.bits and issubclass(field.type, Char):
+        return field.type.__cs__.uint8
+    return field.type
+
+
 def _default_factory(type_: type[BaseType]) -> Callable[[], Any]:
     """Return a function that returns default values of a type, which are only shared if they're immutable."""
     value = type_.__default__()
@@ -1110,8 +1168,9 @@ def _default_factory(type_: type[BaseType]) -> Callable[[], Any]:
 def _generate_co_mapping(fields: list[Field]) -> dict[str, str]:
     """Generates a mapping of generated code object names to field names.
 
-    The generated code uses names like ``_0``, ``_1``, etc. for fields, and ``_0_default``, ``_1_default``, etc.
-    for default initializer values. Return a mapping of these names to the actual field names.
+    The generated code uses names like ``_0``, ``_1``, etc. for fields, ``_0_default``, ``_1_default``, etc.
+    for default initializer values, ``_0_type``, ``_1_type``, etc. for field types and ``_0_normalize``,
+    ``_1_normalize``, etc. for their conversion functions. Return a mapping of these names to the actual field names.
 
     Args:
         fields: List of field names.
@@ -1119,7 +1178,12 @@ def _generate_co_mapping(fields: list[Field]) -> dict[str, str]:
     return {
         key: value
         for i, field in enumerate(fields)
-        for key, value in [(f"_{i}", field._name), (f"_{i}_default", f"__{field._name}_default__")]
+        for key, value in [
+            (f"_{i}", field._name),
+            (f"_{i}_default", f"__{field._name}_default__"),
+            (f"_{i}_type", f"__{field._name}_type__"),
+            (f"_{i}_normalize", f"__{field._name}_normalize__"),
+        ]
     }
 
 

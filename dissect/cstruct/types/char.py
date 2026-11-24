@@ -73,6 +73,9 @@ class CharMetaType(MetaType):
         # E.g. char[4](b"abcd", endian=">")
         return MetaType.__call__(cls, *args, **kwargs)
 
+    def _normalize(cls, value: bytes | int | Iterable[int]) -> Char | CharArray:
+        return cls.__new__(cls, value)
+
 
 class CharArray(bytes, BaseArray, metaclass=CharMetaType):
     """Character array type for reading and writing byte strings."""

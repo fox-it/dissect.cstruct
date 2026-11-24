@@ -158,7 +158,12 @@ def generate_structure_stub(
     result = [f"class {name_prefix}{structure.__name__}({module_prefix}{structure.__base__.__name__}):"]
     indent = " " * 4
 
-    args = ["self"]
+    # Fields can be named self, so prefix until there's no longer a clash
+    instance = "self"
+    while instance in structure.__members__:
+        instance = f"_{instance}"
+
+    args = [instance, "/"]
     for field_name, field in structure.__members__.items():
         inlined = False
 
@@ -182,7 +187,9 @@ def generate_structure_stub(
     result.append(textwrap.indent(f"def __init__({', '.join(args)}): ...", prefix=indent))
     result.append(textwrap.indent("@overload", prefix=indent))
     result.append(
-        textwrap.indent("def __init__(self, fh: bytes | memoryview | bytearray | BinaryIO, /): ...", prefix=indent)
+        textwrap.indent(
+            f"def __init__({instance}, fh: bytes | memoryview | bytearray | BinaryIO, /): ...", prefix=indent
+        )
     )
     result.append("")
     return "\n".join(result)

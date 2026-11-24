@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 from io import BytesIO
 from textwrap import dedent
 from types import MethodType
+from typing import TYPE_CHECKING, Any, BinaryIO
 from unittest.mock import patch
 
 import pytest
@@ -16,6 +18,9 @@ from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.pointer import Pointer
 from dissect.cstruct.types.structure import Field, JSONEncoder, Structure, StructureMetaType, asdict, asjson
 from tests.util import verify_compiled
+
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import Endianness
 
 
 @pytest.fixture
@@ -961,17 +966,167 @@ def test_structure_partial_initialization(cs: cstruct) -> None:
     assert str(obj) == "<test a=0x0 b=0x1>"
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        ("uint16 x", 1, 1),
+        ("uint24 x", 1, 1),
+        ("uleb128 x", 1, 1),
+        ("double x", 1.5, 1.5),
+        ("float x", 1, 1.0),
+        ("Color x", 1, 1),
+        ("uint8 *x", 4, 4),
+        ("uint16 x : 4", 1, 1),
+        ("char x", 0x41, b"A"),
+        ("char x[4]", b"ab", b"ab\x00\x00"),
+        ("char x[4]", [0x61], b"a\x00\x00\x00"),
+        ("wchar x", "a", "a"),
+        ("wchar x[4]", "ab", "ab\x00\x00"),
+        ("uint16 x[2]", [1], [1, 0]),
+        ("uint16 x[2]", (1, 2), [1, 2]),
+    ],
+)
+def test_structure_init_convert(cs: cstruct, field: str, value: Any, expected: Any) -> None:
+    """Test that values given to a structure are converted to the types of their fields, which give their bytes."""
+    cdef = f"""
+    enum Color : uint8 {{
+        RED = 1
+    }};
+
+    struct test {{
+        {field};
+    }};
+    """
+    cs.load(cdef)
+
+    obj = cs.test(x=value)
+    assert type(obj.x) is cs.test.__members__["x"].type
+    assert obj.x == expected
+    assert bytes(obj.x) == bytes(obj)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "exception", "message"),
+    [
+        ("uint16 x", "1", TypeError, "Cannot create uint16 from str"),
+        ("uint24 x", 1.5, TypeError, "Cannot create uint24 from float"),
+        ("uleb128 x", "1", TypeError, "Cannot create uleb128 from str"),
+        ("float x", "1", TypeError, "Cannot create float from str"),
+        ("Color x", b"\x01", TypeError, "Cannot create Color from bytes"),
+        ("uint8 *x", "1", TypeError, "Cannot create uint8* from str"),
+        ("char x", "a", TypeError, "Cannot create char from str, encode to bytes first"),
+        ("char x[2]", b"abc", ValueError, "Expected static array size 2, got 3 instead."),
+        ("wchar x", b"a", TypeError, "Cannot create wchar from bytes"),
+        ("wchar x[2]", "abc", ValueError, "Expected static array size 2, got 3 instead."),
+        ("uint16 x[2]", [1, 2, 3], ValueError, "Expected static array size 2, got 3 instead."),
+        ("uint16 x[2]", 1, TypeError, "Cannot create uint16[2] from int"),
+        ("uint16 x[2]", b"\x01\x00\x02\x00", TypeError, "Cannot create uint16[2] from bytes"),
+        ("uint8 x[4]", b"abcd", TypeError, "Cannot create uint8[4] from bytes"),
+    ],
+)
+def test_structure_init_convert_invalid(
+    cs: cstruct, field: str, value: Any, exception: type[Exception], message: str
+) -> None:
+    """Test that values given to a structure that can't be converted to the types of their fields raise an error."""
+    cdef = f"""
+    enum Color : uint8 {{
+        RED = 1
+    }};
+
+    struct test {{
+        {field};
+    }};
+    """
+    cs.load(cdef)
+
+    with pytest.raises(exception, match=f"^{re.escape(message)}$"):
+        cs.test(x=value)
+
+
+def test_structure_init_convert_enum(cs: cstruct) -> None:
+    """Test that a member of another enum given to an enum field becomes the member with the same value."""
+    cdef = """
+    enum Color : uint8 {
+        RED = 1
+    };
+
+    enum Other : uint8 {
+        X = 1
+    };
+
+    struct test {
+        Color x;
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test(x=cs.Other.X).x is cs.Color.RED
+
+
+def test_structure_init_convert_pointer(cs: cstruct) -> None:
+    """Test that a pointer given to a field of another pointer type gets that type, and can still be dereferenced."""
+    cdef = """
+    struct test {
+        uint8  *x;
+    };
+
+    struct other {
+        uint16 *x;
+    };
+    """
+    cs.pointer = cs.uint8
+    cs.load(cdef)
+
+    obj = cs.other(x=cs.test(b"\x01\x2a\x01").x)
+    assert type(obj.x) is cs.other.__members__["x"].type
+    assert obj.x.dereference() == 0x012A
+
+
+def test_structure_read_no_convert(cs: cstruct) -> None:
+    """Test that reading a structure doesn't convert the values that are read, but values given to it are."""
+    converted = []
+
+    class Custom(BaseType):
+        @classmethod
+        def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> int:
+            return cls.__cs__.uint8._read(stream, endian=endian)
+
+        @classmethod
+        def _write(cls, stream: BinaryIO, data: int, *, endian: Endianness) -> int:
+            return cls.__cs__.uint8._write(stream, data, endian=endian)
+
+        @classmethod
+        def _normalize(cls, value: int) -> int:
+            converted.append(value)
+            return value
+
+    cs.add_custom_type("custom", Custom, size=1)
+    cdef = """
+    struct test {
+        custom  a;
+        uint8   b;
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test(b"\x01\x02").a == 1
+    assert converted == []
+
+    assert cs.test(a=1, b=2).a == 1
+    assert converted == [1]
+
+
 def test_codegen_make_init() -> None:
     _make__init__ = structure._make_structure__init__.__wrapped__.__wrapped__
 
     result = _make__init__([f"_{n}" for n in range(5)])
     expected = """
-    def __init__(self, _0 = None, _1 = None, _2 = None, _3 = None, _4 = None):
-     self._0 = _0 if _0 is not None else _0_default()
-     self._1 = _1 if _1 is not None else _1_default()
-     self._2 = _2 if _2 is not None else _2_default()
-     self._3 = _3 if _3 is not None else _3_default()
-     self._4 = _4 if _4 is not None else _4_default()
+    def __init__(self, /, _0 = None, _1 = None, _2 = None, _3 = None, _4 = None):
+     self._0 = _0_default() if _0 is None else _0 if type(_0) is _0_type else _0_normalize(_0)
+     self._1 = _1_default() if _1 is None else _1 if type(_1) is _1_type else _1_normalize(_1)
+     self._2 = _2_default() if _2 is None else _2 if type(_2) is _2_type else _2_normalize(_2)
+     self._3 = _3_default() if _3 is None else _3 if type(_3) is _3_type else _3_normalize(_3)
+     self._4 = _4_default() if _4 is None else _4 if type(_4) is _4_type else _4_normalize(_4)
     """
     assert result == dedent(expected[1:].rstrip())
 
@@ -1349,6 +1504,13 @@ def test_structure_subclass_init(cs: cstruct, compiled: bool) -> None:
     assert obj.initialized
     assert (obj.a, obj.b) == (1, 2)
 
+    class PlainSubclass(cs.test):
+        pass
+
+    obj = PlainSubclass(b"\x01\x00\x00\x00\x02\x00\x00\x00")
+    assert type(obj) is PlainSubclass
+    assert (obj.a, obj.b) == (1, 2)
+
     obj = cs.test(b"\x01\x00\x00\x00\x02\x00\x00\x00")
     assert type(obj) is cs.test
     assert list(obj.__dict__) == ["a", "b", "__dynamic_sizes__"]
@@ -1501,8 +1663,10 @@ def test_structure_write_nested(cs: cstruct, compiled: bool) -> None:
     with pytest.raises(WriteError, match=r"^Cannot write test: 'int' object has no attribute "):
         bytes(cs.test(e=1, f=cs.nested(c=2, d=5), g=4))
 
+    inner = cs.inner(a=3)
+    inner.b = b"abc"
     with pytest.raises(WriteError, match="Expected static array size 2, got 3 instead"):
-        bytes(cs.test(e=1, f=cs.nested(c=2, d=cs.inner(a=3, b=b"abc")), g=4))
+        bytes(cs.test(e=1, f=cs.nested(c=2, d=inner), g=4))
 
 
 def test_structure_write_nested_padding(cs: cstruct, compiled: bool) -> None:
@@ -1605,13 +1769,15 @@ def test_structure_write_offset_after_dynamic_field(cs: cstruct, compiled: bool)
 
 
 def test_structure_write_field_names(cs: cstruct, compiled: bool) -> None:
-    """Test that field names that aren't valid identifiers and duplicate field names are written correctly."""
+    """Test that keywords, names of generated parameters and duplicate field names are read, written and created."""
     cdef = """
     struct test {
         uint8   class;
         uint8   from;
         uint8   _;
         uint8   _;
+        uint8   self;
+        uint8   cls;
     };
     """
     cs.load(cdef, compiled=compiled)
@@ -1619,8 +1785,16 @@ def test_structure_write_field_names(cs: cstruct, compiled: bool) -> None:
     assert verify_compiled(cs.test, compiled)
 
     # Duplicate fields use the same attribute
-    obj = cs.test(b"\x01\x02\x03\x04")
-    assert bytes(obj) == b"\x01\x02\x04\x04"
+    obj = cs.test(b"\x01\x02\x03\x04\x05\x06")
+    assert (obj.self, obj.cls) == (5, 6)
+    assert bytes(obj) == b"\x01\x02\x04\x04\x05\x06"
+
+    class Subclass(cs.test):
+        pass
+
+    assert bytes(Subclass(b"\x01\x02\x03\x04\x05\x06")) == b"\x01\x02\x04\x04\x05\x06"
+
+    assert bytes(cs.test(self=5, cls=6)) == b"\x00\x00\x00\x00\x05\x06"
 
 
 def test_structure_write_none(cs: cstruct, compiled: bool) -> None:

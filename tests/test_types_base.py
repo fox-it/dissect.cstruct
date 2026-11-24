@@ -105,8 +105,9 @@ def test_array_write_padding_dynamic_entries(cs: cstruct, compiled: bool) -> Non
     assert obj.a == [1, 0, 0]
     assert [entry.data for entry in obj.b] == [b"x", b""]
 
+    obj.b = [cs.entry(), cs.entry(), cs.entry()]
     with pytest.raises(WriteError, match=r"^Expected static array size 2, got 3 instead\.$"):
-        bytes(cs.test(a=[1], b=[cs.entry(), cs.entry(), cs.entry()]))
+        bytes(obj)
 
 
 def test_array_bytes_null_terminated(cs: cstruct) -> None:
@@ -482,14 +483,18 @@ def test_array_struct_write(cs: cstruct, compiled: bool) -> None:
     assert bytes(cs.test(a=1, b=[1], c=[3, 4])) == b"\x01\x01\x00\x00\x00\x03\x00\x04\x00"
 
     # The total amount of values is right, but the second array is too long
+    obj = cs.test(a=1, b=[1])
+    obj.c = [2, 3, 4]
     with pytest.raises(WriteError, match="Expected static array size 2, got 3 instead"):
-        bytes(cs.test(a=1, b=[1], c=[2, 3, 4]))
+        bytes(obj)
 
     with pytest.raises(WriteError, match=r"^Cannot write test: "):
         bytes(cs.test(a=1, b=[1, 2**16], c=[3, 4]))
 
+    obj = cs.test(a=1, b=[1, 2], c=[3, 4])
+    obj.d = [1]
     with pytest.raises(WriteError, match="Expected static array size 0, got 1 instead"):
-        bytes(cs.test(a=1, b=[1, 2], c=[3, 4], d=[1]))
+        bytes(obj)
 
 
 def test_array_multidimensional_write_padding(cs: cstruct, compiled: bool) -> None:

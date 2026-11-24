@@ -284,6 +284,10 @@ def test_bitfield_char(cs: cstruct, compiled: bool) -> None:
 
     assert bytes(obj) == buf
 
+    # Character bit fields are also integers when they're created
+    assert type(cs.test(c=0xFF).c) is cs.uint8
+    assert bytes(cs.test()) == b"\x00" * 7
+
 
 def test_bitfield_dynamic(cs: cstruct, compiled: bool) -> None:
     cdef = """
