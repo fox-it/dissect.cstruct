@@ -1170,12 +1170,18 @@ def _generate_co_mapping(fields: list[Field]) -> dict[str, str]:
 
     The generated code uses names like ``_0``, ``_1``, etc. for fields, ``_0_default``, ``_1_default``, etc.
     for default initializer values, ``_0_type``, ``_1_type``, etc. for field types and ``_0_normalize``,
-    ``_1_normalize``, etc. for their conversion functions. Return a mapping of these names to the actual field names.
+    ``_1_normalize``, etc. for their conversion functions. Return a mapping of these names to the actual field names,
+    and of ``self`` to a name that no field has.
 
     Args:
         fields: List of field names.
     """
-    return {
+    # Fields can be named self, so prefix until there's no longer a clash
+    instance = "self"
+    while any(field._name == instance for field in fields):
+        instance = f"_{instance}"
+
+    return {"self": instance} | {
         key: value
         for i, field in enumerate(fields)
         for key, value in [
