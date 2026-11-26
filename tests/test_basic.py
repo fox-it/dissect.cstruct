@@ -883,14 +883,20 @@ def test_deprecation_warnings(cs: cstruct) -> None:
 
     with pytest.warns(
         DeprecationWarning,
-        match=re.escape("The 'dumps' method on instances is deprecated, use 'cls.dumps(obj)' instead."),
+        match=re.escape(
+            "The 'dumps' method on instances is deprecated, use 'bytes(obj)' instead, or 'cls.dumps(obj)' to include"
+            " the null terminator of a null-terminated array."
+        ),
     ):
         assert cs.uint16(1).dumps(endian=">") == b"\x00\x01"
 
     fh = BytesIO()
     with pytest.warns(
         DeprecationWarning,
-        match=re.escape("The 'write' method on instances is deprecated, use 'cls.write(stream, obj)' instead."),
+        match=re.escape(
+            "The 'write' method on instances is deprecated, use 'stream.write(bytes(obj))' instead, or"
+            " 'cls.write(stream, obj)' to include the null terminator of a null-terminated array."
+        ),
     ):
         assert cs.uint16(1).write(fh, endian=">") == 2
     assert fh.getvalue() == b"\x00\x01"

@@ -118,7 +118,8 @@ class CharArray(bytes, BaseArray, metaclass=CharMetaType):
         if isinstance(data, (bytearray, memoryview)):
             data = bytes(data)
         elif not isinstance(data, bytes):
-            raise TypeError(f"Expected bytes, got {type(data).__name__}")
+            hint = ", encode to bytes first" if isinstance(data, str) else ""
+            raise TypeError(f"Expected bytes, got {type(data).__name__}{hint}")
 
         if cls.__null_terminated__:
             data += b"\x00"
@@ -200,7 +201,8 @@ class Char(bytes, BaseType, metaclass=CharMetaType):
     @classmethod
     def _write(cls, stream: BinaryIO, data: bytes, *, endian: Endianness) -> int:
         if not isinstance(data, _BUFFER_TYPES):
-            raise TypeError(f"Expected bytes, got {type(data).__name__}")
+            hint = ", encode to bytes first" if isinstance(data, str) else ""
+            raise TypeError(f"Expected bytes, got {type(data).__name__}{hint}")
 
         if (actual_size := len(data)) > 1:
             raise WriteError(f"Expected a single character, got {actual_size} instead.")

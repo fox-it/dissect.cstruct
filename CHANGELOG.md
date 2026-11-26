@@ -49,6 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - For null-terminated arrays, it does not include the null terminator. Use `cls.dumps(obj)` to include the null terminator.
   - For integer types, `bytearray(obj)` gives as many zero bytes as its value, e.g. `bytearray(cs.uint32(5))` gives 5 zero bytes. Use `bytearray(bytes(obj))` instead.
 - `char` and `char` arrays no longer accept a string, when they're created or written. Encode the string to bytes first.
+- Writing doesn't convert values anymore (e.g. `type.write(value)`, or manually setting an attribute on a structure instance): a `char` doesn't accept an int, and `uint8` arrays don't accept bytes. Convert the value first, e.g. `cs.char(0x41)` or `cs.uint8[2](b"\x01\x02")`, or pass it as an argument when the structure is created.
 - Creating a `char`, a `wchar` or an array from a value instead of from data:
   - An int creates a `char` with that byte, e.g. `cs.char(0x41)` is `b"A"`.
   - Arrays of all types with a fixed number of entries add default entries to a value with fewer entries, e.g. `cs.char[4]([0x41])` is `b"A\x00\x00\x00"`, `cs.wchar[4]("A")` is `"A\x00\x00\x00"` and `cs.uint8[4]([1])` and `cs.uleb128[4]([1])` are `[1, 0, 0, 0]`.

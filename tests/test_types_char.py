@@ -231,7 +231,9 @@ def test_char_struct_write(cs: cstruct, compiled: bool) -> None:
     for value in ("x", 0x78):
         obj = cs.test(a=1, c=2)
         obj.b = value
-        with pytest.raises(WriteError, match=rf"^Cannot write test: Expected bytes, got {type(value).__name__}$"):
+
+        hint = ", encode to bytes first" if isinstance(value, str) else ""
+        with pytest.raises(WriteError, match=rf"^Cannot write test: Expected bytes, got {type(value).__name__}{hint}$"):
             bytes(obj)
 
 
@@ -276,5 +278,7 @@ def test_char_array_struct_write(cs: cstruct, compiled: bool) -> None:
     for value in ("abcd", "a", [97]):
         obj = cs.test(a=1, c=2)
         obj.b = value
-        with pytest.raises(WriteError, match=rf"^Cannot write test: Expected bytes, got {type(value).__name__}$"):
+
+        hint = ", encode to bytes first" if isinstance(value, str) else ""
+        with pytest.raises(WriteError, match=rf"^Cannot write test: Expected bytes, got {type(value).__name__}{hint}$"):
             bytes(obj)
