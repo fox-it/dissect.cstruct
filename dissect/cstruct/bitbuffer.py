@@ -73,7 +73,14 @@ class BitBuffer:
 
     def flush(self) -> None:
         if self._type is not None:
-            self._type._write(self.stream, self._buffer, endian=self.endian)
+            buffer = self._buffer
+            if issubclass(self._type, bytes):
+                if self.endian == "<":
+                    buffer = buffer.to_bytes(self._type.__size__, "little")
+                else:
+                    buffer = buffer.to_bytes(self._type.__size__, "big")
+
+            self._type._write(self.stream, buffer, endian=self.endian)
         self._type = None
         self._remaining = 0
         self._buffer = 0

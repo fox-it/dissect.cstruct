@@ -14,7 +14,7 @@ from dissect.cstruct.expression import Expression
 from dissect.cstruct.util import classproperty, normalize_endianness
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable
 
     from typing_extensions import Self
 
@@ -46,12 +46,21 @@ class MetaType(type):
     """The array type for this type class."""
 
     def __call__(cls, /, *args, **kwargs) -> Self:  # type: ignore
-        """Adds support for ``TypeClass(bytes | file-like object)`` parsing syntax."""
+        """Create a value of this type like its Python base type does, or parse it from data.
+
+        A bytes-like or file-like object is parsed, e.g. ``uint16(b"\\x01\\x00")`` is 1. Other values are given to the
+        Python base type, e.g. ``uint16("1")`` is 1 like ``int("1")``. Some types have exceptions, e.g. ``char(0x41)``
+        is ``b"A"``.
+        """
         if len(args) == 1 and not kwargs:
             # Fast path for the most common case without keyword arguments
             obj = args[0]
             if type(obj) in _BUFFER_TYPES:
                 return cls._read(BytesIO(obj), endian=cls.__cs__.endian)
+
+            if isinstance(obj, int):
+                # E.g. uint32(1)
+                return type.__call__(cls, obj)
 
             if hasattr(obj, "read") and not isinstance(obj, cls):
                 return cls._read(obj, endian=cls.__cs__.endian)
@@ -97,15 +106,14 @@ class MetaType(type):
         return cls()
 
     def _normalize(cls, value: Any) -> Any:
-        """Internal function for converting a value to this type.
+        """Internal function for converting a value that is given to a field of this type when a structure is created.
 
-        Types that can be created from a Python value, such as an integer or a list, override this.
-        Other values are returned as they are.
+        Calls the type, so a field accepts the same values, e.g. ``uint16("1")`` and ``uint16(b"\\x01\\x00")``.
 
         Args:
             value: The value to convert, never ``None``.
         """
-        return value
+        return cls(value)
 
     def reads(cls, data: bytes | memoryview | bytearray, *, endian: AllowedEndianness | None = None) -> Self:  # type: ignore
         """Parse the given data from a bytes-like object.
@@ -433,26 +441,31 @@ class BaseArray(BaseType):
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: list[Any], *, endian: Endianness) -> int:
+        if not isinstance(data, list) or (isinstance(cls.__num_entries__, int) and len(data) != cls.__num_entries__):
+            # E.g. a tuple, or a list of another size
+            data = cls._entries(data)
+
         if cls.__null_terminated__:
             return cls.__type__._write_0(stream, data, endian=endian)
-
-        # Also an array of entries with a dynamic size, e.g. LEB128 or a structure, has a fixed number of entries
-        if isinstance(cls.__num_entries__, int) and len(data) != cls.__num_entries__:
-            data = cls._pad(data)
 
         return cls.__type__._write_array(stream, data, endian=endian)
 
     @classmethod
-    def _pad(cls, data: list[Any]) -> list[Any]:
-        """Internal function for padding the entries of an array to its fixed number of entries.
+    def _entries(cls, data: list[Any] | tuple[Any, ...]) -> list[Any] | tuple[Any, ...]:
+        """Internal function for checking the entries of an array, and padding them to its fixed number of entries.
 
         Args:
             data: The entries of the array.
         """
-        if remaining := cls.__num_entries__ - (actual_size := len(data)):
+        if not isinstance(data, (list, tuple)):
+            # E.g. bytes, which aren't converted to entries
+            raise TypeError(f"Expected a list, got {type(data).__name__}")
+
+        # Also an array of entries with a dynamic size, e.g. LEB128 or a structure, has a fixed number of entries
+        if isinstance(cls.__num_entries__, int) and (remaining := cls.__num_entries__ - (actual_size := len(data))):
             if remaining < 0:
                 raise WriteError(f"Expected static array size {cls.__num_entries__}, got {actual_size} instead.")
-            data = data + [cls.__type__.__default__()] * remaining
+            data = [*data, *[cls.__type__.__default__()] * remaining]
 
         return data
 
@@ -548,12 +561,6 @@ class Array(list[T], BaseArray, metaclass=ArrayMetaType):
             return MetaType.dumps(self.__type__[len(self)], self)
 
         return MetaType.dumps(self.__class__, self)
-
-    @classmethod
-    def _normalize(cls, value: Iterable[Any]) -> Self:
-        if isinstance(value, _BUFFER_TYPES):
-            raise TypeError(f"Cannot create {cls.__name__} from {type(value).__name__}")
-        return cls(value)
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> list[T]:

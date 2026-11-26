@@ -16,7 +16,15 @@ from dissect.cstruct.exception import DefinitionError, ResolveError, WriteError
 from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.pointer import Pointer
-from dissect.cstruct.types.structure import Field, JSONEncoder, Structure, StructureMetaType, asdict, asjson
+from dissect.cstruct.types.structure import (
+    Field,
+    JSONEncoder,
+    Structure,
+    StructureMetaType,
+    UnionProxy,
+    asdict,
+    asjson,
+)
 from tests.util import verify_compiled
 
 if TYPE_CHECKING:
@@ -970,24 +978,32 @@ def test_structure_partial_initialization(cs: cstruct) -> None:
     ("field", "value", "expected"),
     [
         ("uint16 x", 1, 1),
-        ("uint24 x", 1, 1),
-        ("uleb128 x", 1, 1),
+        ("uint16 x", "1", 1),
+        ("uint16 x", b"\x01\x00", 1),
+        ("uint24 x", 1.5, 1),
+        ("uleb128 x", "1", 1),
         ("double x", 1.5, 1.5),
-        ("float x", 1, 1.0),
+        ("float x", "1", 1.0),
         ("Color x", 1, 1),
+        ("Color x", b"\x01", 1),
         ("uint8 *x", 4, 4),
+        ("uint8 *x", "4", 4),
         ("uint16 x : 4", 1, 1),
         ("char x", 0x41, b"A"),
         ("char x[4]", b"ab", b"ab\x00\x00"),
         ("char x[4]", [0x61], b"a\x00\x00\x00"),
+        ("char x[4]", BytesIO(b"abcdef"), b"abcd"),
         ("wchar x", "a", "a"),
+        ("wchar x", b"a\x00", "a"),
         ("wchar x[4]", "ab", "ab\x00\x00"),
         ("uint16 x[2]", [1], [1, 0]),
         ("uint16 x[2]", (1, 2), [1, 2]),
+        ("uint16 x[2]", b"\x01\x00\x02\x00", [1, 2]),
+        ("uint16 x[2]", BytesIO(b"\x01\x00\x02\x00"), [1, 2]),
     ],
 )
 def test_structure_init_convert(cs: cstruct, field: str, value: Any, expected: Any) -> None:
-    """Test that values given to a structure are converted to the types of their fields, which give their bytes."""
+    """Test that values given to a structure are converted like the types of their fields do, e.g. by parsing bytes."""
     cdef = f"""
     enum Color : uint8 {{
         RED = 1
@@ -1008,20 +1024,16 @@ def test_structure_init_convert(cs: cstruct, field: str, value: Any, expected: A
 @pytest.mark.parametrize(
     ("field", "value", "exception", "message"),
     [
-        ("uint16 x", "1", TypeError, "Cannot create uint16 from str"),
-        ("uint24 x", 1.5, TypeError, "Cannot create uint24 from float"),
-        ("uleb128 x", "1", TypeError, "Cannot create uleb128 from str"),
-        ("float x", "1", TypeError, "Cannot create float from str"),
-        ("Color x", b"\x01", TypeError, "Cannot create Color from bytes"),
-        ("uint8 *x", "1", TypeError, "Cannot create uint8* from str"),
+        ("uint16 x", "a", ValueError, "invalid literal for int() with base 10: 'a'"),
+        ("uint16 x", b"\x01", EOFError, "Read 1 bytes, but expected 2"),
         ("char x", "a", TypeError, "Cannot create char from str, encode to bytes first"),
         ("char x[2]", b"abc", ValueError, "Expected static array size 2, got 3 instead."),
-        ("wchar x", b"a", TypeError, "Cannot create wchar from bytes"),
+        ("wchar x", 1, TypeError, "Cannot create wchar from int"),
         ("wchar x[2]", "abc", ValueError, "Expected static array size 2, got 3 instead."),
         ("uint16 x[2]", [1, 2, 3], ValueError, "Expected static array size 2, got 3 instead."),
         ("uint16 x[2]", 1, TypeError, "Cannot create uint16[2] from int"),
-        ("uint16 x[2]", b"\x01\x00\x02\x00", TypeError, "Cannot create uint16[2] from bytes"),
-        ("uint8 x[4]", b"abcd", TypeError, "Cannot create uint8[4] from bytes"),
+        ("uint16 x[2]", "ab", TypeError, "Cannot create uint16[2] from str"),
+        ("uint16 x[2]", b"\x01\x00", EOFError, "Read 2 bytes, but expected 4"),
     ],
 )
 def test_structure_init_convert_invalid(
@@ -1061,6 +1073,39 @@ def test_structure_init_convert_enum(cs: cstruct) -> None:
     cs.load(cdef)
 
     assert cs.test(x=cs.Other.X).x is cs.Color.RED
+    assert cs.Color(cs.Other.X) is cs.Color.RED
+
+
+def test_structure_init_convert_structure(cs: cstruct) -> None:
+    """Test that a structure field converts values like its structure type, but keeps values that are structures."""
+    cdef = """
+    struct inner {
+        uint8   a;
+        uint8   b;
+    };
+
+    struct test {
+        inner   x;
+    };
+
+    union wrapper {
+        inner   x;
+        uint16  y;
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test(x=b"\x01\x02").x == cs.inner(a=1, b=2)
+    assert cs.test(x=1).x == cs.inner(a=1)
+
+    # E.g. a structure of another cstruct instance, or a structure in a union
+    other = cstruct().load(cdef).inner(a=1, b=2)
+    assert cs.test(x=other).x is other
+
+    proxy = cs.wrapper(y=0x0201).x
+    assert type(proxy) is UnionProxy
+    assert cs.test(x=proxy).x is proxy
+    assert bytes(cs.test(x=proxy)) == b"\x01\x02"
 
 
 def test_structure_init_convert_pointer(cs: cstruct) -> None:
@@ -1658,10 +1703,15 @@ def test_structure_write_nested(cs: cstruct, compiled: bool) -> None:
     assert cs.test.dumps(obj, endian=">") == b"\x01\x00\x02\x03ab\x04"
 
     # Any other value that isn't a structure doesn't have the attributes to write
+    obj = cs.test(e=1, g=4)
+    obj.f = 5
     with pytest.raises(WriteError, match=r"^Cannot write test: 'int' object has no attribute "):
-        bytes(cs.test(e=1, f=5, g=4))
+        bytes(obj)
+
+    obj.f = cs.nested(c=2)
+    obj.f.d = 5
     with pytest.raises(WriteError, match=r"^Cannot write test: 'int' object has no attribute "):
-        bytes(cs.test(e=1, f=cs.nested(c=2, d=5), g=4))
+        bytes(obj)
 
     inner = cs.inner(a=3)
     inner.b = b"abc"

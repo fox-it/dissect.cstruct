@@ -73,8 +73,11 @@ class CharMetaType(MetaType):
         # E.g. char[4](b"abcd", endian=">")
         return MetaType.__call__(cls, *args, **kwargs)
 
-    def _normalize(cls, value: bytes | int | Iterable[int]) -> Char | CharArray:
-        return cls.__new__(cls, value)
+    def _normalize(cls, value: Any) -> Char | CharArray:
+        if isinstance(value, _BUFFER_TYPES):
+            # The bytes of a char field are its value, e.g. b"ab" is b"ab\x00\x00" for a char[4] field
+            return cls.__new__(cls, value)
+        return cls(value)
 
 
 class CharArray(bytes, BaseArray, metaclass=CharMetaType):
@@ -110,10 +113,12 @@ class CharArray(bytes, BaseArray, metaclass=CharMetaType):
         return bytes.__new__(cls, super()._read(stream, context=context, endian=endian))
 
     @classmethod
-    def _write(cls, stream: BinaryIO, data: bytes | bytearray | memoryview | list[int], *, endian: Endianness) -> int:
+    def _write(cls, stream: BinaryIO, data: bytes | bytearray | memoryview, *, endian: Endianness) -> int:
         # Convert other bytes-like data to bytes, so adding the null terminator and padding doesn't modify it in place
-        if isinstance(data, (list, bytearray, memoryview)):
+        if isinstance(data, (bytearray, memoryview)):
             data = bytes(data)
+        elif not isinstance(data, bytes):
+            raise TypeError(f"Expected bytes, got {type(data).__name__}")
 
         if cls.__null_terminated__:
             data += b"\x00"
@@ -193,12 +198,9 @@ class Char(bytes, BaseType, metaclass=CharMetaType):
         return b"".join(buf)
 
     @classmethod
-    def _write(cls, stream: BinaryIO, data: bytes | int, *, endian: Endianness) -> int:
-        if isinstance(data, str):
-            raise TypeError(f"Expected bytes, got {type(data).__name__}, encode to bytes first")
-
-        if isinstance(data, int):
-            data = bytes((data,))
+    def _write(cls, stream: BinaryIO, data: bytes, *, endian: Endianness) -> int:
+        if not isinstance(data, _BUFFER_TYPES):
+            raise TypeError(f"Expected bytes, got {type(data).__name__}")
 
         if (actual_size := len(data)) > 1:
             raise WriteError(f"Expected a single character, got {actual_size} instead.")

@@ -539,6 +539,22 @@ def test_union_partial_initialization(cs: cstruct, compiled: bool) -> None:
     assert str(obj) == "<test a=0x2 b=0x2>"
 
 
+def test_union_init_convert(cs: cstruct, compiled: bool) -> None:
+    """Test that values given to a union are converted to the types of their fields, like for a structure."""
+    cdef = """
+    union test {
+        uint16  a[2];
+        uint32  b;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    assert cs.test(a=b"\x01\x00\x02\x00").b == 0x00020001
+    assert cs.test(b="1").a == [1, 0]
+
+
 def test_union_initialization_field_names(cs: cstruct, compiled: bool) -> None:
     """Test that fields with the names of the generated parameters can be given as keywords."""
     cdef = """

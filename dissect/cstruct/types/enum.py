@@ -49,7 +49,8 @@ class EnumMetaType(EnumMeta, MetaType):
             if type(value) is not cls and (member := cls._value2member_map_.get(value)) is not None:
                 return member
 
-            return super().__call__(value)
+            # E.g. a member of another enum, which doesn't hash like its value
+            return super().__call__(value if type(value) is cls else int(value))
 
         # We are constructing a new Enum class
         # cs is the cstruct instance, but we can't isinstance check it due to circular imports
@@ -88,12 +89,6 @@ class EnumMetaType(EnumMeta, MetaType):
         if isinstance(value, cls):
             return True
         return value in cls._value2member_map_
-
-    def _normalize(cls, value: int) -> Self:
-        if not isinstance(value, int):
-            raise TypeError(f"Cannot create {cls.__name__} from {type(value).__name__}")
-        # Look up a member of another enum by its value
-        return cls(int(value))
 
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
         return cls(cls.__type__._read(stream, context=context, endian=endian))

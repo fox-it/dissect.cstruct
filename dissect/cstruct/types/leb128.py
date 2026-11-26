@@ -22,12 +22,6 @@ class LEB128(int, BaseType):
     __signed__: bool
 
     @classmethod
-    def _normalize(cls, value: int) -> Self:
-        if not isinstance(value, int):
-            raise TypeError(f"Cannot create {cls.__name__} from {type(value).__name__}")
-        return cls.__new__(cls, value)
-
-    @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
         result = 0
         shift = 0

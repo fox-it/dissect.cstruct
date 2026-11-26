@@ -22,6 +22,10 @@ def test_char_read(cs: cstruct) -> None:
 def test_char_write(cs: cstruct) -> None:
     assert bytes(cs.char(b"A")) == b"A"
 
+    # Writing doesn't convert values, e.g. an int
+    with pytest.raises(WriteError, match=r"^Cannot write char: Expected bytes, got int$"):
+        cs.char.dumps(0x41)
+
 
 def test_char_value(cs: cstruct) -> None:
     """Test that a ``char`` and ``char`` array behave as expected when given sensible values."""
@@ -76,6 +80,10 @@ def test_char_array_write(cs: cstruct) -> None:
     assert bytes(cs.char[4](buf)) == b"AAAA"
     assert bytes(cs.char[None](buf)) == b"AAAA"
     assert cs.char[None].dumps(cs.char[None](buf)) == b"AAAA\x00"
+
+    # Writing doesn't convert values, e.g. a list
+    with pytest.raises(WriteError, match=r"^Cannot write char\[4\]: Expected bytes, got list$"):
+        cs.char[4].dumps([0x41])
 
 
 def test_char_array_write_padding(cs: cstruct) -> None:
@@ -176,7 +184,6 @@ def test_char_write_too_long(cs: cstruct, compiled: bool) -> None:
     cs.load(cdef, compiled=compiled)
 
     assert cs.char.dumps(b"x") == b"x"
-    assert cs.char.dumps(0x78) == b"x"
 
     with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
         cs.char.dumps(b"xy")
@@ -220,11 +227,12 @@ def test_char_struct_write(cs: cstruct, compiled: bool) -> None:
     # Integers are converted
     assert bytes(cs.test(a=1, b=0x78, c=2)) == b"\x01x\x02"
 
-    # Strings aren't converted, they must be encoded to bytes first
-    obj = cs.test(a=1, c=2)
-    obj.b = "x"
-    with pytest.raises(WriteError):
-        bytes(obj)
+    # Writing doesn't convert values, e.g. strings must be encoded to bytes first
+    for value in ("x", 0x78):
+        obj = cs.test(a=1, c=2)
+        obj.b = value
+        with pytest.raises(WriteError, match=rf"^Cannot write test: Expected bytes, got {type(value).__name__}$"):
+            bytes(obj)
 
 
 def test_char_array_struct_write(cs: cstruct, compiled: bool) -> None:
@@ -264,9 +272,9 @@ def test_char_array_struct_write(cs: cstruct, compiled: bool) -> None:
     with pytest.raises(WriteError, match="Expected static array size 0, got 1 instead"):
         bytes(obj)
 
-    # Strings aren't converted, they must be encoded to bytes first
-    for value in ("abcd", "a"):
+    # Writing doesn't convert values, e.g. strings must be encoded to bytes first
+    for value in ("abcd", "a", [97]):
         obj = cs.test(a=1, c=2)
         obj.b = value
-        with pytest.raises(WriteError):
+        with pytest.raises(WriteError, match=rf"^Cannot write test: Expected bytes, got {type(value).__name__}$"):
             bytes(obj)

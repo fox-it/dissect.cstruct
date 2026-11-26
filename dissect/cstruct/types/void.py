@@ -18,6 +18,10 @@ class VoidArray(list, BaseArray):
         return cls()
 
     @classmethod
+    def _normalize(cls, value: Any) -> Any:
+        return value
+
+    @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
         return cls()
 
@@ -36,6 +40,11 @@ class Void(BaseType):
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, Void)
+
+    @classmethod
+    def _normalize(cls, value: Any) -> Any:
+        # The value of a void field doesn't matter
+        return value
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:

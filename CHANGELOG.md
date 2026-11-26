@@ -56,7 +56,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Without a value, the result is the default value, e.g. `cs.char()` is `b"\x00"` and `cs.uint8[4]()` is `[0, 0, 0, 0]`.
   - `TypeError` is raised for unsupported values.
 - On Python 3.12 and newer, instances of all types support the buffer protocol, so that e.g. `fh.write(obj)` works.
-- Values that are given when a structure is created are converted to the types of their fields. E.g. in `struct test { uint16 values[2]; }`, `cs.test(values=[1, 2]).values` is a `uint16[2]`.
+- Values that are given when a structure or union is created are converted to the types of their fields, like the type does. E.g. in `struct test { uint16 values[2]; }`, `cs.test(values=[1, 2]).values` is a `uint16[2]` and `cs.test(values=b"\x01\x00\x02\x00").values` is `[1, 2]`.
   - Values that are set as attributes aren't converted, e.g. `cs.test().values = [1, 2]`. For performance reasons this is impractical.
 
 ### Deprecated

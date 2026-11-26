@@ -102,6 +102,12 @@ class StructureMetaType(MetaType):
 
         return super().__call__(*args, **kwargs)
 
+    def _normalize(cls, value: Any) -> Any:
+        if isinstance(value, (Structure, UnionProxy)):
+            # E.g. a structure of another type with the same fields
+            return value
+        return cls(value)
+
     def _update_fields(
         cls, fields: list[Field], align: bool = False, classdict: dict[str, Any] | None = None
     ) -> dict[str, Any]:
@@ -1009,7 +1015,8 @@ def _make_union__init__(fields: list[str]) -> str:
     """
     field_args = ", ".join(f"{field} = None" for field in fields)
     field_init = "\n".join(
-        f" object.__setattr__(self, '{name}', {name} if {name} is not None else _{i}_default())"
+        f" object.__setattr__(self, '{name}', _{i}_default() if {name} is None"
+        f" else {name} if type({name}) is _{i}_type else _{i}_normalize({name}))"
         for i, name in enumerate(fields)
     )
 
@@ -1098,7 +1105,6 @@ def _generate_structure__init__(fields: list[Field]) -> FunctionType:
         fields: List of field names.
     """
     mapping = _generate_co_mapping(fields)
-    types = {field._name: _value_type(field) for field in fields}
 
     template: FunctionType = _make_structure__init__(len(fields))
     return type(template)(
@@ -1106,10 +1112,7 @@ def _generate_structure__init__(fields: list[Field]) -> FunctionType:
             co_names=_remap_co_values(template.__code__.co_names, mapping),
             co_varnames=_remap_co_values(template.__code__.co_varnames, mapping),
         ),
-        template.__globals__
-        | {f"__{name}_default__": _default_factory(type_) for name, type_ in types.items()}
-        | {f"__{name}_type__": type_ for name, type_ in types.items()}
-        | {f"__{name}_normalize__": type_._normalize for name, type_ in types.items()},
+        template.__globals__ | _generate__init__globals(fields),
         argdefs=template.__defaults__,
     )
 
@@ -1147,8 +1150,22 @@ def _generate_union__init__(fields: list[Field]) -> FunctionType:
             co_names=_remap_co_values(template.__code__.co_names, mapping),
             co_varnames=_remap_co_values(template.__code__.co_varnames, mapping),
         ),
-        template.__globals__ | {f"__{field._name}_default__": _default_factory(field.type) for field in fields},
+        template.__globals__ | _generate__init__globals(fields),
         argdefs=template.__defaults__,
+    )
+
+
+def _generate__init__globals(fields: list[Field]) -> dict[str, Any]:
+    """Generates the default factories, types and conversion functions of fields for an ``__init__`` method.
+
+    Args:
+        fields: List of fields.
+    """
+    types = {field._name: _value_type(field) for field in fields}
+    return (
+        {f"__{name}_default__": _default_factory(type_) for name, type_ in types.items()}
+        | {f"__{name}_type__": type_ for name, type_ in types.items()}
+        | {f"__{name}_normalize__": type_._normalize for name, type_ in types.items()}
     )
 
 

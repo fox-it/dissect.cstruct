@@ -721,9 +721,9 @@ def test_generate_packed_write_arrays(cs: cstruct, TestEnum: type[Enum]) -> None
     code = next(gen._generate_packed_source(fields))
 
     expected = """
-    if (_value0 := data.a) is None or len(_value0) != 2: _value0 = _array_values(_type0, _value0)
-    if (_value1 := data.b) is None or len(_value1) != 2: _value1 = _array_values(_type1, _value1)
-    if (_value2 := data.c) is None or len(_value2) != 2: _value2 = _array_values(_type2, _value2)
+    if not isinstance(_value0 := data.a, list) or len(_value0) != 2: _value0 = _array_values(_type0, _value0)
+    if not isinstance(_value1 := data.b, list) or len(_value1) != 2: _value1 = _array_values(_type1, _value1)
+    if not isinstance(_value2 := data.c, list) or len(_value2) != 2: _value2 = _array_values(_type2, _value2)
     stream.write(_pack0[endian](*_value0, *_value1, b''.join([item.to_bytes(3, _byteorder[endian], signed=False) for item in _value2])))
     """  # noqa: E501
 

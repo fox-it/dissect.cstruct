@@ -58,9 +58,6 @@ class WcharMetaType(MetaType):
         # E.g. wchar[2](b"a\x00b\x00", endian=">")
         return MetaType.__call__(cls, *args, **kwargs)
 
-    def _normalize(cls, value: str) -> Wchar | WcharArray:
-        return cls.__new__(cls, value)
-
 
 def _wchar_count(value: str) -> int:
     """Return the number of ``wchar`` entries that a string takes up, in which a surrogate pair takes up two."""

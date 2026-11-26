@@ -222,15 +222,15 @@ _PACKABLE_TYPES = (Array, Char, CharArray, Int, Packed, Pointer, Void, VoidArray
 
 def _field_bytes(type_: type[BaseType], value: Any, endian: str) -> bytes:
     """Return the bytes of a char or wchar field that isn't of the right type yet or doesn't fit."""
-    buf = type_.dumps(type_.__default__() if value is None else value, endian=endian)
-    if len(buf) > type_.__size__:
+    type_._write(out := io.BytesIO(), type_.__default__() if value is None else value, endian=endian)
+    if len(buf := out.getvalue()) > type_.__size__:
         raise WriteError(f"Expected {type_.__size__} bytes for {type_.__name__}, got {len(buf)} instead.")
     return buf
 
 
 def _array_values(type_: type[Array], value: list[Any] | None) -> list[Any]:
-    """Return the values of an array field that doesn't have the right size yet."""
-    return type_.__default__() if value is None else type_._pad(value)
+    """Return the values of an array field that isn't a list of the right size yet."""
+    return type_.__default__() if value is None else type_._entries(value)
 
 
 def _or_default(value: Any, type_: type[BaseType]) -> Any:
@@ -1077,7 +1077,8 @@ class _WriteSourceGenerator(_SourceGenerator):
             var = self._var("value")
             num = field_type.__num_entries__
             pack.lines.append(
-                f"if ({var} := {value}) is None or len({var}) != {num}: {var} = _array_values({type_}, {var})"
+                f"if not isinstance({var} := {value}, list) or len({var}) != {num}: "
+                f"{var} = _array_values({type_}, {var})"
             )
 
             # Entries can be enum members or plain integers, both can be packed as they are

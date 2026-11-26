@@ -462,7 +462,7 @@ def test_write_stream_errors(cs: cstruct) -> None:
 
 
 def test_array_struct_write(cs: cstruct, compiled: bool) -> None:
-    """Test that arrays in a structure are written from any sequence, and pad values that are too short."""
+    """Test that arrays in a structure are written from a list or tuple, and pad values that are too short."""
     cdef = """
     struct test {
         uint8   a;
@@ -481,6 +481,19 @@ def test_array_struct_write(cs: cstruct, compiled: bool) -> None:
 
     # Shorter values are padded
     assert bytes(cs.test(a=1, b=[1], c=[3, 4])) == b"\x01\x01\x00\x00\x00\x03\x00\x04\x00"
+
+    obj = cs.test(a=1, c=[3, 4])
+    obj.b = (1,)
+    assert bytes(obj) == b"\x01\x01\x00\x00\x00\x03\x00\x04\x00"
+    assert cs.uint16[2].dumps((1,)) == b"\x01\x00\x00\x00"
+
+    # Writing doesn't convert values, e.g. bytes aren't entries
+    obj.b = b"\x01\x02"
+    with pytest.raises(WriteError, match=r"^Cannot write test: Expected a list, got bytes$"):
+        bytes(obj)
+
+    with pytest.raises(WriteError, match=r"^Cannot write uint16\[2\]: Expected a list, got bytes$"):
+        cs.uint16[2].dumps(b"\x01\x02")
 
     # The total amount of values is right, but the second array is too long
     obj = cs.test(a=1, b=[1])

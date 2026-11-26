@@ -26,7 +26,18 @@ def test_pointer(cs: cstruct) -> None:
     assert str(obj) == "255"
 
     with pytest.raises(NullPointerDereference):
-        ptr(0, None, endian=cs.endian).dereference()
+        ptr(0).dereference()
+
+    # Created from a value like an int, without a stream to dereference
+    assert type(ptr(1)) is ptr
+    assert ptr("1") == 1
+    with pytest.raises(NullPointerDereference):
+        ptr(1).dereference()
+
+    # A pointer keeps its stream, also as another pointer type
+    assert ptr(obj).dereference() == 255
+    assert cs._make_pointer(cs.int8)(obj).dereference() == -1
+    assert ptr(ptr(0)) == 0
 
 
 @pytest.mark.parametrize(

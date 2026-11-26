@@ -93,9 +93,8 @@ assert c_parser.Example(5) == c_parser.Example.B
 assert bytes(result) == data
 
 # You can also instantiate structures from Python by using kwargs
-# Note that array sizes are not enforced
 instance = c_parser.some_struct(
-    field_1=5, field_2="lorem", field_3="ipsum", field_4=[c_parser.Example.B, c_parser.Example.A]
+    field_1=5, field_2=b"lorem", field_3=b"ipsum", field_4=[c_parser.Example.B, c_parser.Example.A]
 )
 assert bytes(instance) == b"\x05loremipsum\x05\x00\x00\x00"
 
@@ -176,6 +175,40 @@ assert cs.uint32(b"\x05\x00\x00\x00") == 5
 assert cs.uint24[2](b"\x01\x00\x00\x02\x00\x00") == [1, 2]  # You can also parse arrays using list indexing
 assert cs.char[None](b"hello world!\x00") == b"hello world!"  # A list index of None means null terminated
 ```
+
+### Creating values
+A type creates a value like its Python base type does, e.g. `int` for `uint32` and `list` for arrays. Bytes-like and file-like objects are parsed instead.
+
+```python
+from dissect.cstruct import cstruct
+
+cs = cstruct()
+assert cs.uint32("5") == 5  # Like int("5")
+assert cs.uint32(b"\x05\x00\x00\x00") == 5  # Parsed
+assert cs.uint8[4]([1, 2]) == [1, 2, 0, 0]  # Padded to the number of entries
+```
+
+Some types don't accept all the values of their Python base type:
+- `char` and `char` arrays don't accept a `str`, encode it to bytes first. An `int` gives a single character, e.g. `cs.char(0x41)` is `b"A"`.
+- `wchar` and `wchar` arrays only accept a `str`.
+- Other arrays don't accept a `str` or an `int`.
+
+A structure or union converts the values of its fields in the same way. A `char` field takes bytes as its value, and a structure field keeps a structure as it is. Values that are set as attributes aren't converted for performance reasons.
+
+```python
+cs.load("""
+struct example {
+    uint16  values[2];
+    char    name[4];
+};
+""")
+
+obj = cs.example(values=b"\x01\x00\x02\x00", name=b"ab")
+assert obj.values == [1, 2]  # Parsed
+assert obj.name == b"ab\x00\x00"  # Padded
+```
+
+Writing doesn't convert values. E.g. `cs.uint8[2].dumps(b"\x01\x02")` raises a `WriteError`. Use `cs.uint8[2].dumps([1, 2])` instead.
 
 ### Unions and nested structures
 Unions and nested structures are supported, both anonymous and named.
