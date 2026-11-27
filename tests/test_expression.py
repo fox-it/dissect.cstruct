@@ -383,7 +383,20 @@ def _expression_function(expr: Expression) -> Callable[[cstruct, dict], int]:
     return eval(f"lambda cs, context: {expr.source()}", SOURCE_GLOBALS)
 
 
-def test_expression_source(cs: cstruct) -> None:
+@pytest.mark.parametrize(
+    ("source", "context"),
+    [
+        ("a - 8", {"a": 100}),
+        ("(a & 1) * 16", {"a": 3}),
+        ("a * 2 + b * (3 + 4) >> 1", {"a": 5, "b": 10}),
+        ("sizeof(test) * X - -1", {}),
+        ("offsetof(test, b) + ~X % 3", {}),
+        ("a.b | 0x10 ^ 1 << 2", {"a": {"b": 3}}),
+        ("a / 3", {"a": cstruct().uint32(10)}),
+        ("1 + 2", {}),
+    ],
+)
+def test_expression_source(cs: cstruct, source: str, context: dict) -> None:
     """Test that the source code of an expression calculates the same value as evaluating it."""
     cdef = """
     #define X 4
@@ -394,20 +407,8 @@ def test_expression_source(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    cases = [
-        ("a - 8", {"a": 100}),
-        ("(a & 1) * 16", {"a": 3}),
-        ("a * 2 + b * (3 + 4) >> 1", {"a": 5, "b": 10}),
-        ("sizeof(test) * X - -1", {}),
-        ("offsetof(test, b) + ~X % 3", {}),
-        ("a.b | 0x10 ^ 1 << 2", {"a": {"b": 3}}),
-        ("a / 3", {"a": cs.uint32(10)}),
-        ("1 + 2", {}),
-    ]
-
-    for source, context in cases:
-        expr = Expression(source)
-        assert _expression_function(expr)(cs, context) == expr.evaluate(cs, context)
+    expr = Expression(source)
+    assert _expression_function(expr)(cs, context) == expr.evaluate(cs, context)
 
 
 @pytest.mark.parametrize(

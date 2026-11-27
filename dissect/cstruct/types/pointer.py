@@ -7,6 +7,7 @@ from dissect.cstruct.exception import EOFError, NullPointerDereference
 from dissect.cstruct.types.base import BaseType, normalize_endianness
 from dissect.cstruct.types.char import Char
 from dissect.cstruct.types.void import Void
+from dissect.cstruct.types.wchar import Wchar
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -27,12 +28,21 @@ class Pointer(int, BaseType, Generic[T]):
     __endian: Endianness
 
     def __new__(
-        cls, value: int, stream: BinaryIO | None, *, context: dict[str, Any] | None = None, endian: Endianness
+        cls,
+        value: int,
+        stream: BinaryIO | None = None,
+        *,
+        context: dict[str, Any] | None = None,
+        endian: Endianness | None = None,
     ) -> Self:
+        if stream is None and isinstance(value, Pointer):
+            # Keep the stream, so that e.g. a pointer of another type can still be dereferenced
+            stream, context, endian = value.__stream, value.__context, value.__endian
+
         obj = super().__new__(cls, value)
         obj.__stream = stream
         obj.__context = context
-        obj.__endian = endian
+        obj.__endian = endian if endian is not None else cls.__cs__.endian
         obj.dereference = cache(obj.dereference)
         return obj
 
@@ -72,13 +82,7 @@ class Pointer(int, BaseType, Generic[T]):
 
     @classmethod
     def __default__(cls) -> Self:
-        return cls.__new__(
-            cls,
-            cls.__cs__.pointer.__default__(),
-            None,
-            context=None,
-            endian=cls.__cs__.endian,
-        )
+        return cls.__new__(cls, cls.__cs__.pointer.__default__())
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
@@ -115,9 +119,9 @@ class Pointer(int, BaseType, Generic[T]):
         except OverflowError:
             raise EOFError(f"Offset {int(self):#x} is beyond the end of the stream") from None
 
-        if issubclass(self.__type__, Char):
-            # This makes the assumption that a char pointer is a null-terminated string
-            value = self.__type__._read_0(self.__stream, context=self.__context, endian=endian)
+        if issubclass(self.__type__, (Char, Wchar)):
+            # This makes the assumption that a char or wchar pointer is a null-terminated string
+            value = self.__type__[None]._read(self.__stream, context=self.__context, endian=endian)
         else:
             value = self.__type__._read(self.__stream, context=self.__context, endian=endian)
 

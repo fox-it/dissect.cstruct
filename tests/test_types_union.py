@@ -86,31 +86,31 @@ def test_union_write(TestUnion: type[Union]) -> None:
     buf = b"\x01\x00\x00\x00"
     obj = TestUnion(buf)
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     obj = TestUnion(a=1, b=2)
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
     assert bytes(obj) == buf
 
     obj = TestUnion(b=1)
-    assert obj.dumps() == b"\x01\x00\x00\x00"
+    assert bytes(obj) == b"\x01\x00\x00\x00"
 
     obj = TestUnion()
-    assert obj.dumps() == b"\x00\x00\x00\x00"
+    assert bytes(obj) == b"\x00\x00\x00\x00"
 
     obj = TestUnion(5, 1)
-    assert obj.dumps() == b"\x05\x00\x00\x00"
+    assert bytes(obj) == b"\x05\x00\x00\x00"
     obj.a = None
     assert obj.a == 0
-    assert obj.dumps() == b"\x00\x00\x00\x00"
+    assert bytes(obj) == b"\x00\x00\x00\x00"
 
     obj = TestUnion(None, 1)
     assert obj.a == 0
-    assert obj.dumps() == b"\x00\x00\x00\x00"
+    assert bytes(obj) == b"\x00\x00\x00\x00"
 
     obj = TestUnion(1, None)
     assert obj.b == 1
-    assert obj.dumps() == b"\x01\x00\x00\x00"
+    assert bytes(obj) == b"\x01\x00\x00\x00"
 
 
 def test_union_write_anonymous(cs: cstruct, compiled: bool) -> None:
@@ -127,7 +127,7 @@ def test_union_write_anonymous(cs: cstruct, compiled: bool) -> None:
 
     obj = cs.test(b"\x01\x00\x00\x00")
     assert obj.a == 1
-    assert obj.dumps() == b"\x01\x00\x00\x00"
+    assert bytes(obj) == b"\x01\x00\x00\x00"
 
 
 def test_union_array_read(TestUnion: type[Union]) -> None:
@@ -147,7 +147,7 @@ def test_union_array_read(TestUnion: type[Union]) -> None:
     assert obj[1].a == 2
     assert obj[1].b == 2
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
     assert obj == [TestUnion(1), TestUnion(2)]
 
     obj = TestUnion[None](b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00")
@@ -160,10 +160,10 @@ def test_union_array_write(TestUnion: type[Union]) -> None:
     obj = TestUnionArray([TestUnion(1), TestUnion(2)])
 
     assert len(obj) == 2
-    assert obj.dumps() == b"\x01\x00\x00\x00\x02\x00\x00\x00"
+    assert bytes(obj) == b"\x01\x00\x00\x00\x02\x00\x00\x00"
 
     obj = TestUnion[None]([TestUnion(1)])
-    assert obj.dumps() == b"\x01\x00\x00\x00\x00\x00\x00\x00"
+    assert TestUnion[None].dumps(obj) == b"\x01\x00\x00\x00\x00\x00\x00\x00"
 
 
 def test_union_modify(cs: cstruct) -> None:
@@ -250,8 +250,8 @@ def test_union_definition(cs: cstruct, compiled: bool) -> None:
     assert obj.b == b"zomgbeef"
     assert list(obj.__dict__) == ["a", "b", "__dynamic_sizes__", "_buf", "_endian"]
 
-    assert obj.dumps() == buf
-    assert cs.test().dumps() == b"\x00\x00\x00\x00\x00\x00\x00\x00"
+    assert bytes(obj) == buf
+    assert bytes(cs.test()) == b"\x00\x00\x00\x00\x00\x00\x00\x00"
 
 
 def test_union_definition_nested(cs: cstruct, compiled: bool) -> None:
@@ -289,7 +289,7 @@ def test_union_definition_nested(cs: cstruct, compiled: bool) -> None:
     assert obj.c.a.b == 0x66656562
     assert obj.c.b.b == b"holybeef"
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_union_definition_anonymous(cs: cstruct, compiled: bool) -> None:
@@ -320,7 +320,7 @@ def test_union_definition_anonymous(cs: cstruct, compiled: bool) -> None:
     assert obj.b == b"\x01\x01\x02"
     assert obj.c == b"\x02"
     assert obj.d == 0x04040303
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_union_definition_dynamic(cs: cstruct, compiled: bool) -> None:
@@ -347,7 +347,7 @@ def test_union_definition_dynamic(cs: cstruct, compiled: bool) -> None:
     assert obj.b == 0x6161616161616109
 
     with pytest.raises(NotImplementedError, match="Writing dynamic unions is not yet supported"):
-        obj.dumps()
+        bytes(obj)
 
 
 def test_union_update(cs: cstruct, compiled: bool) -> None:
@@ -368,7 +368,7 @@ def test_union_update(cs: cstruct, compiled: bool) -> None:
     assert obj.a == 2
     obj.b = 0xFFFF
     assert obj.a == 0xFF
-    assert obj.dumps() == b"\xff\xff"
+    assert bytes(obj) == b"\xff\xff"
 
 
 def test_union_nested_update(cs: cstruct) -> None:
@@ -393,11 +393,11 @@ def test_union_nested_update(cs: cstruct) -> None:
     obj.c.b.b = b"ABCDEFGH"
     assert obj.c.a.a == 0x44434241
     assert obj.c.a.b == 0x48474645
-    assert obj.dumps() == b"1337ABCDEFGH"
+    assert bytes(obj) == b"1337ABCDEFGH"
 
     obj.c.b.b = b"AAAAAAAA"
     assert obj.c.a.a == 0x41414141
-    assert obj.dumps() == b"1337AAAAAAAA"
+    assert bytes(obj) == b"1337AAAAAAAA"
 
 
 def test_union_anonymous_update(cs: cstruct) -> None:
@@ -444,7 +444,7 @@ def test_union_default(cs: cstruct, compiled: bool) -> None:
     assert obj.a == 0
     assert obj.b == b"\x00\x00\x00\x00\x00\x00\x00\x00"
 
-    assert obj.dumps() == b"\x00" * 8
+    assert bytes(obj) == b"\x00" * 8
 
     for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
@@ -455,7 +455,7 @@ def test_union_default(cs: cstruct, compiled: bool) -> None:
     assert obj.t_union == cs.test.__default__()
     assert obj.t_union_array == [cs.test.__default__(), cs.test.__default__()]
 
-    assert obj.dumps() == b"\x00" * 24
+    assert bytes(obj) == b"\x00" * 24
 
     for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
@@ -539,6 +539,38 @@ def test_union_partial_initialization(cs: cstruct, compiled: bool) -> None:
     assert str(obj) == "<test a=0x2 b=0x2>"
 
 
+def test_union_init_convert(cs: cstruct, compiled: bool) -> None:
+    """Test that values given to a union are converted to the types of their fields, like for a structure."""
+    cdef = """
+    union test {
+        uint16  a[2];
+        uint32  b;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    assert cs.test(a=b"\x01\x00\x02\x00").b == 0x00020001
+    assert cs.test(b="1").a == [1, 0]
+
+
+def test_union_initialization_field_names(cs: cstruct, compiled: bool) -> None:
+    """Test that fields with the names of the generated parameters can be given as keywords."""
+    cdef = """
+    union test {
+        uint8   self;
+        uint16  cls;
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    assert bytes(cs.test(self=1)) == b"\x01\x00"
+    assert bytes(cs.test(cls=0x0102)) == b"\x02\x01"
+
+
 def test_union_partial_initialization_dynamic(cs: cstruct, compiled: bool) -> None:
     """Partial initialization of a dynamic union should fill in the rest with appropriate values."""
     cdef = """
@@ -606,7 +638,7 @@ def test_union_changing_endian(cs: cstruct, compiled: bool) -> None:
     assert obj.a == 0x7A6F6D67
     assert obj.b == b"zomgbeef"
 
-    assert obj.dumps(endian=">") == buf
+    assert cs.test.dumps(obj, endian=">") == buf
 
 
 UNION_DEF = """
@@ -814,7 +846,7 @@ def test_union_default_nested(cs: cstruct, compiled: bool) -> None:
     """Test that a union with doubly nested structures can be created with separate default values."""
     cs.load(UNION_NESTED, compiled=compiled)
 
-    assert cs.test().dumps() == b"\x00\x00\x00\x00"
+    assert bytes(cs.test()) == b"\x00\x00\x00\x00"
     assert cs.test().e.c.a == 0
 
     # Default values of different instances are separate values
@@ -832,7 +864,7 @@ def test_union_update_nested_field(cs: cstruct, compiled: bool) -> None:
     obj.e.c.a = 5
     assert obj.f == [5, 2, 3, 4]
     assert obj.g == 0x04030205
-    assert obj.dumps() == b"\x05\x02\x03\x04"
+    assert bytes(obj) == b"\x05\x02\x03\x04"
 
 
 def test_union_update_anonymous_field(cs: cstruct, compiled: bool) -> None:
@@ -852,7 +884,7 @@ def test_union_update_anonymous_field(cs: cstruct, compiled: bool) -> None:
     obj.a = 3
     assert obj.a == 3
     assert obj.c == 0x0020003
-    assert obj.dumps() == b"\x03\x00\x02\x00"
+    assert bytes(obj) == b"\x03\x00\x02\x00"
 
 
 def test_union_in_union(cs: cstruct, compiled: bool) -> None:
@@ -872,7 +904,7 @@ def test_union_in_union(cs: cstruct, compiled: bool) -> None:
     """
     cs.load(cdef, compiled=compiled)
 
-    assert cs.test().dumps() == b"\x00"
+    assert bytes(cs.test()) == b"\x00"
 
     obj = cs.test(b"\x01")
     assert obj.e.d.b.a == 1
@@ -883,7 +915,7 @@ def test_union_in_union(cs: cstruct, compiled: bool) -> None:
     assert obj.e.d.b.a == 2
     assert obj.e.d.c == 2
     assert obj.f == 2
-    assert obj.dumps() == b"\x02"
+    assert bytes(obj) == b"\x02"
 
 
 def test_union_asdict(cs: cstruct, compiled: bool) -> None:
@@ -944,18 +976,19 @@ def test_union_write_largest_field(cs: cstruct, compiled: bool) -> None:
 
     buf = b"\x01\x02\x03\x04"
     obj = cs.test(buf)
-    assert obj.dumps() == buf
-    assert obj.dumps(endian=">") == buf[::-1]
+    assert bytes(obj) == buf
+    assert cs.test.dumps(obj, endian=">") == buf[::-1]
 
     fh = io.BytesIO()
-    assert obj.write(fh) == 4
+    assert cs.test.write(fh, obj) == 4
+    assert fh.getvalue() == buf
 
 
 def test_union_write_empty(cs: cstruct, compiled: bool) -> None:
     """Test that a union without any fields doesn't write anything."""
     cs.load("union test {};", compiled=compiled)
 
-    assert cs.test().dumps() == b""
+    assert bytes(cs.test()) == b""
 
 
 def test_union_write_anonymous_largest(cs: cstruct, compiled: bool) -> None:
@@ -992,19 +1025,19 @@ def test_union_write_anonymous_largest(cs: cstruct, compiled: bool) -> None:
     assert verify_compiled(cs.larger, compiled)
 
     buf = b"\x01\x02\x03\x04\x05\x06\x07\x08"
-    assert cs.larger(buf).dumps() == buf
-    assert cs.only_anonymous(buf).dumps() == buf
+    assert bytes(cs.larger(buf)) == buf
+    assert bytes(cs.only_anonymous(buf)) == buf
 
     # Changes to a field of the anonymous structure are written too
     obj = cs.larger(buf)
     obj.b = 0x11111111
-    assert obj.dumps() == b"\x01\x02\x03\x04\x11\x11\x11\x11"
+    assert bytes(obj) == b"\x01\x02\x03\x04\x11\x11\x11\x11"
 
     obj.c = 0x2222
-    assert obj.dumps() == b"\x22\x22\x03\x04\x11\x11\x11\x11"
+    assert bytes(obj) == b"\x22\x22\x03\x04\x11\x11\x11\x11"
 
     # A regular field of the same size is preferred, which only makes a difference for the other endianness
-    assert cs.same_size(b"\x01\x02\x03\x04").dumps(endian=">") == b"\x04\x03\x02\x01"
+    assert cs.same_size.dumps(cs.same_size(b"\x01\x02\x03\x04"), endian=">") == b"\x04\x03\x02\x01"
 
 
 def test_union_in_structure_write(cs: cstruct, compiled: bool) -> None:
@@ -1034,14 +1067,14 @@ def test_union_in_structure_write(cs: cstruct, compiled: bool) -> None:
 
     buf = b"\x01\x02\x00\x03\x00\x04\x05\x06"
     obj = cs.test(buf)
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     obj.f.c.a = 7
-    assert obj.dumps() == b"\x01\x07\x00\x03\x00\x04\x05\x06"
+    assert bytes(obj) == b"\x01\x07\x00\x03\x00\x04\x05\x06"
 
     obj.g = 8
-    assert obj.dumps() == b"\x01\x07\x00\x03\x00\x08\x00\x06"
+    assert bytes(obj) == b"\x01\x07\x00\x03\x00\x08\x00\x06"
 
     # Fields that are None have the default value
     obj.f = None
-    assert obj.dumps() == b"\x01\x00\x00\x00\x00\x08\x00\x06"
+    assert bytes(obj) == b"\x01\x00\x00\x00\x00\x08\x00\x06"

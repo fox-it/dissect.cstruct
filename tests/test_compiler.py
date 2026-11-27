@@ -172,10 +172,10 @@ def test_generate_packed_read_byte_types(cs: cstruct) -> None:
     expected = """
     buf = stream.read(18)
     if len(buf) != 18: raise _EOFError(f"Read {len(buf)} bytes, but expected 18")
-    _value0 = _type_call(_type0, buf[0:1])
-    _value1 = _type_call(_type1, buf[1:3])
-    _value2 = _type_call(_type2, str(buf[3:5], _encoding0[endian], 'surrogatepass'))
-    _value3 = _type_call(_type3, str(buf[5:9], _encoding0[endian], 'surrogatepass'))
+    _value0 = _bytes_new(_type0, buf[0:1])
+    _value1 = _bytes_new(_type1, buf[1:3])
+    _value2 = _str_new(_type2, buf[3:5], _encoding0[endian], 'surrogatepass')
+    _value3 = _str_new(_type3, buf[5:9], _encoding0[endian], 'surrogatepass')
     _value4 = _type_call(_type4, _int_from_bytes(buf[9:12], _byteorder[endian], signed=True))
     _array_buf = buf[12:18]
     """
@@ -341,7 +341,7 @@ def test_generate_fields_dynamic_after_bitfield(cs: cstruct, TestEnum: Enum, oth
     except _Error: raise
     except (ArithmeticError, ValueError) as e: raise _ReadError("Invalid array size 'size': " + str(e)) from e
     _offset = stream.tell()
-    _value3 = values['c'] = _type_call(_type4, _type5._read_array(stream, _count, context=values, endian=endian))
+    _value3 = values['c'] = _bytes_new(_type4, _type5._read_array(stream, _count, context=values, endian=endian))
     sizes['c'] = stream.tell() - _offset
     """
 
@@ -388,7 +388,7 @@ def test_generate_fields_dynamic_before_bitfield(cs: cstruct, TestEnum: Enum, ot
     except _Error: raise
     except (ArithmeticError, ValueError) as e: raise _ReadError("Invalid array size 'size': " + str(e)) from e
     _offset = stream.tell()
-    _value3 = values['c'] = _type_call(_type4, _type5._read_array(stream, _count, context=values, endian=endian))
+    _value3 = values['c'] = _bytes_new(_type4, _type5._read_array(stream, _count, context=values, endian=endian))
     sizes['c'] = stream.tell() - _offset
     """
 
@@ -425,9 +425,9 @@ def test_compiled_dynamic_array_sizes() -> None:
     lines = source_lines(compiled.test)
     assert [line for line in lines if line.startswith("try: _count = ") or "._read" in line] == [
         "try: _count = max(0, int(_value0))",
-        "_value3 = values['a'] = _type_call(_type3, _type4._read_array(stream, _count, context=values, endian=endian))",
+        "_value3 = values['a'] = _bytes_new(_type3, _type4._read_array(stream, _count, context=values, endian=endian))",
         "try: _count = max(0, (int(_value0) - _identifier(cs, values, 'HDR')))",
-        "_value4 = values['b'] = _type_call(_type5, _type6._read_array(stream, _count, context=values, endian=endian))",
+        "_value4 = values['b'] = _str_new(_type5, _type6._read_array(stream, _count, context=values, endian=endian))",
         "try: _count = max(0, (int(_value1) * 2))",
         "_value5 = values['c'] = _type_call(_type7, _type8._read_array(stream, _count, context=values, endian=endian))",
         "try: _count = max(0, _identifier(cs, values, 'hdr.size'))",
@@ -533,7 +533,7 @@ def test_inline_nested(inline_cs: tuple[cstruct, cstruct]) -> None:
         obj = inlined.header(buf, endian=endian)
         expected = not_inlined.header(buf, endian=endian)
         assert parsed_state(obj) == parsed_state(expected)
-        assert obj.dumps() == expected.dumps()
+        assert bytes(obj) == bytes(expected)
         assert obj.__dynamic_sizes__ == expected.__dynamic_sizes__
         assert obj.form.resident.length == expected.form.resident.length
         assert obj.x == expected.x
@@ -685,6 +685,10 @@ def test_lazy_compile(cs: cstruct) -> None:
             obj.a = _value0
             obj.__dynamic_sizes__ = {}
             return obj
+        if cls.__construct__ is _construct0:
+            obj = _construct0(cls, _value0)
+            obj.__dynamic_sizes__ = {}
+            return obj
         obj = _type_call(cls, **{'a': _value0})
         obj.__dynamic_sizes__ = {}
         return obj
@@ -717,9 +721,9 @@ def test_generate_packed_write_arrays(cs: cstruct, TestEnum: type[Enum]) -> None
     code = next(gen._generate_packed_source(fields))
 
     expected = """
-    if (_value0 := data.a) is None or len(_value0) != 2: _value0 = _array_values(_type0, _value0)
-    if (_value1 := data.b) is None or len(_value1) != 2: _value1 = _array_values(_type1, _value1)
-    if (_value2 := data.c) is None or len(_value2) != 2: _value2 = _array_values(_type2, _value2)
+    if not isinstance(_value0 := data.a, list) or len(_value0) != 2: _value0 = _array_values(_type0, _value0)
+    if not isinstance(_value1 := data.b, list) or len(_value1) != 2: _value1 = _array_values(_type1, _value1)
+    if not isinstance(_value2 := data.c, list) or len(_value2) != 2: _value2 = _array_values(_type2, _value2)
     stream.write(_pack0[endian](*_value0, *_value1, b''.join([item.to_bytes(3, _byteorder[endian], signed=False) for item in _value2])))
     """  # noqa: E501
 
@@ -844,7 +848,7 @@ def test_generate_structure_write(cs: cstruct) -> None:
     assert isinstance(cs.test.__dict__["_write"], classmethod)
 
     obj = cs.test(b=1, c=b"ab", d=cs.nested(a=2), n=1, e=[3], f=4, g=5)
-    assert obj.dumps() == b"\x01\x00\x00\x00ab\x02\x01\x03\x54\x00"
+    assert bytes(obj) == b"\x01\x00\x00\x00ab\x02\x01\x03\x54\x00"
 
 
 def test_generate_union_write(cs: cstruct) -> None:
@@ -1083,19 +1087,19 @@ def test_write_after_add_field(cs: cstruct) -> None:
 
     # Before the first write
     cs.nested.add_field("e", cs.uint8)
-    assert cs.test(b=1, c=cs.nested(a=2, e=3), d=4).dumps() == b"\x01\x02\x03\x04"
+    assert bytes(cs.test(b=1, c=cs.nested(a=2, e=3), d=4)) == b"\x01\x02\x03\x04"
 
     # After the first write, in the structure that was compiled
     cs.test.add_field("f", cs.uint8)
-    assert cs.test(b=1, c=cs.nested(a=2, e=3), d=4, f=5).dumps() == b"\x01\x02\x03\x04\x05"
+    assert bytes(cs.test(b=1, c=cs.nested(a=2, e=3), d=4, f=5)) == b"\x01\x02\x03\x04\x05"
 
     # After the first write, in the structure that was inlined
     cs.nested.add_field("g", cs.uint8)
-    assert cs.test(b=1, c=cs.nested(a=2, e=3, g=6), d=4, f=5).dumps() == b"\x01\x02\x03\x06\x04\x05"
+    assert bytes(cs.test(b=1, c=cs.nested(a=2, e=3, g=6), d=4, f=5)) == b"\x01\x02\x03\x06\x04\x05"
 
     # A field that isn't supported by the compiler
     cs.test.add_field("h", cs.uleb128)
-    assert cs.test(b=1, c=cs.nested(a=2, e=3, g=6), d=4, f=5, h=7).dumps() == b"\x01\x02\x03\x06\x04\x05\x07"
+    assert bytes(cs.test(b=1, c=cs.nested(a=2, e=3, g=6), d=4, f=5, h=7)) == b"\x01\x02\x03\x06\x04\x05\x07"
 
     cdef = """
     struct nested_last {
@@ -1110,9 +1114,9 @@ def test_write_after_add_field(cs: cstruct) -> None:
     cs.load(cdef)
 
     # After the first write, in a structure that was inlined without any fields after it
-    assert cs.test_last(b=1, c=cs.nested_last(a=2)).dumps() == b"\x01\x02"
+    assert bytes(cs.test_last(b=1, c=cs.nested_last(a=2))) == b"\x01\x02"
     cs.nested_last.add_field("d", cs.uint8)
-    assert cs.test_last(b=1, c=cs.nested_last(a=2, d=3)).dumps() == b"\x01\x02\x03"
+    assert bytes(cs.test_last(b=1, c=cs.nested_last(a=2, d=3))) == b"\x01\x02\x03"
 
 
 def test_write_generate_failure(cs: cstruct) -> None:
@@ -1124,7 +1128,7 @@ def test_write_generate_failure(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert cs.test(a=1).dumps() == b"\x01"
+    assert bytes(cs.test(a=1)) == b"\x01"
 
     with patch.object(compiler._ReadSourceGenerator, "generate", side_effect=ValueError):
         assert cs.test(b"\x01").a == 1
@@ -1132,7 +1136,7 @@ def test_write_generate_failure(cs: cstruct) -> None:
     # Adding a field no longer recompiles the structure, so _write has to be the interpreted version too
     assert not cs.test.__compiled__
     cs.test.add_field("b", cs.uint8)
-    assert cs.test(a=1, b=2).dumps() == b"\x01\x02"
+    assert bytes(cs.test(a=1, b=2)) == b"\x01\x02"
 
 
 def test_write_generate_failure_keeps_read(cs: cstruct) -> None:
@@ -1145,7 +1149,7 @@ def test_write_generate_failure_keeps_read(cs: cstruct) -> None:
     cs.load(cdef)
 
     with patch.object(compiler._WriteSourceGenerator, "generate", side_effect=ValueError):
-        assert cs.test(a=1).dumps() == b"\x01"
+        assert bytes(cs.test(a=1)) == b"\x01"
 
     assert cs.test.__compiled__
     assert not hasattr(cs.test._write, "__source__")
@@ -1183,7 +1187,7 @@ def test_write_custom_types(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert cs.test(a=1, b=2, c=[3, 4]).dumps() == b"\x01writearray"
+    assert bytes(cs.test(a=1, b=2, c=[3, 4])) == b"\x01writearray"
 
     cdef = """
     struct test_bits {
@@ -1193,7 +1197,7 @@ def test_write_custom_types(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    assert cs.test_bits(a=1, b=2).dumps() == b"\x01write"
+    assert bytes(cs.test_bits(a=1, b=2)) == b"\x01write"
 
 
 @pytest.mark.parametrize("endian", ["<", ">", "!", "@", "="])
@@ -1214,13 +1218,13 @@ def test_native_alignment(endian: Endianness, compiled: bool) -> None:
     assert len(cs.test) == 15
 
     # Packing or unpacking multiple values at once shouldn't add padding to align them
-    buf = cs.uint8.dumps(1) + cs.uint32.dumps(2) + cs.uint16.dumps(3) + cs.uint64.dumps(4)
+    buf = bytes(cs.uint8(1)) + bytes(cs.uint32(2)) + bytes(cs.uint16(3)) + bytes(cs.uint64(4))
     obj = cs.test(buf)
     assert obj.a == 1
     assert obj.b == 2
     assert obj.c == 3
     assert obj.d == 4
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_read_offset_before_position(cs: cstruct, compiled: bool) -> None:

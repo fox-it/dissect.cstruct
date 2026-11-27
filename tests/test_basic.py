@@ -59,7 +59,6 @@ def test_load_init() -> None:
     assert "test" in cs.types
     a = cs.test(a=0xBADC0DE, b=0xACCE55ED)
     assert len(bytes(a)) == 12
-    assert bytes(a) == a.dumps()
     assert bytes(a) == b"\x0b\xad\xc0\xde\x00\x00\x00\x00\xac\xce\x55\xed"
 
     # load using positional argument and little endian
@@ -67,7 +66,6 @@ def test_load_init() -> None:
     assert "test" in cs.types
     a = cs.test(a=0xBADC0DE, b=0xACCE55ED)
     assert len(bytes(a)) == 12
-    assert bytes(a) == a.dumps()
     assert bytes(a) == b"\xde\xc0\xad\x0b\xed\x55\xce\xac\x00\x00\x00\x00"
 
 
@@ -294,7 +292,7 @@ def test_half_compiled_struct(cs: cstruct) -> None:
     assert obj.b.c == 3
     assert obj.c == 4
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_cstruct_bytearray(cs: cstruct) -> None:
@@ -357,8 +355,8 @@ def test_dunder_bytes(cs: cstruct) -> None:
 
     a = cs.test(a=0xBADC0DE, b=0xACCE55ED)
     assert len(bytes(a)) == 12
-    assert bytes(a) == a.dumps()
     assert bytes(a) == b"\x0b\xad\xc0\xde\x00\x00\x00\x00\xac\xce\x55\xed"
+    assert bytes(a) == cs.test.dumps(a)
 
 
 def test_array_of_null_terminated_strings(cs: cstruct, compiled: bool) -> None:
@@ -432,7 +430,7 @@ def test_array_three_dimensional(cs: cstruct, compiled: bool) -> None:
     assert obj.a[1][1][0] == 7
     assert obj.a[1][1][1] == 8
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_nested_array_of_variable_size(cs: cstruct, compiled: bool) -> None:
@@ -461,7 +459,7 @@ def test_nested_array_of_variable_size(cs: cstruct, compiled: bool) -> None:
     assert obj.a[1][0][1] == 5
     assert obj.a[1][0][2] == 6
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_report_array_size_mismatch(cs: cstruct) -> None:
@@ -472,10 +470,11 @@ def test_report_array_size_mismatch(cs: cstruct) -> None:
     """
     cs.load(cdef)
 
-    a = cs.test(a=[1, 2, 3])
+    a = cs.test()
+    a.a = [1, 2, 3]
 
-    with pytest.raises(WriteError):
-        a.dumps()
+    with pytest.raises(WriteError, match=r"^Expected static array size 2, got 3 instead\.$"):
+        bytes(a)
 
 
 def test_reserved_keyword(cs: cstruct, compiled: bool) -> None:
@@ -557,16 +556,6 @@ def test_dynamic_substruct_size(cs: cstruct) -> None:
 
     assert cs.sub.__dynamic__
     assert cs.test.__dynamic__
-
-
-def test_dumps_write_overload(cs: cstruct) -> None:
-    assert cs.uint8.dumps(1) == cs.uint8(1).dumps() == b"\x01"
-
-    fh = BytesIO()
-    cs.uint8.write(fh, 1)
-    assert fh.getvalue() == b"\x01"
-    cs.uint8(2).write(fh)
-    assert fh.getvalue() == b"\x01\x02"
 
 
 def test_linked_list(cs: cstruct) -> None:
@@ -747,11 +736,18 @@ def test_cdef_defines(cs: cstruct) -> None:
     )
 
     src = cs.cdef()
-    assert "#define INT_CONST 8" in src
-    assert "#define STR_CONST 'hello'" in src
-    assert "#define BYTES_CONST b'world'" in src
     # The constant referenced in the (dynamic) array expression must be emitted
-    assert "uint8 data[count * INT_CONST];" in src
+    assert src == textwrap.dedent(
+        """\
+        #define INT_CONST 8
+        #define STR_CONST 'hello'
+        #define BYTES_CONST b'world'
+
+        struct Test {
+            uint32 count;
+            uint8 data[count * INT_CONST];
+        };"""
+    )
 
     reparsed = cstruct()
     reparsed.load(src)
@@ -884,3 +880,23 @@ def test_deprecation_warnings(cs: cstruct) -> None:
 
     # No test for the pointer type since it also conflicts with a bug fix
     # (accessing a field named 'type' on a pointer type)
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=re.escape(
+            "The 'dumps' method on instances is deprecated, use 'bytes(obj)' instead, or 'cls.dumps(obj)' to include"
+            " the null terminator of a null-terminated array."
+        ),
+    ):
+        assert cs.uint16(1).dumps(endian=">") == b"\x00\x01"
+
+    fh = BytesIO()
+    with pytest.warns(
+        DeprecationWarning,
+        match=re.escape(
+            "The 'write' method on instances is deprecated, use 'stream.write(bytes(obj))' instead, or"
+            " 'cls.write(stream, obj)' to include the null terminator of a null-terminated array."
+        ),
+    ):
+        assert cs.uint16(1).write(fh, endian=">") == 2
+    assert fh.getvalue() == b"\x00\x01"

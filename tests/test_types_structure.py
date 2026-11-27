@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 from io import BytesIO
 from textwrap import dedent
 from types import MethodType
-from unittest.mock import call, patch
+from typing import TYPE_CHECKING, Any, BinaryIO
+from unittest.mock import patch
 
 import pytest
 
@@ -14,8 +16,19 @@ from dissect.cstruct.exception import DefinitionError, ResolveError, WriteError
 from dissect.cstruct.types import structure
 from dissect.cstruct.types.base import Array, BaseType
 from dissect.cstruct.types.pointer import Pointer
-from dissect.cstruct.types.structure import Field, JSONEncoder, Structure, StructureMetaType, asdict, asjson
+from dissect.cstruct.types.structure import (
+    Field,
+    JSONEncoder,
+    Structure,
+    StructureMetaType,
+    UnionProxy,
+    asdict,
+    asjson,
+)
 from tests.util import verify_compiled
+
+if TYPE_CHECKING:
+    from dissect.cstruct.cstruct import Endianness
 
 
 @pytest.fixture
@@ -67,21 +80,21 @@ def test_structure_write(TestStruct: type[Structure]) -> None:
     buf = b"\x01\x00\x00\x00\x02\x00\x00\x00"
     obj = TestStruct(buf)
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     obj = TestStruct(a=1, b=2)
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
     assert bytes(obj) == buf
 
     obj = TestStruct(a=1)
-    assert obj.dumps() == b"\x01\x00\x00\x00\x00\x00\x00\x00"
+    assert bytes(obj) == b"\x01\x00\x00\x00\x00\x00\x00\x00"
 
     obj = TestStruct()
     assert obj.a == 0
-    assert obj.dumps() == b"\x00\x00\x00\x00\x00\x00\x00\x00"
+    assert bytes(obj) == b"\x00\x00\x00\x00\x00\x00\x00\x00"
 
     obj.a = None
-    assert obj.dumps() == b"\x00\x00\x00\x00\x00\x00\x00\x00"
+    assert bytes(obj) == b"\x00\x00\x00\x00\x00\x00\x00\x00"
 
 
 def test_structure_array_read(TestStruct: type[Structure]) -> None:
@@ -101,7 +114,7 @@ def test_structure_array_read(TestStruct: type[Structure]) -> None:
     assert obj[1].a == 3
     assert obj[1].b == 4
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
     assert obj == [TestStruct(1, 2), TestStruct(3, 4)]
 
     obj = TestStruct[None](b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
@@ -114,10 +127,44 @@ def test_structure_array_write(TestStruct: type[Structure]) -> None:
     obj = TestStructArray([TestStruct(1, 2), TestStruct(3, 4)])
 
     assert len(obj) == 2
-    assert obj.dumps() == b"\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x04\x00\x00\x00"
+    assert bytes(obj) == b"\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x04\x00\x00\x00"
 
     obj = TestStruct[None]([TestStruct(1, 2)])
-    assert obj.dumps() == b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    assert TestStruct[None].dumps(obj) == b"\x01\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+
+
+def test_structure_array_null_terminated(cs: cstruct, compiled: bool) -> None:
+    cdef = """
+    struct key {
+        uint8   id;
+        uint32  magic;
+    };
+
+    struct bag {
+        key     keys[];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.bag, compiled)
+
+    # An empty array is only the terminator, an empty key of 5 null bytes
+    assert cs.bag.dumps(cs.bag(keys=[])) == b"\x00" * 5
+
+    keys = [cs.key(id=1, magic=0x11), cs.key(id=2, magic=0x22)]
+    data = b"\x01\x11\x00\x00\x00" + b"\x02\x22\x00\x00\x00"
+
+    obj = cs.bag(keys=keys)
+    assert cs.bag.dumps(obj) == data + b"\x00" * 5
+
+    obj = cs.bag(data + b"\x00" * 5)
+    assert obj.keys == keys
+
+    # Like other null-terminated arrays, bytes() doesn't include the terminator
+    assert bytes(obj.keys) == data
+
+    # Reading stops at the first empty key
+    assert cs.bag(data[:5] + b"\x00" * 5 + data[5:]).keys == keys[:1]
 
 
 def test_structure_modify(cs: cstruct) -> None:
@@ -266,12 +313,12 @@ def test_structure_definition_simple(cs: cstruct, compiled: bool) -> None:
     assert obj.__dynamic_sizes__ == {"string": 7, "wstring": 10}
     assert obj.__sizes__ == {"magic": 4, "wmagic": 8, "a": 1, "b": 2, "c": 4, "string": 7, "wstring": 10}
     assert len(obj) == len(buf)
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     assert repr(obj)
 
     fh = BytesIO()
-    obj.write(fh)
+    cs.test.write(fh, obj)
     assert fh.getvalue() == buf
 
 
@@ -479,7 +526,7 @@ def test_structure_definition_simple_be(cs: cstruct, compiled: bool) -> None:
     assert obj.c == 0x04050607
     assert obj.string == b"lalala"
     assert obj.wstring == "test"
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
@@ -580,14 +627,14 @@ def test_structure_definition_nested(cs: cstruct, compiled: bool) -> None:
     assert obj.a.a == 1337
     assert obj.a.b == 9000
     assert obj.b.c == b"deadbeef"
-    assert obj.dumps() == data
+    assert bytes(obj) == data
 
     obj = cs.test_anonymous(data)
     assert obj.magic == b"zomg"
     assert obj.a == 1337
     assert obj.b == 9000
     assert obj.c == b"deadbeef"
-    assert obj.dumps() == data
+    assert bytes(obj) == data
 
 
 def test_structure_definition_write(cs: cstruct, compiled: bool) -> None:
@@ -609,7 +656,7 @@ def test_structure_definition_write(cs: cstruct, compiled: bool) -> None:
     buf = b"testt\x00e\x00s\x00t\x00\x01\x02\x03\x04\x05\x06\x07lalala\x00t\x00e\x00s\x00t\x00\x00\x00"
 
     obj = cs.test()
-    obj.magic = "test"
+    obj.magic = b"test"
     obj.wmagic = "test"
     obj.a = 0x01
     obj.b = 0x0302
@@ -620,7 +667,7 @@ def test_structure_definition_write(cs: cstruct, compiled: bool) -> None:
     with pytest.raises(AttributeError):
         obj.nope  # noqa: B018
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     inst = cs.test(
         magic=b"test",
@@ -631,7 +678,7 @@ def test_structure_definition_write(cs: cstruct, compiled: bool) -> None:
         string=b"lalala",
         wstring="test",
     )
-    assert inst.dumps() == buf
+    assert bytes(inst) == buf
 
 
 def test_structure_definition_write_be(cs: cstruct, compiled: bool) -> None:
@@ -654,7 +701,7 @@ def test_structure_definition_write_be(cs: cstruct, compiled: bool) -> None:
     buf = b"test\x00t\x00e\x00s\x00t\x01\x02\x03\x04\x05\x06\x07lalala\x00\x00t\x00e\x00s\x00t\x00\x00"
 
     obj = cs.test()
-    obj.magic = "test"
+    obj.magic = b"test"
     obj.wmagic = "test"
     obj.a = 0x01
     obj.b = 0x0203
@@ -662,7 +709,7 @@ def test_structure_definition_write_be(cs: cstruct, compiled: bool) -> None:
     obj.string = b"lalala"
     obj.wstring = "test"
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_structure_definition_write_anonymous(cs: cstruct) -> None:
@@ -682,7 +729,7 @@ def test_structure_definition_write_anonymous(cs: cstruct) -> None:
     cs.load(cdef)
 
     obj = cs.test(a=1, c=3)
-    assert obj.dumps() == b"\x01\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00"
+    assert bytes(obj) == b"\x01\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00"
 
 
 def test_structure_field_discard(cs: cstruct, compiled: bool) -> None:
@@ -701,11 +748,11 @@ def test_structure_field_discard(cs: cstruct, compiled: bool) -> None:
 
     assert verify_compiled(cs.test, compiled)
 
-    with patch.object(cs.char, "__new__") as mock_char_new:
-        cs.test(b"\x01\x02\x03\x00\x04\x00\x05\x00ab")
-
-        assert len(mock_char_new.mock_calls) == 2
-        mock_char_new.assert_has_calls([call(cs.char, b"a"), call(cs.char, b"b")])
+    # The discarded fields are read too, so that the fields after them are read from the right offset
+    fh = BytesIO(b"\x01\x02\x03\x00\x04\x00\x05\x00abrest")
+    obj = cs.test(fh)
+    assert (obj.a, obj.b, obj.c, obj.d) == (1, 3, 5, b"a")
+    assert fh.tell() == 10
 
 
 def test_structure_field_duplicate(cs: cstruct) -> None:
@@ -803,7 +850,7 @@ def test_structure_default(cs: cstruct, compiled: bool) -> None:
     assert isinstance(obj.t_pointer_array[0], Pointer)
     assert isinstance(obj.t_pointer_array[1], Pointer)
 
-    assert obj.dumps() == b"\x00" * 57
+    assert bytes(obj) == b"\x00" * 57
 
     for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
@@ -814,7 +861,7 @@ def test_structure_default(cs: cstruct, compiled: bool) -> None:
     assert obj.t_struct == cs.test.__default__()
     assert obj.t_struct_array == [cs.test.__default__(), cs.test.__default__()]
 
-    assert obj.dumps() == b"\x00" * 171
+    assert bytes(obj) == b"\x00" * 171
 
     for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
@@ -872,7 +919,7 @@ def test_structure_default_dynamic(cs: cstruct, compiled: bool) -> None:
     assert obj.t_flag_array_n == obj.t_flag_array_d == []
     assert obj.t_pointer_n == obj.t_pointer_d == []
 
-    assert obj.dumps() == b"\x00" * 20
+    assert bytes(obj) == b"\x00" * 20
 
     for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
@@ -882,7 +929,7 @@ def test_structure_default_dynamic(cs: cstruct, compiled: bool) -> None:
     obj = cs.test_nested.__default__()
     assert obj.t_struct_n == obj.t_struct_array_d == []
 
-    assert obj.dumps() == b"\x00" * 21
+    assert bytes(obj) == b"\x00" * 21
 
     for name in obj.__members__:
         assert isinstance(getattr(obj, name), BaseType)
@@ -927,17 +974,217 @@ def test_structure_partial_initialization(cs: cstruct) -> None:
     assert str(obj) == "<test a=0x0 b=0x1>"
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        ("uint16 x", 1, 1),
+        ("uint16 x", "1", 1),
+        ("uint16 x", b"\x01\x00", 1),
+        ("uint24 x", 1.5, 1),
+        ("uleb128 x", "1", 1),
+        ("double x", 1.5, 1.5),
+        ("float x", "1", 1.0),
+        ("Color x", 1, 1),
+        ("Color x", b"\x01", 1),
+        ("uint8 *x", 4, 4),
+        ("uint8 *x", "4", 4),
+        ("uint16 x : 4", 1, 1),
+        ("char x", 0x41, b"A"),
+        ("char x[4]", b"ab", b"ab\x00\x00"),
+        ("char x[4]", [0x61], b"a\x00\x00\x00"),
+        ("char x[4]", BytesIO(b"abcdef"), b"abcd"),
+        ("wchar x", "a", "a"),
+        ("wchar x", b"a\x00", "a"),
+        ("wchar x[4]", "ab", "ab\x00\x00"),
+        ("uint16 x[2]", [1], [1, 0]),
+        ("uint16 x[2]", (1, 2), [1, 2]),
+        ("uint16 x[2]", b"\x01\x00\x02\x00", [1, 2]),
+        ("uint16 x[2]", BytesIO(b"\x01\x00\x02\x00"), [1, 2]),
+    ],
+)
+def test_structure_init_convert(cs: cstruct, field: str, value: Any, expected: Any) -> None:
+    """Test that values given to a structure are converted like the types of their fields do, e.g. by parsing bytes."""
+    cdef = f"""
+    enum Color : uint8 {{
+        RED = 1
+    }};
+
+    struct test {{
+        {field};
+    }};
+    """
+    cs.load(cdef)
+
+    obj = cs.test(x=value)
+    assert type(obj.x) is cs.test.__members__["x"].type
+    assert obj.x == expected
+    assert bytes(obj.x) == bytes(obj)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "exception", "message"),
+    [
+        ("uint16 x", "a", ValueError, "invalid literal for int() with base 10: 'a'"),
+        ("uint16 x", b"\x01", EOFError, "Read 1 bytes, but expected 2"),
+        ("uint16 x", b"\x01\x00\x02", ValueError, "Expected 2 bytes for uint16, got 3 instead."),
+        ("uint24 x", b"\x00" * 4, ValueError, "Expected 3 bytes for uint24, got 4 instead."),
+        ("uleb128 x", b"\x01\x02", ValueError, "Expected 1 bytes for uleb128, got 2 instead."),
+        ("char x", "a", TypeError, "Cannot create char from str, encode to bytes first"),
+        ("char x[2]", b"abc", ValueError, "Expected static array size 2, got 3 instead."),
+        ("wchar x", 1, TypeError, "Cannot create wchar from int"),
+        ("wchar x[2]", "abc", ValueError, "Expected static array size 2, got 3 instead."),
+        ("uint16 x[2]", [1, 2, 3], ValueError, "Expected static array size 2, got 3 instead."),
+        ("uint16 x[2]", 1, TypeError, "Cannot create uint16[2] from int"),
+        ("uint16 x[2]", "ab", TypeError, "Cannot create uint16[2] from str"),
+        ("uint16 x[2]", b"\x01\x00", EOFError, "Read 2 bytes, but expected 4"),
+        ("uint16 x[2]", b"\x01\x00\x02\x00\x03", ValueError, "Expected 4 bytes for uint16[2], got 5 instead."),
+        ("dynamic x", b"\x01\xaa\xbb", ValueError, "Expected 2 bytes for dynamic, got 3 instead."),
+    ],
+)
+def test_structure_init_convert_invalid(
+    cs: cstruct, field: str, value: Any, exception: type[Exception], message: str
+) -> None:
+    """Test that values given to a structure that can't be converted to the types of their fields raise an error."""
+    cdef = f"""
+    enum Color : uint8 {{
+        RED = 1
+    }};
+
+    struct dynamic {{
+        uint8   n;
+        uint8   data[n];
+    }};
+
+    struct test {{
+        {field};
+    }};
+    """
+    cs.load(cdef)
+
+    with pytest.raises(exception, match=f"^{re.escape(message)}$"):
+        cs.test(x=value)
+
+
+def test_structure_init_convert_enum(cs: cstruct) -> None:
+    """Test that a member of another enum given to an enum field becomes the member with the same value."""
+    cdef = """
+    enum Color : uint8 {
+        RED = 1
+    };
+
+    enum Other : uint8 {
+        X = 1
+    };
+
+    struct test {
+        Color x;
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test(x=cs.Other.X).x is cs.Color.RED
+    assert cs.Color(cs.Other.X) is cs.Color.RED
+
+
+def test_structure_init_convert_structure(cs: cstruct) -> None:
+    """Test that a structure field converts values like its structure type, but keeps values that are structures."""
+    cdef = """
+    struct inner {
+        uint8   a;
+        uint8   b;
+    };
+
+    struct test {
+        inner   x;
+    };
+
+    union wrapper {
+        inner   x;
+        uint16  y;
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test(x=b"\x01\x02").x == cs.inner(a=1, b=2)
+    assert cs.test(x=1).x == cs.inner(a=1)
+
+    with pytest.raises(ValueError, match=r"^Expected 2 bytes for inner, got 3 instead\.$"):
+        cs.test(x=b"\x01\x02\x03")
+
+    # E.g. a structure of another cstruct instance, or a structure in a union
+    other = cstruct().load(cdef).inner(a=1, b=2)
+    assert cs.test(x=other).x is other
+
+    proxy = cs.wrapper(y=0x0201).x
+    assert type(proxy) is UnionProxy
+    assert cs.test(x=proxy).x is proxy
+    assert bytes(cs.test(x=proxy)) == b"\x01\x02"
+
+
+def test_structure_init_convert_pointer(cs: cstruct) -> None:
+    """Test that a pointer given to a field of another pointer type gets that type, and can still be dereferenced."""
+    cdef = """
+    struct test {
+        uint8  *x;
+    };
+
+    struct other {
+        uint16 *x;
+    };
+    """
+    cs.pointer = cs.uint8
+    cs.load(cdef)
+
+    obj = cs.other(x=cs.test(b"\x01\x2a\x01").x)
+    assert type(obj.x) is cs.other.__members__["x"].type
+    assert obj.x.dereference() == 0x012A
+
+
+def test_structure_read_no_convert(cs: cstruct) -> None:
+    """Test that reading a structure doesn't convert the values that are read, but values given to it are."""
+    converted = []
+
+    class Custom(BaseType):
+        @classmethod
+        def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> int:
+            return cls.__cs__.uint8._read(stream, endian=endian)
+
+        @classmethod
+        def _write(cls, stream: BinaryIO, data: int, *, endian: Endianness) -> int:
+            return cls.__cs__.uint8._write(stream, data, endian=endian)
+
+        @classmethod
+        def _normalize(cls, value: int) -> int:
+            converted.append(value)
+            return value
+
+    cs.add_custom_type("custom", Custom, size=1)
+    cdef = """
+    struct test {
+        custom  a;
+        uint8   b;
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.test(b"\x01\x02").a == 1
+    assert converted == []
+
+    assert cs.test(a=1, b=2).a == 1
+    assert converted == [1]
+
+
 def test_codegen_make_init() -> None:
     _make__init__ = structure._make_structure__init__.__wrapped__.__wrapped__
 
     result = _make__init__([f"_{n}" for n in range(5)])
     expected = """
-    def __init__(self, _0 = None, _1 = None, _2 = None, _3 = None, _4 = None):
-     self._0 = _0 if _0 is not None else _0_default()
-     self._1 = _1 if _1 is not None else _1_default()
-     self._2 = _2 if _2 is not None else _2_default()
-     self._3 = _3 if _3 is not None else _3_default()
-     self._4 = _4 if _4 is not None else _4_default()
+    def __init__(self, /, _0 = None, _1 = None, _2 = None, _3 = None, _4 = None):
+     self._0 = _0_default() if _0 is None else _0 if type(_0) is _0_type else _0_normalize(_0)
+     self._1 = _1_default() if _1 is None else _1 if type(_1) is _1_type else _1_normalize(_1)
+     self._2 = _2_default() if _2 is None else _2 if type(_2) is _2_type else _2_normalize(_2)
+     self._3 = _3_default() if _3 is None else _3 if type(_3) is _3_type else _3_normalize(_3)
+     self._4 = _4_default() if _4 is None else _4 if type(_4) is _4_type else _4_normalize(_4)
     """
     assert result == dedent(expected[1:].rstrip())
 
@@ -991,7 +1238,7 @@ def test_structure_definition_newline(cs: cstruct, compiled: bool) -> None:
     obj.string = b"lalala"
     obj.wstring = "test"
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_cdef_struct(cs: cstruct) -> None:
@@ -1229,12 +1476,12 @@ def test_structure_changing_endian(cs: cstruct, compiled: bool) -> None:
 
     assert obj.a == 0x04030201
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     obj = cs.test(buf, endian=">")
     assert obj.a == 0x01020304
 
-    assert obj.dumps(endian=">") == buf
+    assert cs.test.dumps(obj, endian=">") == buf
 
 
 def test_structure_endian_name_conflict(cs: cstruct, compiled: bool) -> None:
@@ -1280,7 +1527,7 @@ def test_structure_changing_endian_field_types(cs: cstruct, compiled: bool) -> N
     assert obj.d == 0x0B0A09
     assert obj.e == [0x0E0D0C, 0x11100F]
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     obj = cs.test(buf, endian=">")
 
@@ -1290,7 +1537,7 @@ def test_structure_changing_endian_field_types(cs: cstruct, compiled: bool) -> N
     assert obj.d == 0x090A0B
     assert obj.e == [0x0C0D0E, 0x0F1011]
 
-    assert obj.dumps(endian=">") == buf
+    assert cs.test.dumps(obj, endian=">") == buf
 
 
 def test_structure_subclass_init(cs: cstruct, compiled: bool) -> None:
@@ -1313,6 +1560,13 @@ def test_structure_subclass_init(cs: cstruct, compiled: bool) -> None:
     obj = Subclass(b"\x01\x00\x00\x00\x02\x00\x00\x00")
     assert isinstance(obj, Subclass)
     assert obj.initialized
+    assert (obj.a, obj.b) == (1, 2)
+
+    class PlainSubclass(cs.test):
+        pass
+
+    obj = PlainSubclass(b"\x01\x00\x00\x00\x02\x00\x00\x00")
+    assert type(obj) is PlainSubclass
     assert (obj.a, obj.b) == (1, 2)
 
     obj = cs.test(b"\x01\x00\x00\x00\x02\x00\x00\x00")
@@ -1347,7 +1601,7 @@ def test_structure_default_not_shared(cs: cstruct, compiled: bool) -> None:
     assert obj.e[1] == [0, 0]
 
     # Values of different instances are separate values
-    assert cs.test().dumps() == b"\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    assert bytes(cs.test()) == b"\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 
 
 def test_structure_write_return_value(cs: cstruct, compiled: bool) -> None:
@@ -1366,7 +1620,7 @@ def test_structure_write_return_value(cs: cstruct, compiled: bool) -> None:
     assert verify_compiled(cs.test, compiled)
 
     fh = BytesIO()
-    assert cs.test(a=1, b=2, c=3, d=4, e=5).write(fh) == 12
+    assert cs.test.write(fh, cs.test(a=1, b=2, c=3, d=4, e=5)) == 12
     assert fh.getvalue() == b"\x01\x00\x32\x00\x04\x00\x00\x00\x05\x00\x00\x00"
 
 
@@ -1389,21 +1643,21 @@ def test_structure_write_missing_attribute(cs: cstruct, compiled: bool) -> None:
     assert verify_compiled(cs.test, compiled)
 
     obj = cs.test(b=1, c=cs.nested(a=2), n=1, d=[3])
-    assert obj.dumps() == b"\x01\x02\x01\x03"
+    assert bytes(obj) == b"\x01\x02\x01\x03"
 
     del obj.b
     with pytest.raises(WriteError, match=r"^Cannot write test: 'test' object has no attribute 'b'$"):
-        obj.dumps()
+        bytes(obj)
 
     obj = cs.test(b=1, c=cs.nested(a=2), n=1, d=[3])
     del obj.d
     with pytest.raises(WriteError, match=r"^Cannot write test: 'test' object has no attribute 'd'$"):
-        obj.dumps()
+        bytes(obj)
 
     obj = cs.test(b=1, c=cs.nested(a=2), n=1, d=[3])
     del obj.c.a
     with pytest.raises(WriteError, match=r"^Cannot write test: 'nested' object has no attribute 'a'$"):
-        obj.dumps()
+        bytes(obj)
 
 
 def test_structure_write_dynamic(cs: cstruct, compiled: bool) -> None:
@@ -1424,12 +1678,12 @@ def test_structure_write_dynamic(cs: cstruct, compiled: bool) -> None:
 
     buf = b"\x02\x01\x00\x02\x00\x03ab\x78\x00\x00\x00\x04"
     fh = BytesIO()
-    assert cs.test(buf).write(fh) == len(buf)
+    assert cs.test.write(fh, cs.test(buf)) == len(buf)
     assert fh.getvalue() == buf
 
     # The length of a value doesn't have to match the expression
     assert (
-        cs.test(n=1, a=[1, 2, 3], b=4, c=b"xy", d="", e=5).dumps() == b"\x01\x01\x00\x02\x00\x03\x00\x04xy\x00\x00\x05"
+        bytes(cs.test(n=1, a=[1, 2, 3], b=4, c=b"xy", d="", e=5)) == b"\x01\x01\x00\x02\x00\x03\x00\x04xy\x00\x00\x05"
     )
 
 
@@ -1458,17 +1712,24 @@ def test_structure_write_nested(cs: cstruct, compiled: bool) -> None:
 
     buf = b"\x01\x02\x00\x03ab\x04"
     obj = cs.test(buf)
-    assert obj.dumps() == buf
-    assert obj.dumps(endian=">") == b"\x01\x00\x02\x03ab\x04"
+    assert bytes(obj) == buf
+    assert cs.test.dumps(obj, endian=">") == b"\x01\x00\x02\x03ab\x04"
 
     # Any other value that isn't a structure doesn't have the attributes to write
+    obj = cs.test(e=1, g=4)
+    obj.f = 5
     with pytest.raises(WriteError, match=r"^Cannot write test: 'int' object has no attribute "):
-        cs.test(e=1, f=5, g=4).dumps()
-    with pytest.raises(WriteError, match=r"^Cannot write test: 'int' object has no attribute "):
-        cs.test(e=1, f=cs.nested(c=2, d=5), g=4).dumps()
+        bytes(obj)
 
+    obj.f = cs.nested(c=2)
+    obj.f.d = 5
+    with pytest.raises(WriteError, match=r"^Cannot write test: 'int' object has no attribute "):
+        bytes(obj)
+
+    inner = cs.inner(a=3)
+    inner.b = b"abc"
     with pytest.raises(WriteError, match="Expected static array size 2, got 3 instead"):
-        cs.test(e=1, f=cs.nested(c=2, d=cs.inner(a=3, b=b"abc")), g=4).dumps()
+        bytes(cs.test(e=1, f=cs.nested(c=2, d=inner), g=4))
 
 
 def test_structure_write_nested_padding(cs: cstruct, compiled: bool) -> None:
@@ -1493,7 +1754,7 @@ def test_structure_write_nested_padding(cs: cstruct, compiled: bool) -> None:
     assert verify_compiled(cs.test, compiled)
 
     fh = BytesIO()
-    assert cs.test(c=1, d=cs.nested(a=2, b=3), e=4).write(fh) == 8
+    assert cs.test.write(fh, cs.test(c=1, d=cs.nested(a=2, b=3), e=4)) == 8
     assert fh.getvalue() == b"\x01\x02\x00\x00\x00\x03\x00\x04"
 
 
@@ -1523,7 +1784,7 @@ def test_structure_write_offset(cs: cstruct, compiled: bool, offset: int, expect
     assert verify_compiled(cs.test, compiled)
 
     fh = BytesIO()
-    assert cs.test(a=1, b=2, c=3, d=4).write(fh) == len(expected)
+    assert cs.test.write(fh, cs.test(a=1, b=2, c=3, d=4)) == len(expected)
     assert fh.getvalue() == expected
 
 
@@ -1541,7 +1802,7 @@ def test_structure_write_offset_not_packed(cs: cstruct, compiled: bool) -> None:
     assert verify_compiled(cs.test, compiled)
 
     fh = BytesIO()
-    assert cs.test(a=1, b=[[2, 3]], c=4).write(fh) == 7
+    assert cs.test.write(fh, cs.test(a=1, b=[[2, 3]], c=4)) == 7
     assert fh.getvalue() == b"\x01\x00\x00\x00\x02\x03\x04"
 
 
@@ -1562,22 +1823,24 @@ def test_structure_write_offset_after_dynamic_field(cs: cstruct, compiled: bool)
 
     # Padding only if the dynamic field is short enough
     fh = BytesIO()
-    assert cs.test(n=1, a=[2], b=3, c=4, d=5).write(fh) == 8
+    assert cs.test.write(fh, cs.test(n=1, a=[2], b=3, c=4, d=5)) == 8
     assert fh.getvalue() == b"\x01\x02\x00\x00\x03\x00\x04\x05"
 
     fh = BytesIO()
-    assert cs.test(n=5, a=[2, 2, 2, 2, 2], b=3, c=4, d=5).write(fh) == 9
+    assert cs.test.write(fh, cs.test(n=5, a=[2, 2, 2, 2, 2], b=3, c=4, d=5)) == 9
     assert fh.getvalue() == b"\x05\x02\x02\x02\x02\x02\x03\x04\x05"
 
 
 def test_structure_write_field_names(cs: cstruct, compiled: bool) -> None:
-    """Test that field names that aren't valid identifiers and duplicate field names are written correctly."""
+    """Test that keywords, names of generated parameters and duplicate field names are read, written and created."""
     cdef = """
     struct test {
         uint8   class;
         uint8   from;
         uint8   _;
         uint8   _;
+        uint8   self;
+        uint8   cls;
     };
     """
     cs.load(cdef, compiled=compiled)
@@ -1585,8 +1848,16 @@ def test_structure_write_field_names(cs: cstruct, compiled: bool) -> None:
     assert verify_compiled(cs.test, compiled)
 
     # Duplicate fields use the same attribute
-    obj = cs.test(b"\x01\x02\x03\x04")
-    assert obj.dumps() == b"\x01\x02\x04\x04"
+    obj = cs.test(b"\x01\x02\x03\x04\x05\x06")
+    assert (obj.self, obj.cls) == (5, 6)
+    assert bytes(obj) == b"\x01\x02\x04\x04\x05\x06"
+
+    class Subclass(cs.test):
+        pass
+
+    assert bytes(Subclass(b"\x01\x02\x03\x04\x05\x06")) == b"\x01\x02\x04\x04\x05\x06"
+
+    assert bytes(cs.test(self=5, cls=6)) == b"\x00\x00\x00\x00\x05\x06"
 
 
 def test_structure_write_none(cs: cstruct, compiled: bool) -> None:
@@ -1624,4 +1895,23 @@ def test_structure_write_none(cs: cstruct, compiled: bool) -> None:
     for field in cs.test.__fields__:
         setattr(obj, field._name, None)
 
-    assert obj.dumps() == bytes(24)
+    assert bytes(obj) == bytes(24)
+
+
+@pytest.mark.parametrize("name", ["dumps", "write"])
+def test_structure_method_name_conflict(cs: cstruct, compiled: bool, name: str) -> None:
+    """Test that ``bytes(obj)`` and ``len(obj)`` work when a field is named like the ``dumps`` or ``write`` method."""
+    cdef = f"""
+    struct test {{
+        uint8   {name};
+        char    b[];
+    }};
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert verify_compiled(cs.test, compiled)
+
+    obj = cs.test(**{name: 1}, b=b"x")
+    assert getattr(obj, name) == 1
+    assert bytes(obj) == b"\x01x\x00"
+    assert len(obj) == 3

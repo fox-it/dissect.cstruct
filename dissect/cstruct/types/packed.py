@@ -25,23 +25,29 @@ class PackedMetaType(MetaType):
             # Handle a few fast path cases
             obj = args[0]
             if (tp := type(obj)) is bytes or tp is bytearray or (tp is memoryview and obj.c_contiguous):
+                # E.g. uint32(b"\x01\x00\x00\x00")
                 data = obj.cast("B") if tp is memoryview else obj
                 if len(data) < cls.__size__:
+                    # E.g. uint32(b"\x01")
                     raise EOFError(f"Read {len(data)} bytes, but expected {cls.__size__}")
 
                 return cls.__new__(cls, _struct(cls.__cs__.endian, cls.__fmt__).unpack_from(data)[0])
 
             if hasattr(obj, "read") and not isinstance(obj, cls):
+                # E.g. uint32(fh)
                 return cls._read(obj, endian=cls.__cs__.endian)
 
             if not _is_buffer_type(obj):
-                # E.g. initializing with a value
+                # E.g. uint32(1)
                 return type.__call__(cls, obj)
 
         elif not args and not kwargs:
             # Default value
+            # E.g. uint32()
             return type.__call__(cls)
 
+        # Everything else
+        # E.g. uint32(b"\x01\x00\x00\x00", endian=">")
         return MetaType.__call__(cls, *args, **kwargs)
 
 
@@ -50,6 +56,17 @@ class Packed(BaseType, Generic[T], metaclass=PackedMetaType):
 
     __fmt__: str
     __signed__: bool
+
+    @classmethod
+    def __default__(cls) -> Self:
+        return type.__call__(cls)
+
+    @classmethod
+    def _normalize(cls, value: Any) -> Self:
+        if isinstance(value, (int, float)):
+            # Fast path for numbers
+            return cls.__new__(cls, value)
+        return MetaType._normalize(cls, value)
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:

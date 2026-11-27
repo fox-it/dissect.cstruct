@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import re
+import sys
 from typing import TYPE_CHECKING, BinaryIO
 
 import pytest
@@ -17,9 +18,46 @@ if TYPE_CHECKING:
 
 def test_array_size_mismatch(cs: cstruct) -> None:
     with pytest.raises(WriteError):
-        cs.uint8[2]([1, 2, 3]).dumps()
+        cs.uint8[2].dumps([1, 2, 3])
 
-    assert cs.uint8[2]([1, 2]).dumps()
+    assert bytes(cs.uint8[2]([1, 2])) == b"\x01\x02"
+
+
+def test_array_value(cs: cstruct) -> None:
+    """Test that an array can be created from sensible values."""
+    cdef = """
+    struct point {
+        uint8 x;
+    };
+    """
+    cs.load(cdef)
+
+    assert cs.uint8[4]([1, 2]) == [1, 2, 0, 0]
+    assert cs.uint8[4]((1, 2)) == [1, 2, 0, 0]
+    assert cs.uint8[4](x for x in (1, 2)) == [1, 2, 0, 0]
+    assert cs.uint8[4]() == [0, 0, 0, 0]
+    assert cs.uint8[None]([1, 2]) == [1, 2]
+    assert cs.uint8[None]() == []
+    assert cs.uleb128[4]([1, 2]) == [1, 2, 0, 0]
+
+    # Values of other cstruct types, which are subclasses of list
+    assert cs.uint8[2](cs.uint8[2]([1, 2])) == [1, 2]
+    assert cs.uint8[4](cs.uint8[2]([1, 2])) == [1, 2, 0, 0]
+
+    # Every entry of the padding is a new structure
+    points = cs.point[3]([cs.point(x=1)])
+    assert [point.x for point in points] == [1, 0, 0]
+    assert points[1] is not points[2]
+
+    with pytest.raises(ValueError, match=r"^Expected static array size 4, got 5 instead\.$"):
+        cs.uint8[4]([1, 2, 3, 4, 5])
+
+    # Not converted with list()
+    with pytest.raises(TypeError, match=r"^Cannot create uint8\[4\] from int$"):
+        cs.uint8[4](3)
+
+    with pytest.raises(TypeError, match=r"^Cannot create uint8\[\] from str$"):
+        cs.uint8[None]("ab")
 
 
 def test_array_write_padding(cs: cstruct) -> None:
@@ -38,6 +76,57 @@ def test_array_write_padding(cs: cstruct) -> None:
     buf = io.BytesIO()
     cs.point[4]._write(buf, [cs.point(x=1, y=2)], endian=cs.endian)
     assert buf.getvalue() == b"\x01\x02" + b"\x00\x00" * 3
+
+
+def test_array_write_padding_dynamic_entries(cs: cstruct, compiled: bool) -> None:
+    """Test that an array of entries with a dynamic size is padded to its number of entries."""
+    cdef = """
+    struct entry {
+        uint8   length;
+        char    data[length];
+    };
+
+    struct test {
+        uleb128 a[3];
+        entry   b[2];
+    };
+    """
+    cs.load(cdef, compiled=compiled)
+
+    assert cs.uleb128[3].dumps([1]) == b"\x01\x00\x00"
+
+    with pytest.raises(WriteError, match=r"^Expected static array size 3, got 4 instead\.$"):
+        cs.uleb128[3].dumps([1, 2, 3, 4])
+
+    buf = bytes(cs.test(a=[1], b=[cs.entry(length=1, data=b"x")]))
+    assert buf == b"\x01\x00\x00\x01x\x00"
+
+    obj = cs.test(buf)
+    assert obj.a == [1, 0, 0]
+    assert [entry.data for entry in obj.b] == [b"x", b""]
+
+    obj.b = [cs.entry(), cs.entry(), cs.entry()]
+    with pytest.raises(WriteError, match=r"^Expected static array size 2, got 3 instead\.$"):
+        bytes(obj)
+
+
+def test_array_bytes_null_terminated(cs: cstruct) -> None:
+    """Test that ``bytes(obj)`` leaves out the null terminator of an array."""
+    cdef = """
+    struct point {
+        uint8 x;
+        uint8 y;
+    };
+    """
+    cs.load(cdef)
+
+    values = cs.uint16[None]([1, 2])
+    assert bytes(values) == b"\x01\x00\x02\x00"
+    assert cs.uint16[None].dumps(values) == b"\x01\x00\x02\x00\x00\x00"
+
+    points = cs.point[None]([cs.point(x=1, y=2)])
+    assert bytes(points) == b"\x01\x02"
+    assert cs.point[None].dumps(points) == b"\x01\x02\x00\x00"
 
 
 def test_array_large_count(cs: cstruct, compiled: bool) -> None:
@@ -104,19 +193,19 @@ def test_eof(cs: cstruct, compiled: bool) -> None:
 
     test_char = cs.test_char(b"abc")
     assert test_char.data == b"abc"
-    assert test_char.dumps() == b"abc"
+    assert bytes(test_char) == b"abc"
 
     test_wchar = cs.test_wchar("abc".encode("utf-16-le"))
     assert test_wchar.data == "abc"
-    assert test_wchar.dumps() == "abc".encode("utf-16-le")
+    assert bytes(test_wchar) == "abc".encode("utf-16-le")
 
     test_packed = cs.test_packed(b"\x01\x00\x02\x00")
     assert test_packed.data == [1, 2]
-    assert test_packed.dumps() == b"\x01\x00\x02\x00"
+    assert bytes(test_packed) == b"\x01\x00\x02\x00"
 
     test_int = cs.test_int(b"\x01\x00\x00\x02\x00\x00")
     assert test_int.data == [1, 2]
-    assert test_int.dumps() == b"\x01\x00\x00\x02\x00\x00"
+    assert bytes(test_int) == b"\x01\x00\x00\x02\x00\x00"
 
     # A partial last element is a short read
     with pytest.raises(EOFError, match=r"^Read 1 bytes, but expected 2$"):
@@ -127,12 +216,12 @@ def test_eof(cs: cstruct, compiled: bool) -> None:
 
     test_enum = cs.test_enum(b"\x01\x00")
     assert test_enum.data == [cs.Test.A]
-    assert test_enum.dumps() == b"\x01\x00"
+    assert bytes(test_enum) == b"\x01\x00"
 
     test_eof_field = cs.test_eof_field(b"\x01a\x02")
     assert test_eof_field.data == b"a"
     assert test_eof_field.remainder == 2
-    assert test_eof_field.dumps() == b"\x01a\x02"
+    assert bytes(test_eof_field) == b"\x01a\x02"
 
 
 @pytest.mark.parametrize(
@@ -351,6 +440,8 @@ def test_bytes_like_subclasses(cs: cstruct, factory: type) -> None:
         assert method(cs.uint32, factory(data)) == 0x04030201
         assert method(cs.uint24, factory(data)) == 0x030201
         assert method(cs.uint16[2], factory(data)) == [0x0201, 0x0403]
+        assert method(cs.char[4], factory(data)) == b"\x01\x02\x03\x04"
+        assert method(cs.wchar[2], factory(data)) == "\u0201\u0403"
         assert method(cs.test, factory(data)).c == 0x08070605
 
 
@@ -371,7 +462,7 @@ def test_write_stream_errors(cs: cstruct) -> None:
 
 
 def test_array_struct_write(cs: cstruct, compiled: bool) -> None:
-    """Test that arrays in a structure are written from any sequence, and pad values that are too short."""
+    """Test that arrays in a structure are written from a list or tuple, and pad values that are too short."""
     cdef = """
     struct test {
         uint8   a;
@@ -385,21 +476,38 @@ def test_array_struct_write(cs: cstruct, compiled: bool) -> None:
     assert verify_compiled(cs.test, compiled)
 
     buf = b"\x01\x01\x00\x02\x00\x03\x00\x04\x00"
-    assert cs.test(a=1, b=[1, 2], c=[3, 4]).dumps() == buf
-    assert cs.test(a=1, b=(1, 2), c=[3, 4]).dumps() == buf
+    assert bytes(cs.test(a=1, b=[1, 2], c=[3, 4])) == buf
+    assert bytes(cs.test(a=1, b=(1, 2), c=[3, 4])) == buf
 
     # Shorter values are padded
-    assert cs.test(a=1, b=[1], c=[3, 4]).dumps() == b"\x01\x01\x00\x00\x00\x03\x00\x04\x00"
+    assert bytes(cs.test(a=1, b=[1], c=[3, 4])) == b"\x01\x01\x00\x00\x00\x03\x00\x04\x00"
+
+    obj = cs.test(a=1, c=[3, 4])
+    obj.b = (1,)
+    assert bytes(obj) == b"\x01\x01\x00\x00\x00\x03\x00\x04\x00"
+    assert cs.uint16[2].dumps((1,)) == b"\x01\x00\x00\x00"
+
+    # Writing doesn't convert values, e.g. bytes aren't entries
+    obj.b = b"\x01\x02"
+    with pytest.raises(WriteError, match=r"^Cannot write test: Expected a list, got bytes$"):
+        bytes(obj)
+
+    with pytest.raises(WriteError, match=r"^Cannot write uint16\[2\]: Expected a list, got bytes$"):
+        cs.uint16[2].dumps(b"\x01\x02")
 
     # The total amount of values is right, but the second array is too long
+    obj = cs.test(a=1, b=[1])
+    obj.c = [2, 3, 4]
     with pytest.raises(WriteError, match="Expected static array size 2, got 3 instead"):
-        cs.test(a=1, b=[1], c=[2, 3, 4]).dumps()
+        bytes(obj)
 
     with pytest.raises(WriteError, match=r"^Cannot write test: "):
-        cs.test(a=1, b=[1, 2**16], c=[3, 4]).dumps()
+        bytes(cs.test(a=1, b=[1, 2**16], c=[3, 4]))
 
+    obj = cs.test(a=1, b=[1, 2], c=[3, 4])
+    obj.d = [1]
     with pytest.raises(WriteError, match="Expected static array size 0, got 1 instead"):
-        cs.test(a=1, b=[1, 2], c=[3, 4], d=[1]).dumps()
+        bytes(obj)
 
 
 def test_array_multidimensional_write_padding(cs: cstruct, compiled: bool) -> None:
@@ -421,4 +529,32 @@ def test_array_multidimensional_write_padding(cs: cstruct, compiled: bool) -> No
     assert verify_compiled(cs.test, compiled)
 
     obj = cs.test(a=[[1], [2, 3]], b=[b"a", b"bc"], c=[cs.nested(a=5)], d=7)
-    assert obj.dumps() == b"\x01\x00\x02\x03a\x00bc\x05\x00\x07"
+    assert bytes(obj) == b"\x01\x00\x02\x03a\x00bc\x05\x00\x07"
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="The buffer protocol of Python classes needs Python 3.12")
+def test_buffer(cs: cstruct) -> None:
+    """Test that instances support the buffer protocol, with the same bytes as ``bytes(obj)``."""
+    cdef = """
+    enum Test : uint16 {
+        A = 1
+    };
+
+    struct test {
+        uint8   a;
+        char    b[];
+    };
+    """
+    cs.load(cdef)
+
+    assert memoryview(cs.uint16(0x0102)).tobytes() == b"\x02\x01"
+    assert memoryview(cs.uint16[2]([1, 2])).tobytes() == b"\x01\x00\x02\x00"
+    assert memoryview(cs.Test.A).tobytes() == b"\x01\x00"
+    assert memoryview(cs.char[None](b"ab\x00")).tobytes() == b"ab"
+    assert memoryview(cs.char[4]([97, 98])).tobytes() == b"ab\x00\x00"
+    assert memoryview(cs.wchar[None]("ab")).tobytes() == b"a\x00b\x00"
+    assert memoryview(cs.uint16[None]([1, 2])).tobytes() == b"\x01\x00\x02\x00"
+
+    fh = io.BytesIO()
+    assert fh.write(cs.test(a=1, b=b"ab")) == 4
+    assert fh.getvalue() == b"\x01ab\x00"

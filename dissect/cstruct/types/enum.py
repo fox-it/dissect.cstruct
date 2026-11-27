@@ -49,7 +49,8 @@ class EnumMetaType(EnumMeta, MetaType):
             if type(value) is not cls and (member := cls._value2member_map_.get(value)) is not None:
                 return member
 
-            return super().__call__(value)
+            # E.g. a member of another enum, which doesn't hash like its value
+            return super().__call__(value if type(value) is cls else int(value))
 
         # We are constructing a new Enum class
         # cs is the cstruct instance, but we can't isinstance check it due to circular imports

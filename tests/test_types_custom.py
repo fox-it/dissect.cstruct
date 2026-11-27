@@ -53,12 +53,14 @@ def test_adding_custom_type(cs: cstruct) -> None:
     cs.EtwPointer.as_64bit()
     assert cs.EtwPointer.__type__ is cs.uint64
     assert len(cs.EtwPointer) == 8
-    assert cs.EtwPointer(b"\xde\xad\xbe\xef" * 2).dumps() == b"\xde\xad\xbe\xef" * 2
+    assert bytes(cs.EtwPointer(b"\xde\xad\xbe\xef" * 2)) == b"\xde\xad\xbe\xef" * 2
+    assert cs.EtwPointer.dumps(0xEFBEADDEEFBEADDE) == b"\xde\xad\xbe\xef" * 2
 
     cs.EtwPointer.as_32bit()
     assert cs.EtwPointer.__type__ is cs.uint32
     assert len(cs.EtwPointer) == 4
-    assert cs.EtwPointer(b"\xde\xad\xbe\xef" * 2).dumps() == b"\xde\xad\xbe\xef"
+    assert bytes(cs.EtwPointer(b"\xde\xad\xbe\xef" * 2)) == b"\xde\xad\xbe\xef"
+    assert cs.EtwPointer.dumps(0xEFBEADDE) == b"\xde\xad\xbe\xef"
 
 
 def test_using_type_in_struct(cs: cstruct) -> None:
@@ -83,7 +85,8 @@ def test_using_type_in_struct(cs: cstruct) -> None:
     obj = cs.test(b"\xde\xad\xbe\xef" * 3)
     assert obj.data == 0xEFBEADDE
     assert obj.data2 == 0xEFBEADDEEFBEADDE
-    assert obj.data.dumps() == b"\xde\xad\xbe\xef"
+    assert bytes(obj.data) == b"\xde\xad\xbe\xef"
+    assert bytes(obj) == b"\xde\xad\xbe\xef" * 3
 
 
 def test_custom_default(cs: cstruct) -> None:

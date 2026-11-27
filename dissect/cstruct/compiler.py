@@ -37,7 +37,13 @@ from dissect.cstruct.types import (
     WcharArray,
 )
 from dissect.cstruct.types.enum import EnumMetaType
-from dissect.cstruct.types.structure import StructureMetaType, UnionMetaType, UnionProxy
+from dissect.cstruct.types.structure import (
+    StructureMetaType,
+    UnionMetaType,
+    UnionProxy,
+    _uses_generated_init,
+    _value_type,
+)
 from dissect.cstruct.util import ENDIANNESS_TO_BYTEORDER_MAP, _struct
 
 if TYPE_CHECKING:
@@ -216,15 +222,15 @@ _PACKABLE_TYPES = (Array, Char, CharArray, Int, Packed, Pointer, Void, VoidArray
 
 def _field_bytes(type_: type[BaseType], value: Any, endian: str) -> bytes:
     """Return the bytes of a char or wchar field that isn't of the right type yet or doesn't fit."""
-    buf = type_.dumps(type_.__default__() if value is None else value, endian=endian)
-    if len(buf) > type_.__size__:
+    type_._write(out := io.BytesIO(), type_.__default__() if value is None else value, endian=endian)
+    if len(buf := out.getvalue()) > type_.__size__:
         raise WriteError(f"Expected {type_.__size__} bytes for {type_.__name__}, got {len(buf)} instead.")
     return buf
 
 
 def _array_values(type_: type[Array], value: list[Any] | None) -> list[Any]:
-    """Return the values of an array field that doesn't have the right size yet."""
-    return type_.__default__() if value is None else type_._pad(value)
+    """Return the values of an array field that isn't a list of the right size yet."""
+    return type_.__default__() if value is None else type_._entries(value)
 
 
 def _or_default(value: Any, type_: type[BaseType]) -> Any:
@@ -235,6 +241,8 @@ def _or_default(value: Any, type_: type[BaseType]) -> Any:
 # Globals that are available to all generated functions
 _GLOBALS = {
     "_type_call": type.__call__,
+    "_bytes_new": bytes.__new__,
+    "_str_new": str.__new__,
     "_object_new": object.__new__,
     "_setattr": setattr,
     "_repeat": repeat,
@@ -412,6 +420,15 @@ class _ReadSourceGenerator(_SourceGenerator):
             outro.append(f"    obj.__dynamic_sizes__ = {sizes}")
             outro.append("    return obj")
 
+            # Subclasses without their own __init__ or __new__ inherit __construct__, which also bypasses __init__
+            # It has a parameter for each field name, like the keyword arguments below
+            construct = self._add_symbol(self.cls.__construct__, "construct")
+            values = "".join(f", {var}" for var in dict(self._assigned).values())
+            outro.append(f"if cls.__construct__ is {construct}:")
+            outro.append(f"    obj = {construct}(cls{values})")
+            outro.append(f"    obj.__dynamic_sizes__ = {sizes}")
+            outro.append("    return obj")
+
         # Using type.__call__ directly calls the __init__ method of the class
         outro.append(f"obj = _type_call(cls, **{{{kwargs}}})")
         outro.append(f"obj.__dynamic_sizes__ = {sizes}")
@@ -571,7 +588,16 @@ class _ReadSourceGenerator(_SourceGenerator):
         lines.append("except _Error: raise")
         lines.append(f"except (ArithmeticError, ValueError) as e: raise _ReadError({message!r} + str(e)) from e")
         element = self._type_symbol(field.type.__type__)
-        return f"_type_call({type_}, {element}._read_array(stream, _count, context={context}, endian=endian))"
+        entries = f"{element}._read_array(stream, _count, context={context}, endian=endian)"
+
+        # Create char and wchar arrays without the checks of their constructor
+        if issubclass(field.type, CharArray):
+            return f"_bytes_new({type_}, {entries})"
+
+        if issubclass(field.type, WcharArray):
+            return f"_str_new({type_}, {entries})"
+
+        return f"_type_call({type_}, {entries})"
 
     def _generate_bits_source(self, field: Field) -> Iterator[str]:
         """Generate the code for reading a bit field."""
@@ -594,7 +620,7 @@ class _ReadSourceGenerator(_SourceGenerator):
         lines.append(f"else: _bit_value = (_bit_buffer >> {remaining - field.bits}) & {mask}")
 
         # Character bit fields are returned as the integer type they're read as
-        type_ = self._type_symbol(read_type if issubclass(field.type, Char) else field.type)
+        type_ = self._type_symbol(_value_type(field))
 
         if issubclass(field.type, (Enum, Flag)):
             lines.append(_member_lookup(type_, "_bit_value"))
@@ -747,14 +773,14 @@ class _ReadSourceGenerator(_SourceGenerator):
 
             lines.extend(target(field, f"_type_call({array}, {value})"))
 
-        elif issubclass(field_type, CharArray):
-            lines.extend(target(field, f"_type_call({self._type_symbol(field.type)}, {getter})"))
+        elif issubclass(field_type, (Char, CharArray)):
+            lines.extend(target(field, f"_bytes_new({self._type_symbol(field.type)}, {getter})"))
 
         elif issubclass(field_type, WcharArray) or issubclass(read_type, Wchar):
             encoding = self._add_symbol(read_type.__encoding_map__, "encoding")
-            # Using str() instead of .decode() also supports other bytes-like objects returned by the stream
+            # Decoding like str() instead of .decode() also supports other bytes-like objects returned by the stream
             type_ = self._type_symbol(field.type)
-            lines.extend(target(field, f"_type_call({type_}, str({getter}, {encoding}[endian], 'surrogatepass'))"))
+            lines.extend(target(field, f"_str_new({type_}, {getter}, {encoding}[endian], 'surrogatepass')"))
 
         elif issubclass(field_type, Pointer):
             context = self._context(lines)
@@ -1051,7 +1077,8 @@ class _WriteSourceGenerator(_SourceGenerator):
             var = self._var("value")
             num = field_type.__num_entries__
             pack.lines.append(
-                f"if ({var} := {value}) is None or len({var}) != {num}: {var} = _array_values({type_}, {var})"
+                f"if not isinstance({var} := {value}, list) or len({var}) != {num}: "
+                f"{var} = _array_values({type_}, {var})"
             )
 
             # Entries can be enum members or plain integers, both can be packed as they are
@@ -1176,11 +1203,6 @@ def _can_inline_fields(fields: list[Field], size: int, is_union: bool, in_union:
             return False
 
     return True
-
-
-def _uses_generated_init(type_: type[Structure]) -> bool:
-    """Return whether a structure type uses a generated ``__init__``, so we can bypass it by setting attributes."""
-    return "__init__" in type_.__dict__ and type_.__new__ is object.__new__
 
 
 def _can_pack(type_: type[BaseType]) -> bool:

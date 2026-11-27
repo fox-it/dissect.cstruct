@@ -19,6 +19,13 @@ class Int(int, BaseType):
     __signed__: bool
 
     @classmethod
+    def _normalize(cls, value: Any) -> Self:
+        if isinstance(value, int):
+            # Fast path for integers
+            return type.__call__(cls, value)
+        return MetaType._normalize(cls, value)
+
+    @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:
         data = stream.read(cls.__size__)
 

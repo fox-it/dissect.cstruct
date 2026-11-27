@@ -58,9 +58,9 @@ def test_enum_read(TestEnum: type[Enum]) -> None:
 
 
 def test_enum_write(TestEnum: type[Enum]) -> None:
-    assert TestEnum.B.dumps() == b"\x02"
-    assert TestEnum(b"\x02").dumps() == b"\x02"
-    assert TestEnum.dumps(2) == b"\x02"
+    assert bytes(TestEnum.B) == b"\x02"
+    assert bytes(TestEnum(b"\x02")) == b"\x02"
+    assert bytes(TestEnum(2)) == b"\x02"
 
 
 def test_enum_array_read(TestEnum: type[Enum]) -> None:
@@ -69,10 +69,10 @@ def test_enum_array_read(TestEnum: type[Enum]) -> None:
 
 
 def test_enum_array_write(TestEnum: type[Enum]) -> None:
-    assert TestEnum[2]([TestEnum.B, TestEnum.C]).dumps() == b"\x02\x03"
-    assert TestEnum[None]([TestEnum.B, TestEnum.C]).dumps() == b"\x02\x03\x00"
-    assert TestEnum[2]([2, 3]).dumps() == b"\x02\x03"
-    assert TestEnum[None]([2, 3]).dumps() == b"\x02\x03\x00"
+    assert bytes(TestEnum[2]([TestEnum.B, TestEnum.C])) == b"\x02\x03"
+    assert TestEnum[None].dumps([TestEnum.B, TestEnum.C]) == b"\x02\x03\x00"
+    assert bytes(TestEnum[2]([2, 3])) == b"\x02\x03"
+    assert TestEnum[None].dumps([2, 3]) == b"\x02\x03\x00"
 
 
 def test_enum_alias(cs: cstruct) -> None:
@@ -88,7 +88,7 @@ def test_enum_alias(cs: cstruct) -> None:
 
     assert AliasEnum.B == AliasEnum.C
 
-    assert AliasEnum.B.dumps() == AliasEnum.C.dumps()
+    assert bytes(AliasEnum.B) == bytes(AliasEnum.C)
 
 
 def test_enum_bad_type(cs: cstruct) -> None:
@@ -97,13 +97,13 @@ def test_enum_bad_type(cs: cstruct) -> None:
 
 
 def test_enum_eof(TestEnum: type[Enum]) -> None:
-    with pytest.raises(EOFError):
+    with pytest.raises(EOFError, match="Read 0 bytes, but expected 1"):
         TestEnum(b"")
 
-    with pytest.raises(EOFError):
+    with pytest.raises(EOFError, match="Read 1 bytes, but expected 2"):
         TestEnum[2](b"\x01")
 
-    with pytest.raises(EOFError):
+    with pytest.raises(EOFError, match="Read 0 bytes, but expected 1"):
         TestEnum[None](b"\x01")
 
 
@@ -241,15 +241,15 @@ def test_enum_struct(cs: cstruct, compiled: bool) -> None:
     with pytest.raises(AttributeError):
         cs.Test16.C  # noqa: B018
 
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     buf = b"\x01\x00\x02\x00\x00\x00"
     assert cs.test_term(buf).null == [cs.Test16.A, cs.Test16.B]
-    assert cs.test_term(null=[cs.Test16.A, cs.Test16.B]).dumps() == buf
+    assert bytes(cs.test_term(null=[cs.Test16.A, cs.Test16.B])) == buf
 
     buf = b"\x01\x00\x01\x00\x02\x00"
     assert cs.test_expr(buf).expr == [cs.Test16.A, cs.Test16.B]
-    assert cs.test_expr(size=1, expr=[cs.Test16.A, cs.Test16.B]).dumps() == buf
+    assert bytes(cs.test_expr(size=1, expr=[cs.Test16.A, cs.Test16.B])) == buf
 
 
 def test_enum_comments(cs: cstruct) -> None:
@@ -371,11 +371,11 @@ def test_enum_struct_write(cs: cstruct, compiled: bool) -> None:
     obj.list = [cs.Test16.A, cs.Test16.B]
 
     buf = b"\x01\x00\x02\x00\x01\x00\x00\x02\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x01\x00\x02\x00"
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
     # Plain integers are written like enum members
     obj = cs.test(a16=1, b16=2, a24=1, b24=2, a32=1, b32=2, list=[1, 2])
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_enum_anonymous(cs: cstruct, compiled: bool) -> None:
@@ -515,4 +515,4 @@ def test_enum_int_type_array(cs: cstruct, compiled: bool) -> None:
 
     assert obj.b == [cs.Test.C, cs.Test(9)]
     assert obj.c == 3
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf

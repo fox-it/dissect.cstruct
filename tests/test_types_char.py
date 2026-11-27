@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import re
 from typing import TYPE_CHECKING
 
 import pytest
@@ -19,7 +20,44 @@ def test_char_read(cs: cstruct) -> None:
 
 
 def test_char_write(cs: cstruct) -> None:
-    assert cs.char(b"A").dumps() == b"A"
+    assert bytes(cs.char(b"A")) == b"A"
+
+    # Writing doesn't convert values, e.g. an int
+    with pytest.raises(WriteError, match=r"^Cannot write char: Expected bytes, got int$"):
+        cs.char.dumps(0x41)
+
+
+def test_char_value(cs: cstruct) -> None:
+    """Test that a ``char`` and ``char`` array behave as expected when given sensible values."""
+    assert cs.char(0x78) == b"x"
+    assert cs.char() == b"\x00"
+    assert cs.char[4]([97, 98]) == b"ab\x00\x00"
+    assert cs.char[4]() == b"\x00\x00\x00\x00"
+    assert cs.char[None]([97, 98]) == b"ab"
+
+    # Values of other cstruct types, which are subclasses of int and list
+    assert cs.char(cs.uint8(0x78)) == b"x"
+    assert cs.char[2](cs.uint8[2]([97, 98])) == b"ab"
+    assert cs.char[4](cs.uint8[2]([97, 98])) == b"ab\x00\x00"
+
+    with pytest.raises(ValueError, match=r"^Expected a single character, got 2 instead\.$"):
+        cs.char([120, 121])
+
+    with pytest.raises(ValueError, match=r"^Expected static array size 4, got 5 instead\.$"):
+        cs.char[4]([97, 98, 99, 100, 101])
+
+    # Strings aren't converted, they must be encoded to bytes first
+    for type_ in (cs.char, cs.char[4], cs.char[None]):
+        with pytest.raises(
+            TypeError, match=rf"^Cannot create {re.escape(type_.__name__)} from str, encode to bytes first$"
+        ):
+            type_("ab")
+
+    with pytest.raises(TypeError, match=r"^Cannot create char\[4\] from int$"):
+        cs.char[4](3)
+
+    with pytest.raises(TypeError, match=r"^Cannot create char\[\] from int$"):
+        cs.char[None](3)
 
 
 def test_char_array(cs: cstruct) -> None:
@@ -27,21 +65,30 @@ def test_char_array(cs: cstruct) -> None:
 
     assert cs.char[4](buf) == b"AAAA"
     assert cs.char[4](io.BytesIO(buf)) == b"AAAA"
+    assert cs.char[4](buf[:4], endian=">") == b"AAAA"
 
     assert cs.char[None](buf) == b"AAAA"
     assert cs.char[None](io.BytesIO(buf)) == b"AAAA"
+
+    # An instance of the type is copied, not parsed
+    assert cs.char[None](cs.char[None](buf)) == b"AAAA"
 
 
 def test_char_array_write(cs: cstruct) -> None:
     buf = b"AAAA\x00"
 
-    assert cs.char[4](buf).dumps() == b"AAAA"
-    assert cs.char[None](buf).dumps() == b"AAAA\x00"
+    assert bytes(cs.char[4](buf)) == b"AAAA"
+    assert bytes(cs.char[None](buf)) == b"AAAA"
+    assert cs.char[None].dumps(cs.char[None](buf)) == b"AAAA\x00"
+
+    # Writing doesn't convert values, e.g. a list
+    with pytest.raises(WriteError, match=r"^Cannot write char\[4\]: Expected bytes, got list$"):
+        cs.char[4].dumps([0x41])
 
 
 def test_char_array_write_padding(cs: cstruct) -> None:
     buf = io.BytesIO()
-    cs.char[8]._write(buf, "hi", endian=cs.endian)
+    cs.char[8]._write(buf, b"hi", endian=cs.endian)
     assert buf.getvalue() == b"hi\x00\x00\x00\x00\x00\x00"
 
     cdef = """
@@ -55,37 +102,37 @@ def test_char_array_write_padding(cs: cstruct) -> None:
 
     obj = cs.test_struct()
     obj.x = 4
-    obj.y = "hi"
-    obj.z = "bye"
+    obj.y = b"hi"
+    obj.z = b"bye"
 
-    assert len(obj.dumps()) == len(cs.test_struct)
+    assert len(bytes(obj)) == len(cs.test_struct)
     assert (
-        obj.dumps()
+        bytes(obj)
         == b"\x04\x00\x00\x00hi\x00\x00\x00\x00\x00\x00bye\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
     )
 
 
 def test_char_array_write_size_error(cs: cstruct) -> None:
     buf = io.BytesIO()
-    with pytest.raises(WriteError):
+    with pytest.raises(WriteError, match=re.escape("Expected static array size 4, got 7 instead.")):
         cs.char[4]._write(buf, b"toolong", endian=cs.endian)
 
 
 def test_char_eof(cs: cstruct) -> None:
-    with pytest.raises(EOFError):
+    with pytest.raises(EOFError, match="Read 0 bytes, but expected 1"):
         cs.char(b"")
 
-    with pytest.raises(EOFError):
+    with pytest.raises(EOFError, match="Read 0 bytes, but expected 4"):
         cs.char[4](b"")
 
-    with pytest.raises(EOFError):
+    with pytest.raises(EOFError, match="Read 0 bytes, but expected 1"):
         cs.char[None](b"AAAA")
 
     # More bytes than any stream can hold, e.g. a count from corrupt data
     with pytest.raises(EOFError, match=r"^Read 0 bytes, but expected 9223372036854775808$"):
         cs.char[2**63](b"")
 
-    assert cs.char[0](b"") == b""
+    assert cs.char[0](io.BytesIO(b"")) == b""
 
 
 def test_char_default(cs: cstruct) -> None:
@@ -120,7 +167,7 @@ def test_char_array_bytearray_not_modified(cs: cstruct, compiled: bool) -> None:
 
     a = bytearray(b"a")
     b = bytearray(b"b")
-    assert cs.test(a=a, b=b).dumps() == b"a\x00\x00\x00b\x00"
+    assert bytes(cs.test(a=a, b=b)) == b"a\x00\x00\x00b\x00"
     assert a == b"a"
     assert b == b"b"
 
@@ -137,20 +184,14 @@ def test_char_write_too_long(cs: cstruct, compiled: bool) -> None:
     cs.load(cdef, compiled=compiled)
 
     assert cs.char.dumps(b"x") == b"x"
-    assert cs.char.dumps("x") == b"x"
-    assert cs.char.dumps(0x78) == b"x"
 
     with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
         cs.char.dumps(b"xy")
 
+    obj = cs.test(a=1, c=2)
+    obj.b = b"xy"
     with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
-        cs.char.dumps("xy")
-
-    with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
-        cs.test(a=1, b=b"xy", c=2).dumps()
-
-    with pytest.raises(WriteError, match=r"^Expected a single character, got 2 instead\.$"):
-        cs.test(a=1, b="xy", c=2).dumps()
+        bytes(obj)
 
 
 def test_char_write_too_short(cs: cstruct, compiled: bool) -> None:
@@ -164,7 +205,7 @@ def test_char_write_too_short(cs: cstruct, compiled: bool) -> None:
     cs.load(cdef, compiled=compiled)
 
     assert cs.char.dumps(b"") == b"\x00"
-    assert cs.test(a=1, b=b"").dumps() == b"\x01\x00"
+    assert bytes(cs.test(a=1, b=b"")) == b"\x01\x00"
 
 
 def test_char_struct_write(cs: cstruct, compiled: bool) -> None:
@@ -180,12 +221,20 @@ def test_char_struct_write(cs: cstruct, compiled: bool) -> None:
 
     assert verify_compiled(cs.test, compiled)
 
-    assert cs.test(a=1, b=b"x", c=2).dumps() == b"\x01x\x02"
-    assert cs.test(a=1, b=bytearray(b"x"), c=2).dumps() == b"\x01x\x02"
+    assert bytes(cs.test(a=1, b=b"x", c=2)) == b"\x01x\x02"
+    assert bytes(cs.test(a=1, b=bytearray(b"x"), c=2)) == b"\x01x\x02"
 
-    # Integers and strings are converted
-    assert cs.test(a=1, b=0x78, c=2).dumps() == b"\x01x\x02"
-    assert cs.test(a=1, b="x", c=2).dumps() == b"\x01x\x02"
+    # Integers are converted
+    assert bytes(cs.test(a=1, b=0x78, c=2)) == b"\x01x\x02"
+
+    # Writing doesn't convert values, e.g. strings must be encoded to bytes first
+    for value in ("x", 0x78):
+        obj = cs.test(a=1, c=2)
+        obj.b = value
+
+        hint = ", encode to bytes first" if isinstance(value, str) else ""
+        with pytest.raises(WriteError, match=rf"^Cannot write test: Expected bytes, got {type(value).__name__}{hint}$"):
+            bytes(obj)
 
 
 def test_char_array_struct_write(cs: cstruct, compiled: bool) -> None:
@@ -203,20 +252,33 @@ def test_char_array_struct_write(cs: cstruct, compiled: bool) -> None:
     assert verify_compiled(cs.test, compiled)
 
     buf = b"\x01abcd\x02"
-    assert cs.test(a=1, b=b"abcd", c=2).dumps() == buf
-    assert cs.test(a=1, b=bytearray(b"abcd"), c=2).dumps() == buf
-    assert cs.test(a=1, b=memoryview(b"abcd"), c=2).dumps() == buf
-    assert cs.test(a=1, b="abcd", c=2).dumps() == buf
-    assert cs.test(a=1, b=[97, 98, 99, 100], c=2).dumps() == buf
+    assert bytes(cs.test(a=1, b=b"abcd", c=2)) == buf
+    assert bytes(cs.test(a=1, b=bytearray(b"abcd"), c=2)) == buf
+    assert bytes(cs.test(a=1, b=memoryview(b"abcd"), c=2)) == buf
+    assert bytes(cs.test(a=1, b=[97, 98, 99, 100], c=2)) == buf
 
     # Shorter values are padded
     buf = b"\x01a\x00\x00\x00\x02"
-    assert cs.test(a=1, b=b"a", c=2).dumps() == buf
-    assert cs.test(a=1, b=[97], c=2).dumps() == buf
+    assert bytes(cs.test(a=1, b=b"a", c=2)) == buf
+    assert bytes(cs.test(a=1, b=memoryview(b"a"), c=2)) == buf
+    assert bytes(cs.test(a=1, b=[97], c=2)) == buf
 
     # Longer values aren't accepted
+    obj = cs.test(a=1, c=2)
+    obj.b = b"abcde"
     with pytest.raises(WriteError, match="Expected static array size 4, got 5 instead"):
-        cs.test(a=1, b=b"abcde", c=2).dumps()
+        bytes(obj)
 
+    obj = cs.test(a=1, b=b"abcd", c=2)
+    obj.d = b"e"
     with pytest.raises(WriteError, match="Expected static array size 0, got 1 instead"):
-        cs.test(a=1, b=b"abcd", c=2, d=b"e").dumps()
+        bytes(obj)
+
+    # Writing doesn't convert values, e.g. strings must be encoded to bytes first
+    for value in ("abcd", "a", [97]):
+        obj = cs.test(a=1, c=2)
+        obj.b = value
+
+        hint = ", encode to bytes first" if isinstance(value, str) else ""
+        with pytest.raises(WriteError, match=rf"^Cannot write test: Expected bytes, got {type(value).__name__}{hint}$"):
+            bytes(obj)

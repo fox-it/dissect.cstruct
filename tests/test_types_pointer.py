@@ -21,26 +21,48 @@ def test_pointer(cs: cstruct) -> None:
     assert repr(obj) == "<uint8* @ 0x1>"
 
     assert obj == 1
-    assert obj.dumps() == b"\x01"
+    assert bytes(obj) == b"\x01"
     assert obj.dereference() == 255
     assert str(obj) == "255"
 
     with pytest.raises(NullPointerDereference):
-        ptr(0, None, endian=cs.endian).dereference()
+        ptr(0).dereference()
+
+    # Created from a value like an int, without a stream to dereference
+    assert type(ptr(1)) is ptr
+    assert ptr("1") == 1
+    with pytest.raises(NullPointerDereference):
+        ptr(1).dereference()
+
+    # A pointer keeps its stream, also as another pointer type
+    assert ptr(obj).dereference() == 255
+    assert cs._make_pointer(cs.int8)(obj).dereference() == -1
+    assert ptr(ptr(0)) == 0
 
 
-def test_pointer_char(cs: cstruct) -> None:
+@pytest.mark.parametrize(
+    ("type_name", "buf", "expected", "expected_str"),
+    [
+        ("char", b"\x02\x00asdf\x00", b"asdf", "b'asdf'"),
+        ("wchar", b"\x02\x00a\x00s\x00d\x00f\x00\x00\x00", "asdf", "asdf"),
+    ],
+)
+def test_pointer_char(cs: cstruct, type_name: str, buf: bytes, expected: bytes | str, expected_str: str) -> None:
+    """Test that a ``char`` and ``wchar`` pointer dereference to a null-terminated string that can be written back."""
     cs.pointer = cs.uint8
 
-    ptr = cs._make_pointer(cs.char)
-    assert ptr.__name__ == "char*"
+    ptr = cs._make_pointer(cs.resolve(type_name))
+    assert ptr.__name__ == f"{type_name}*"
 
-    obj = ptr(b"\x02\x00asdf\x00")
-    assert repr(obj) == "<char* @ 0x2>"
+    obj = ptr(buf)
+    assert repr(obj) == f"<{type_name}* @ 0x2>"
 
     assert obj == 2
-    assert obj.dereference() == b"asdf"
-    assert str(obj) == "b'asdf'"
+    assert obj.dereference() == expected
+    assert str(obj) == expected_str
+
+    value = obj.dereference()
+    assert type(value).dumps(value) == buf[2:]
 
 
 def test_pointer_operator(cs: cstruct) -> None:
@@ -50,12 +72,12 @@ def test_pointer_operator(cs: cstruct) -> None:
     obj = ptr(b"\x01\x00\xff")
 
     assert obj == 1
-    assert obj.dumps() == b"\x01"
+    assert bytes(obj) == b"\x01"
     assert obj.dereference() == 0
 
     obj += 1
     assert obj == 2
-    assert obj.dumps() == b"\x02"
+    assert bytes(obj) == b"\x02"
     assert obj.dereference() == 255
 
     obj -= 2
@@ -144,7 +166,7 @@ def test_pointer_struct(cs: cstruct, compiled: bool) -> None:
     assert obj.ptr1 == obj.ptr2
     assert obj.ptr1.dereference() == obj.ptr2.dereference() == 0x06050403
 
-    assert obj.dumps() == b"\x06\x00\x06\x00"
+    assert bytes(obj) == b"\x06\x00\x06\x00"
 
     with pytest.raises(NullPointerDereference):
         cs.ptrtest(b"\x00\x00\x00\x00").ptr1.dereference()
@@ -186,7 +208,7 @@ def test_pointer_struct_pointer(cs: cstruct, compiled: bool) -> None:
     assert obj.ptr.string == b"lalala"
     assert obj.ptr.wstring == "test"
 
-    assert obj.dumps() == b"\x02\x00"
+    assert bytes(obj) == b"\x02\x00"
 
     with pytest.raises(NullPointerDereference):
         cs.ptrtest(b"\x00\x00\x00\x00").ptr.magic  # noqa: B018
@@ -273,7 +295,7 @@ def test_pointer_changing_endian(cs: cstruct) -> None:
     assert repr(obj) == "<uint32* @ 0x2>"
 
     assert obj == 2
-    assert obj.dumps(endian=">") == b"\x00\x02"
+    assert ptr.dumps(obj, endian=">") == b"\x00\x02"
     assert obj.dereference() == 0x01020304
     assert obj.dereference(endian="<") == 0x04030201
 
@@ -295,7 +317,7 @@ def test_pointer_int_type_array(cs: cstruct, compiled: bool) -> None:
     obj = cs.test(buf)
     assert obj.a == [1, 2]
     assert obj.b == 3
-    assert obj.dumps() == buf
+    assert bytes(obj) == buf
 
 
 def test_pointer_struct_write(cs: cstruct, compiled: bool) -> None:
@@ -312,7 +334,7 @@ def test_pointer_struct_write(cs: cstruct, compiled: bool) -> None:
 
     assert verify_compiled(cs.test, compiled)
 
-    assert cs.test(a=1, b=2, c=[3, 4]).dumps() == b"\x01\x02\x00\x03\x00\x04\x00"
+    assert bytes(cs.test(a=1, b=2, c=[3, 4])) == b"\x01\x02\x00\x03\x00\x04\x00"
 
     with pytest.raises(WriteError, match=r"^Cannot write test: "):
-        cs.test(a=1, b=2, c=[3, 2**16]).dumps()
+        bytes(cs.test(a=1, b=2, c=[3, 2**16]))

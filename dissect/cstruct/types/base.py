@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import struct
+import sys
 import warnings
 from io import SEEK_CUR, BytesIO
 from types import MethodType
@@ -44,16 +45,22 @@ class MetaType(type):
     __ArrayType__: type[BaseArray] = "Array"
     """The array type for this type class."""
 
-    def __call__(cls, *args, **kwargs) -> Self:  # type: ignore
-        """Adds support for ``TypeClass(bytes | file-like object)`` parsing syntax."""
+    def __call__(cls, /, *args, **kwargs) -> Self:  # type: ignore
+        """Create a value of this type like its Python base type does, or parse it from data.
+
+        A bytes-like or file-like object is parsed, e.g. ``uint16(b"\\x01\\x00")`` is 1. Other values are given to the
+        Python base type, e.g. ``uint16("1")`` is 1 like ``int("1")``. Some types have exceptions, e.g. ``char(0x41)``
+        is ``b"A"``.
+        """
         if len(args) == 1 and not kwargs:
             # Fast path for the most common case without keyword arguments
             obj = args[0]
             if type(obj) in _BUFFER_TYPES:
-                if len(obj) == cls.__size__ and isinstance(obj, bytes) and issubclass(cls, bytes):
-                    # Shortcut for char/bytes type
-                    return type.__call__(cls, obj)
                 return cls._read(BytesIO(obj), endian=cls.__cs__.endian)
+
+            if isinstance(obj, int):
+                # E.g. uint32(1)
+                return type.__call__(cls, obj)
 
             if hasattr(obj, "read") and not isinstance(obj, cls):
                 return cls._read(obj, endian=cls.__cs__.endian)
@@ -68,10 +75,6 @@ class MetaType(type):
                     normalize_endianness(endian) if (endian := kwargs.get("endian")) is not None else cls.__cs__.endian
                 )
                 return cls._read(obj, endian=endian)
-
-            if isinstance(obj, bytes) and len(obj) == cls.__size__ and issubclass(cls, bytes):
-                # Shortcut for char/bytes type
-                return type.__call__(cls, *args, **kwargs)
 
             if _is_buffer_type(obj):
                 return cls.reads(obj, endian=kwargs.get("endian"))
@@ -101,6 +104,23 @@ class MetaType(type):
     def __default__(cls) -> Self:  # type: ignore
         """Return the default value of this type."""
         return cls()
+
+    def _normalize(cls, value: Any) -> Any:
+        """Internal function for converting a value that is given to a field of this type when a structure is created.
+
+        Calls the type, so a field accepts the same values, e.g. ``uint16("1")`` and ``uint16(b"\\x01\\x00")``.
+        More bytes than the type needs raise a ``ValueError``, e.g. ``b"\\x01\\x00\\x02"`` for a ``uint16`` field.
+
+        Args:
+            value: The value to convert, never ``None``.
+        """
+        if isinstance(value, _BUFFER_TYPES):
+            stream = BytesIO(value)
+            result = cls._read(stream, endian=cls.__cs__.endian)
+            if (size := stream.tell()) != len(value):
+                raise ValueError(f"Expected {size} bytes for {cls.__name__}, got {len(value)} instead.")
+            return result
+        return cls(value)
 
     def reads(cls, data: bytes | memoryview | bytearray, *, endian: AllowedEndianness | None = None) -> Self:  # type: ignore
         """Parse the given data from a bytes-like object.
@@ -334,10 +354,22 @@ class _overload:
 
 
 def _instance_dumps(self: BaseType, *, endian: AllowedEndianness | None = None) -> bytes:
+    warnings.warn(
+        "The 'dumps' method on instances is deprecated, use 'bytes(obj)' instead, or 'cls.dumps(obj)' to include the"
+        " null terminator of a null-terminated array.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return MetaType.dumps(self.__class__, self, endian=endian)
 
 
 def _instance_write(self: BaseType, stream: BinaryIO, *, endian: AllowedEndianness | None = None) -> int:
+    warnings.warn(
+        "The 'write' method on instances is deprecated, use 'stream.write(bytes(obj))' instead, or"
+        " 'cls.write(stream, obj)' to include the null terminator of a null-terminated array.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return MetaType.write(self.__class__, stream, self, endian=endian)
 
 
@@ -353,6 +385,15 @@ class BaseType(metaclass=MetaType):
             raise TypeError("Dynamic size")
 
         return self.__class__.__size__
+
+    def __bytes__(self) -> bytes:
+        return MetaType.dumps(self.__class__, self)
+
+    if sys.version_info >= (3, 12):
+        # The buffer protocol of Python classes, so that e.g. ``fh.write(obj)`` works, needs Python 3.12 or newer.
+        # It gives the same bytes as ``bytes(obj)``.
+        def __buffer__(self, flags: int) -> memoryview:
+            return memoryview(bytes(self))
 
 
 T = TypeVar("T", bound=BaseType)
@@ -409,25 +450,31 @@ class BaseArray(BaseType):
 
     @classmethod
     def _write(cls, stream: BinaryIO, data: list[Any], *, endian: Endianness) -> int:
+        if not isinstance(data, list) or (isinstance(cls.__num_entries__, int) and len(data) != cls.__num_entries__):
+            # E.g. a tuple, or a list of another size
+            data = cls._entries(data)
+
         if cls.__null_terminated__:
             return cls.__type__._write_0(stream, data, endian=endian)
-
-        if not cls.__dynamic__:
-            data = cls._pad(data)
 
         return cls.__type__._write_array(stream, data, endian=endian)
 
     @classmethod
-    def _pad(cls, data: list[Any]) -> list[Any]:
-        """Internal function for padding the entries of a static array to its size.
+    def _entries(cls, data: list[Any] | tuple[Any, ...]) -> list[Any] | tuple[Any, ...]:
+        """Internal function for checking the entries of an array, and padding them to its fixed number of entries.
 
         Args:
             data: The entries of the array.
         """
-        if remaining := cls.__num_entries__ - (actual_size := len(data)):
+        if not isinstance(data, (list, tuple)):
+            # E.g. bytes, which aren't converted to entries
+            raise TypeError(f"Expected a list, got {type(data).__name__}")
+
+        # Also an array of entries with a dynamic size, e.g. LEB128 or a structure, has a fixed number of entries
+        if isinstance(cls.__num_entries__, int) and (remaining := cls.__num_entries__ - (actual_size := len(data))):
             if remaining < 0:
                 raise WriteError(f"Expected static array size {cls.__num_entries__}, got {actual_size} instead.")
-            data = data + [cls.__type__.__default__()] * remaining
+            data = [*data, *[cls.__type__.__default__()] * remaining]
 
         return data
 
@@ -462,7 +509,68 @@ class BaseArray(BaseType):
         return cls.__null_terminated__
 
 
-class Array(list[T], BaseArray):
+class ArrayMetaType(MetaType):
+    """Metaclass for array types."""
+
+    def __call__(cls, *args, **kwargs) -> Array:
+        if len(args) == 1 and not kwargs:
+            # Handle a few fast path cases
+            obj = args[0]
+            if hasattr(obj, "read") and not isinstance(obj, cls):
+                # E.g. uint8[4](fh)
+                return cls._read(obj, endian=cls.__cs__.endian)
+
+            if type(obj) in _BUFFER_TYPES:
+                # E.g. uint8[4](b"\x01\x02\x03\x04")
+                return cls._read(BytesIO(obj), endian=cls.__cs__.endian)
+
+            if not isinstance(obj, (list, tuple)):
+                # E.g. uint8[4](x for x in range(4))
+                if isinstance(obj, _BUFFER_TYPES):
+                    # E.g. uint8[4](char[4](b"abcd"))
+                    return cls._read(BytesIO(obj), endian=cls.__cs__.endian)
+
+                # list() would give the characters of a string, and a less clear error for an int
+                if isinstance(obj, (int, str)):
+                    # E.g. uint8[4]("ab")
+                    raise TypeError(f"Cannot create {cls.__name__} from {type(obj).__name__}")
+
+                # E.g. a generator, which has no length
+                obj = list(obj)
+
+            # E.g. initializing with a list-like
+            # Pad to the correct number of entries if the given value is too short
+            if isinstance(num_entries := cls.__num_entries__, int) and (actual_size := len(obj)) != num_entries:
+                # E.g. uint8[4]([1, 2])
+                if actual_size > num_entries:
+                    # E.g. uint8[2]([1, 2, 3])
+                    raise ValueError(f"Expected static array size {num_entries}, got {actual_size} instead.")
+
+                # Fill the default value, so that mutable entries like structures aren't shared
+                result = cls.__default__()
+                result[:actual_size] = obj
+                return result
+
+            return type.__call__(cls, obj)
+
+        if not args and not kwargs:
+            # Default value
+            # E.g. uint8[4]()
+            return cls.__default__()
+
+        # Everything else
+        # E.g. uint8[4](b"\x01\x02\x03\x04", endian=">")
+        return MetaType.__call__(cls, *args, **kwargs)
+
+
+class Array(list[T], BaseArray, metaclass=ArrayMetaType):
+    def __bytes__(self) -> bytes:
+        # The byte representation of a null-terminated array doesn't include the null terminator.
+        if self.__null_terminated__:
+            return MetaType.dumps(self.__type__[len(self)], self)
+
+        return MetaType.dumps(self.__class__, self)
+
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> list[T]:
         return type.__call__(cls, super()._read(stream, context=context, endian=endian))
