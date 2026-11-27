@@ -49,7 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - For null-terminated arrays, it does not include the null terminator. Use `cls.dumps(obj)` to include the null terminator.
   - For integer types, `bytearray(obj)` gives as many zero bytes as its value, e.g. `bytearray(cs.uint32(5))` gives 5 zero bytes. Use `bytearray(bytes(obj))` instead.
 - `char` and `char` arrays no longer accept a string, when they're created or written. Encode the string to bytes first.
-- Writing doesn't convert values anymore (e.g. `type.write(value)`, or manually setting an attribute on a structure instance): a `char` doesn't accept an int, and `uint8` arrays don't accept bytes. Convert the value first, e.g. `cs.char(0x41)` or `cs.uint8[2](b"\x01\x02")`, or pass it as an argument when the structure is created.
+- Writing doesn't convert values anymore (e.g. `type.write(stream, value)`, or manually setting an attribute on a structure instance): a `char` doesn't accept an int, and `uint8` arrays don't accept bytes. Convert the value first, e.g. `cs.char(0x41)` or `cs.uint8[2](b"\x01\x02")`, or pass it as an argument when the structure is created.
 - Creating a `char`, a `wchar` or an array from a value instead of from data:
   - An int creates a `char` with that byte, e.g. `cs.char(0x41)` is `b"A"`.
   - Arrays of all types with a fixed number of entries add default entries to a value with fewer entries, e.g. `cs.char[4]([0x41])` is `b"A\x00\x00\x00"`, `cs.wchar[4]("A")` is `"A\x00\x00\x00"` and `cs.uint8[4]([1])` and `cs.uleb128[4]([1])` are `[1, 0, 0, 0]`.
@@ -58,6 +58,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `TypeError` is raised for unsupported values.
 - On Python 3.12 and newer, instances of all types support the buffer protocol, so that e.g. `fh.write(obj)` works.
 - Values that are given when a structure or union is created are converted to the types of their fields, like the type does. E.g. in `struct test { uint16 values[2]; }`, `cs.test(values=[1, 2]).values` is a `uint16[2]` and `cs.test(values=b"\x01\x00\x02\x00").values` is `[1, 2]`.
+  - Bytes that are longer than a field raise a `ValueError`, e.g. `cs.test(values=b"\x01\x00\x02\x00\x03\x00")`.
   - Values that are set as attributes aren't converted, e.g. `cs.test().values = [1, 2]`. For performance reasons this is impractical.
 
 ### Deprecated
