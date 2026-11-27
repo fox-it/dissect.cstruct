@@ -148,7 +148,7 @@ class StructureMetaType(MetaType):
             classdict["__eq__"] = Union.__eq__
         else:
             classdict["__init__"] = _generate_structure__init__(raw_lookup.values())
-            classdict["__construct__"] = _generate_structure__construct__(raw_lookup.values())
+            classdict["__construct__"] = _generate_structure__construct__(raw_lookup.keys())
             classdict["__eq__"] = _generate__eq__(field_names)
 
         classdict["__hash__"] = _generate__hash__(field_names)
@@ -1117,22 +1117,13 @@ def _generate_structure__init__(fields: list[Field]) -> FunctionType:
     )
 
 
-def _generate_structure__construct__(fields: list[Field]) -> FunctionType:
+def _generate_structure__construct__(fields: list[str]) -> FunctionType:
     """Generates a ``__construct__`` function for a structure with the specified fields.
 
     Args:
         fields: List of field names.
     """
-    mapping = _generate_co_mapping(fields)
-
-    template: FunctionType = _make_structure__construct__(len(fields))
-    return type(template)(
-        template.__code__.replace(
-            co_names=_remap_co_values(template.__code__.co_names, mapping),
-            co_varnames=_remap_co_values(template.__code__.co_varnames, mapping),
-        ),
-        template.__globals__,
-    )
+    return _patch_attributes(_make_structure__construct__(len(fields)), fields, 2)
 
 
 def _generate_union__init__(fields: list[Field]) -> FunctionType:
@@ -1158,15 +1149,18 @@ def _generate_union__init__(fields: list[Field]) -> FunctionType:
 def _generate__init__globals(fields: list[Field]) -> dict[str, Any]:
     """Generates the default factories, types and conversion functions of fields for an ``__init__`` method.
 
+    The generated code uses the names ``_0_default``, ``_0_type`` and ``_0_normalize`` for the first field, etc.
+
     Args:
         fields: List of fields.
     """
-    types = {field._name: _value_type(field) for field in fields}
-    return (
-        {f"__{name}_default__": _default_factory(type_) for name, type_ in types.items()}
-        | {f"__{name}_type__": type_ for name, type_ in types.items()}
-        | {f"__{name}_normalize__": type_._normalize for name, type_ in types.items()}
-    )
+    result = {}
+    for i, field in enumerate(fields):
+        type_ = _value_type(field)
+        result[f"_{i}_default"] = _default_factory(type_)
+        result[f"_{i}_type"] = type_
+        result[f"_{i}_normalize"] = type_._normalize
+    return result
 
 
 def _value_type(field: Field) -> type[BaseType]:
@@ -1185,10 +1179,8 @@ def _default_factory(type_: type[BaseType]) -> Callable[[], Any]:
 def _generate_co_mapping(fields: list[Field]) -> dict[str, str]:
     """Generates a mapping of generated code object names to field names.
 
-    The generated code uses names like ``_0``, ``_1``, etc. for fields, ``_0_default``, ``_1_default``, etc.
-    for default initializer values, ``_0_type``, ``_1_type``, etc. for field types and ``_0_normalize``,
-    ``_1_normalize``, etc. for their conversion functions. Return a mapping of these names to the actual field names,
-    and of ``self`` to a name that no field has.
+    The generated code uses names like ``_0``, ``_1``, etc. for fields. Return a mapping of these names to the actual
+    field names, and of ``self`` to a name that no field has.
 
     Args:
         fields: List of field names.
@@ -1198,16 +1190,7 @@ def _generate_co_mapping(fields: list[Field]) -> dict[str, str]:
     while any(field._name == instance for field in fields):
         instance = f"_{instance}"
 
-    return {"self": instance} | {
-        key: value
-        for i, field in enumerate(fields)
-        for key, value in [
-            (f"_{i}", field._name),
-            (f"_{i}_default", f"__{field._name}_default__"),
-            (f"_{i}_type", f"__{field._name}_type__"),
-            (f"_{i}_normalize", f"__{field._name}_normalize__"),
-        ]
-    }
+    return {"self": instance} | {f"_{i}": field._name for i, field in enumerate(fields)}
 
 
 def _remap_co_values(value: tuple[Any, ...], mapping: dict[str, str]) -> tuple[Any, ...]:
