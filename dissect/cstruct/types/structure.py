@@ -106,7 +106,7 @@ class StructureMetaType(MetaType):
         if isinstance(value, (Structure, UnionProxy)):
             # E.g. a structure of another type with the same fields
             return value
-        return cls(value)
+        return super()._normalize(value)
 
     def _update_fields(
         cls, fields: list[Field], align: bool = False, classdict: dict[str, Any] | None = None

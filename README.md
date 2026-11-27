@@ -193,7 +193,7 @@ Some types don't accept all the values of their Python base type:
 - `wchar` and `wchar` arrays only accept a `str`.
 - Other arrays don't accept a `str` or an `int`.
 
-A structure or union converts the values of its fields in the same way. A `char` field takes bytes as its value, and a structure field keeps a structure as it is. Values that are set as attributes aren't converted for performance reasons.
+A structure or union converts the values of its fields in the same way. A `char` field takes bytes as its value, and a structure field keeps a structure as it is. Bytes that are longer than the field raise a `ValueError`. Values that are set as attributes aren't converted for performance reasons.
 
 ```python
 cs.load("""

@@ -66,7 +66,7 @@ class Packed(BaseType, Generic[T], metaclass=PackedMetaType):
         if isinstance(value, (int, float)):
             # Fast path for numbers
             return cls.__new__(cls, value)
-        return cls(value)
+        return MetaType._normalize(cls, value)
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:

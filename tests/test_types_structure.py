@@ -1026,6 +1026,8 @@ def test_structure_init_convert(cs: cstruct, field: str, value: Any, expected: A
     [
         ("uint16 x", "a", ValueError, "invalid literal for int() with base 10: 'a'"),
         ("uint16 x", b"\x01", EOFError, "Read 1 bytes, but expected 2"),
+        ("uint16 x", b"\x01\x00\x02", ValueError, "Expected 2 bytes for uint16, got 3 instead."),
+        ("uint24 x", b"\x00" * 4, ValueError, "Expected 3 bytes for uint24, got 4 instead."),
         ("char x", "a", TypeError, "Cannot create char from str, encode to bytes first"),
         ("char x[2]", b"abc", ValueError, "Expected static array size 2, got 3 instead."),
         ("wchar x", 1, TypeError, "Cannot create wchar from int"),
@@ -1034,6 +1036,7 @@ def test_structure_init_convert(cs: cstruct, field: str, value: Any, expected: A
         ("uint16 x[2]", 1, TypeError, "Cannot create uint16[2] from int"),
         ("uint16 x[2]", "ab", TypeError, "Cannot create uint16[2] from str"),
         ("uint16 x[2]", b"\x01\x00", EOFError, "Read 2 bytes, but expected 4"),
+        ("uint16 x[2]", b"\x01\x00\x02\x00\x03", ValueError, "Expected 4 bytes for uint16[2], got 5 instead."),
     ],
 )
 def test_structure_init_convert_invalid(
@@ -1097,6 +1100,9 @@ def test_structure_init_convert_structure(cs: cstruct) -> None:
 
     assert cs.test(x=b"\x01\x02").x == cs.inner(a=1, b=2)
     assert cs.test(x=1).x == cs.inner(a=1)
+
+    with pytest.raises(ValueError, match=r"^Expected 2 bytes for inner, got 3 instead\.$"):
+        cs.test(x=b"\x01\x02\x03")
 
     # E.g. a structure of another cstruct instance, or a structure in a union
     other = cstruct().load(cdef).inner(a=1, b=2)

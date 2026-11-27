@@ -23,7 +23,7 @@ class Int(int, BaseType):
         if isinstance(value, int):
             # Fast path for integers
             return type.__call__(cls, value)
-        return cls(value)
+        return MetaType._normalize(cls, value)
 
     @classmethod
     def _read(cls, stream: BinaryIO, *, context: dict[str, Any] | None = None, endian: Endianness) -> Self:

@@ -109,10 +109,13 @@ class MetaType(type):
         """Internal function for converting a value that is given to a field of this type when a structure is created.
 
         Calls the type, so a field accepts the same values, e.g. ``uint16("1")`` and ``uint16(b"\\x01\\x00")``.
+        Bytes that are longer than the type raise a ``ValueError``, e.g. ``b"\\x01\\x00\\x02"`` for a ``uint16`` field.
 
         Args:
             value: The value to convert, never ``None``.
         """
+        if isinstance(value, _BUFFER_TYPES) and cls.__size__ is not None and len(value) > cls.__size__:
+            raise ValueError(f"Expected {cls.__size__} bytes for {cls.__name__}, got {len(value)} instead.")
         return cls(value)
 
     def reads(cls, data: bytes | memoryview | bytearray, *, endian: AllowedEndianness | None = None) -> Self:  # type: ignore
